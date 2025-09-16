@@ -1,0 +1,12 @@
+[hooks]
+# Pre-commit: Format code, add changes, and run clippy
+pre-commit = "cargo fmt && git add -u && cargo clippy -- -D warnings"
+
+# Commit-msg: Validate commit messages against Conventional Commits specification
+commit-msg = "./tools/scripts/validate-commit-msg.sh"
+
+# Pre-push: Run full test suite and security checks
+pre-push = "cargo test && cargo audit"
+
+[logging]
+verbose = true
