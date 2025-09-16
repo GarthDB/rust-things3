@@ -178,3 +178,4 @@ MIT License - see [LICENSE](LICENSE) file for details.
 - Inspired by [things-cli](https://github.com/thingsapi/things-cli)
 - Built with [Moon](https://moonrepo.dev) workspace management
 - Follows [evelion-apps/things-api](https://github.com/evelion-apps/things-api) patterns
+# Test commit
