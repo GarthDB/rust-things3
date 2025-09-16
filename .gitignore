@@ -6,3 +6,6 @@
 # Rust
 target/
 Cargo.lock
+
+# Homebrew tap (separate repository)
+homebrew-tap/
