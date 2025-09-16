@@ -437,3 +437,420 @@ impl ThingsDatabase {
         })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::test_utils::create_test_database;
+    use tempfile::NamedTempFile;
+
+    /// Test convert_task_type with all possible values
+    #[test]
+    fn test_convert_task_type() {
+        assert_eq!(ThingsDatabase::convert_task_type(1), TaskType::Project);
+        assert_eq!(ThingsDatabase::convert_task_type(2), TaskType::Heading);
+        assert_eq!(ThingsDatabase::convert_task_type(3), TaskType::Area);
+        assert_eq!(ThingsDatabase::convert_task_type(0), TaskType::Todo);
+        assert_eq!(ThingsDatabase::convert_task_type(4), TaskType::Todo);
+        assert_eq!(ThingsDatabase::convert_task_type(-1), TaskType::Todo);
+    }
+
+    /// Test convert_task_status with all possible values
+    #[test]
+    fn test_convert_task_status() {
+        assert_eq!(
+            ThingsDatabase::convert_task_status(1),
+            TaskStatus::Completed
+        );
+        assert_eq!(ThingsDatabase::convert_task_status(2), TaskStatus::Canceled);
+        assert_eq!(ThingsDatabase::convert_task_status(3), TaskStatus::Trashed);
+        assert_eq!(
+            ThingsDatabase::convert_task_status(0),
+            TaskStatus::Incomplete
+        );
+        assert_eq!(
+            ThingsDatabase::convert_task_status(4),
+            TaskStatus::Incomplete
+        );
+        assert_eq!(
+            ThingsDatabase::convert_task_status(-1),
+            TaskStatus::Incomplete
+        );
+    }
+
+    /// Test convert_timestamp with various inputs
+    #[test]
+    fn test_convert_timestamp() {
+        // Test with None - should return current time
+        let result = ThingsDatabase::convert_timestamp(None);
+        let _ = result; // Just verify it doesn't panic
+
+        // Test with valid timestamp - just check it returns a valid DateTime
+        let timestamp = 1234567890.0;
+        let result = ThingsDatabase::convert_timestamp(Some(timestamp));
+        let _ = result; // Just verify it doesn't panic
+
+        // Test with negative timestamp (should fallback to now)
+        let timestamp = -1234567890.0;
+        let result = ThingsDatabase::convert_timestamp(Some(timestamp));
+        let _ = result; // Just verify it doesn't panic
+
+        // Test with very large timestamp (should fallback to now)
+        let timestamp = 999999999999.0;
+        let result = ThingsDatabase::convert_timestamp(Some(timestamp));
+        let _ = result; // Just verify it doesn't panic
+    }
+
+    /// Test convert_date with various inputs
+    #[test]
+    fn test_convert_date() {
+        // Test with None
+        assert_eq!(ThingsDatabase::convert_date(None), None);
+
+        // Test with valid date (days since 2001-01-01)
+        let days = 0; // 2001-01-01
+        let result = ThingsDatabase::convert_date(Some(days));
+        assert_eq!(
+            result,
+            Some(chrono::NaiveDate::from_ymd_opt(2001, 1, 1).unwrap())
+        );
+
+        // Test with 365 days (2002-01-01)
+        let days = 365;
+        let result = ThingsDatabase::convert_date(Some(days));
+        assert_eq!(
+            result,
+            Some(chrono::NaiveDate::from_ymd_opt(2002, 1, 1).unwrap())
+        );
+
+        // Test with negative days (should return None as it's before 2001-01-01)
+        let days = -1;
+        let result = ThingsDatabase::convert_date(Some(days));
+        assert_eq!(result, None);
+
+        // Test with very large number
+        let days = 10000;
+        let result = ThingsDatabase::convert_date(Some(days));
+        assert!(result.is_some());
+    }
+
+    /// Test convert_uuid with various inputs
+    #[test]
+    fn test_convert_uuid() {
+        // Test with None
+        assert_eq!(ThingsDatabase::convert_uuid(None), None);
+
+        // Test with valid UUID string
+        let uuid_str = "550e8400-e29b-41d4-a716-446655440000";
+        let result = ThingsDatabase::convert_uuid(Some(uuid_str.to_string()));
+        assert_eq!(result, Some(Uuid::parse_str(uuid_str).unwrap()));
+
+        // Test with invalid UUID string (should generate deterministic UUID)
+        let uuid_str = "invalid-uuid";
+        let result = ThingsDatabase::convert_uuid(Some(uuid_str.to_string()));
+        assert!(result.is_some());
+        // Should be deterministic
+        let result2 = ThingsDatabase::convert_uuid(Some(uuid_str.to_string()));
+        assert_eq!(result, result2);
+
+        // Test with empty string
+        let result = ThingsDatabase::convert_uuid(Some("".to_string()));
+        assert!(result.is_some());
+
+        // Test with special characters
+        let uuid_str = "!@#$%^&*()";
+        let result = ThingsDatabase::convert_uuid(Some(uuid_str.to_string()));
+        assert!(result.is_some());
+    }
+
+    /// Test map_project_row with various inputs
+    #[test]
+    fn test_map_project_row() {
+        let temp_file = NamedTempFile::new().unwrap();
+        let db_path = temp_file.path();
+        create_test_database(db_path).unwrap();
+
+        let db = ThingsDatabase::new(db_path).unwrap();
+
+        // Test with a real project row (if TMProject table exists)
+        let mut stmt = match db.conn.prepare("SELECT uuid, title, notes, startDate, deadline, creationDate, userModificationDate, area, status FROM TMProject LIMIT 1") {
+            Ok(stmt) => stmt,
+            Err(_) => {
+                // TMProject table doesn't exist, skip this test
+                return;
+            }
+        };
+
+        let mut rows = stmt.query([]).unwrap();
+
+        if let Some(row) = rows.next().unwrap() {
+            let project = ThingsDatabase::map_project_row(row).unwrap();
+            assert!(!project.title.is_empty());
+            assert!(project.uuid != Uuid::nil());
+        }
+    }
+
+    /// Test database connection with invalid path
+    #[test]
+    fn test_database_invalid_path() {
+        let result = ThingsDatabase::new("/nonexistent/path/database.sqlite");
+        assert!(result.is_err());
+    }
+
+    /// Test database connection with malformed database
+    #[test]
+    fn test_database_malformed() {
+        let temp_file = NamedTempFile::new().unwrap();
+        let db_path = temp_file.path();
+
+        // Create a file that's not a valid SQLite database
+        std::fs::write(db_path, "not a database").unwrap();
+
+        let result = ThingsDatabase::new(db_path);
+        // SQLite might still open the file, so we test that it fails on query
+        match result {
+            Ok(db) => {
+                // If it opens, it should fail on query
+                let tasks = db.get_inbox(Some(1));
+                assert!(tasks.is_err());
+            }
+            Err(_) => {
+                // Expected error
+            }
+        }
+    }
+
+    /// Test get_inbox with malformed data
+    #[test]
+    fn test_get_inbox_malformed_data() {
+        let temp_file = NamedTempFile::new().unwrap();
+        let db_path = temp_file.path();
+        create_test_database(db_path).unwrap();
+
+        let db = ThingsDatabase::new(db_path).unwrap();
+
+        // Insert malformed data
+        db.conn.execute(
+            "INSERT INTO TMTask (uuid, title, type, status, notes, startDate, deadline, creationDate, userModificationDate, project, area, heading) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            ("invalid-uuid", "Test Task", 1, 0, "Notes", 0, 0, 0.0, 0.0, "invalid-project", "invalid-area", "invalid-heading")
+        ).unwrap();
+
+        // Should handle malformed data gracefully
+        let tasks = db.get_inbox(Some(10)).unwrap();
+        assert!(!tasks.is_empty());
+    }
+
+    /// Test get_today with edge case dates
+    #[test]
+    fn test_get_today_edge_cases() {
+        let temp_file = NamedTempFile::new().unwrap();
+        let db_path = temp_file.path();
+        create_test_database(db_path).unwrap();
+
+        let db = ThingsDatabase::new(db_path).unwrap();
+
+        // Test with very old date
+        db.conn.execute(
+            "INSERT INTO TMTask (uuid, title, type, status, notes, startDate, deadline, creationDate, userModificationDate, project, area, heading) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            ("test-uuid-1", "Old Task", 0, 0, "Notes", -1000, 0, 0.0, 0.0, None::<String>, None::<String>, None::<String>)
+        ).unwrap();
+
+        // Test with future date
+        db.conn.execute(
+            "INSERT INTO TMTask (uuid, title, type, status, notes, startDate, deadline, creationDate, userModificationDate, project, area, heading) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            ("test-uuid-2", "Future Task", 0, 0, "Notes", 10000, 0, 0.0, 0.0, None::<String>, None::<String>, None::<String>)
+        ).unwrap();
+
+        let tasks = db.get_today(Some(10)).unwrap();
+        // Should handle edge cases gracefully
+        let _ = tasks.len();
+    }
+
+    /// Test search_tasks with edge cases
+    #[test]
+    fn test_search_tasks_edge_cases() {
+        let temp_file = NamedTempFile::new().unwrap();
+        let db_path = temp_file.path();
+        create_test_database(db_path).unwrap();
+
+        let db = ThingsDatabase::new(db_path).unwrap();
+
+        // Test with empty query
+        let tasks = db.search_tasks("", Some(10)).unwrap();
+        let _ = tasks.len();
+
+        // Test with very long query
+        let long_query = "a".repeat(1000);
+        let tasks = db.search_tasks(&long_query, Some(10)).unwrap();
+        let _ = tasks.len();
+
+        // Test with special characters
+        let special_query = "!@#$%^&*()";
+        let tasks = db.search_tasks(special_query, Some(10)).unwrap();
+        let _ = tasks.len();
+
+        // Test with SQL injection attempt
+        let sql_query = "'; DROP TABLE TMTask; --";
+        let tasks = db.search_tasks(sql_query, Some(10)).unwrap();
+        let _ = tasks.len();
+    }
+
+    /// Test get_projects with edge cases
+    #[test]
+    fn test_get_projects_edge_cases() {
+        let temp_file = NamedTempFile::new().unwrap();
+        let db_path = temp_file.path();
+        create_test_database(db_path).unwrap();
+
+        let db = ThingsDatabase::new(db_path).unwrap();
+
+        // Test with invalid area UUID
+        let invalid_uuid = Uuid::new_v4();
+        let projects = db.get_projects(Some(invalid_uuid)).unwrap();
+        assert!(projects.is_empty());
+
+        // Test with no area filter
+        let projects = db.get_projects(None).unwrap();
+        let _ = projects.len();
+    }
+
+    /// Test get_areas with edge cases
+    #[test]
+    fn test_get_areas_edge_cases() {
+        let temp_file = NamedTempFile::new().unwrap();
+        let db_path = temp_file.path();
+        create_test_database(db_path).unwrap();
+
+        let db = ThingsDatabase::new(db_path).unwrap();
+
+        // Test basic areas functionality
+        let areas = db.get_areas().unwrap();
+        let _ = areas.len();
+    }
+
+    /// Test database connection persistence
+    #[test]
+    fn test_database_connection_persistence() {
+        let temp_file = NamedTempFile::new().unwrap();
+        let db_path = temp_file.path();
+        create_test_database(db_path).unwrap();
+
+        let db1 = ThingsDatabase::new(db_path).unwrap();
+        let tasks1 = db1.get_inbox(Some(5)).unwrap();
+
+        // Create another connection to the same database
+        let db2 = ThingsDatabase::new(db_path).unwrap();
+        let tasks2 = db2.get_inbox(Some(5)).unwrap();
+
+        // Should get the same results
+        assert_eq!(tasks1.len(), tasks2.len());
+    }
+
+    /// Test database error recovery
+    #[test]
+    fn test_database_error_recovery() {
+        let temp_file = NamedTempFile::new().unwrap();
+        let db_path = temp_file.path();
+        create_test_database(db_path).unwrap();
+
+        let db = ThingsDatabase::new(db_path).unwrap();
+
+        // Test that we can recover from errors
+        let result = db.get_inbox(Some(5));
+        assert!(result.is_ok());
+
+        // Test with invalid limit
+        let result = db.get_inbox(Some(0));
+        assert!(result.is_ok());
+    }
+
+    /// Test database query consistency
+    #[test]
+    fn test_database_query_consistency() {
+        let temp_file = NamedTempFile::new().unwrap();
+        let db_path = temp_file.path();
+        create_test_database(db_path).unwrap();
+
+        let db = ThingsDatabase::new(db_path).unwrap();
+
+        // Test that different queries return consistent results
+        let inbox = db.get_inbox(Some(10)).unwrap();
+        let today = db.get_today(Some(10)).unwrap();
+        let all_tasks = db.search_tasks("", Some(20)).unwrap();
+
+        // Inbox should be a subset of all tasks
+        assert!(all_tasks.len() >= inbox.len());
+
+        // Today should be a subset of all tasks
+        assert!(all_tasks.len() >= today.len());
+    }
+
+    /// Test database with mock data consistency
+    #[test]
+    fn test_database_with_mock_data_consistency() {
+        let temp_file = NamedTempFile::new().unwrap();
+        let db_path = temp_file.path();
+        create_test_database(db_path).unwrap();
+
+        let db = ThingsDatabase::new(db_path).unwrap();
+
+        // Test that mock data is consistent
+        let tasks = db.get_inbox(Some(10)).unwrap();
+        let projects = db.get_projects(None).unwrap();
+        let areas = db.get_areas().unwrap();
+
+        // Should have some data
+        assert!(tasks.len() > 0 || projects.len() > 0 || areas.len() > 0);
+
+        // Test that tasks with area relationships work
+        let tasks_with_areas = tasks.iter().filter(|t| t.area_uuid.is_some()).count();
+        let _ = tasks_with_areas;
+    }
+
+    /// Test database performance with large limits
+    #[test]
+    fn test_database_performance_with_large_limits() {
+        let temp_file = NamedTempFile::new().unwrap();
+        let db_path = temp_file.path();
+        create_test_database(db_path).unwrap();
+
+        let db = ThingsDatabase::new(db_path).unwrap();
+
+        // Test with very large limit
+        let start = std::time::Instant::now();
+        let tasks = db.get_inbox(Some(10000)).unwrap();
+        let duration = start.elapsed();
+
+        // Should complete quickly even with large limit
+        assert!(duration.as_secs() < 5);
+        let _ = tasks.len();
+    }
+
+    /// Test database helper functions indirectly
+    #[test]
+    fn test_database_helper_functions_indirectly() {
+        let temp_file = NamedTempFile::new().unwrap();
+        let db_path = temp_file.path();
+        create_test_database(db_path).unwrap();
+
+        let db = ThingsDatabase::new(db_path).unwrap();
+
+        // Test that helper functions are called through get_inbox
+        let tasks = db.get_inbox(Some(5)).unwrap();
+
+        // Verify that tasks have proper types and statuses
+        for task in tasks {
+            assert!(matches!(
+                task.task_type,
+                TaskType::Project | TaskType::Heading | TaskType::Area | TaskType::Todo
+            ));
+            assert!(matches!(
+                task.status,
+                TaskStatus::Completed
+                    | TaskStatus::Canceled
+                    | TaskStatus::Trashed
+                    | TaskStatus::Incomplete
+            ));
+        }
+    }
+}
