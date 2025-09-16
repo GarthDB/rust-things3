@@ -85,8 +85,9 @@ jobs:
         echo "All coverage artifacts verified!"
     
     - name: Upload coverage to Codecov (LCOV)
-      uses: codecov/codecov-action@v4
+      uses: codecov/codecov-action@v5
       with:
+        token: ${{ secrets.CODECOV_TOKEN }}
         file: lcov.info
         flags: unittests
         name: codecov-umbrella
@@ -95,8 +96,9 @@ jobs:
       continue-on-error: true
     
     - name: Upload coverage to Codecov (Cobertura)
-      uses: codecov/codecov-action@v4
+      uses: codecov/codecov-action@v5
       with:
+        token: ${{ secrets.CODECOV_TOKEN }}
         file: cobertura.xml
         flags: unittests
         name: codecov-cobertura
