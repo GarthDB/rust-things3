@@ -65,10 +65,10 @@ pub fn create_test_database<P: AsRef<Path>>(db_path: P) -> crate::Result<Connect
         CREATE TABLE IF NOT EXISTS TMArea (
             uuid TEXT PRIMARY KEY,
             title TEXT NOT NULL,
-            notes TEXT,
-            created TEXT NOT NULL,
-            modified TEXT NOT NULL,
-            "index" INTEGER NOT NULL DEFAULT 0
+            visible INTEGER,
+            "index" INTEGER NOT NULL DEFAULT 0,
+            cachedTags BLOB,
+            experimental BLOB
         );
 
         -- TMTag table (tags)
@@ -122,16 +122,12 @@ fn insert_mock_data(conn: &Connection) -> crate::Result<()> {
         ),
     ];
 
-    for (uuid, title, notes) in areas {
+    for (uuid, title, _notes) in areas {
         conn.execute(
-            "INSERT INTO TMArea (uuid, title, notes, created, modified, \"index\") VALUES (?, ?, ?, ?, ?, ?)",
+            "INSERT INTO TMArea (uuid, title, visible, \"index\") VALUES (?, ?, ?, ?)",
             (
-                uuid,
-                title,
-                notes,
-                now.to_rfc3339(),
-                now.to_rfc3339(),
-                0,
+                uuid, title, 1, // visible = 1
+                0, // index
             ),
         )?;
     }
