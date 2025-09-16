@@ -43,22 +43,43 @@ jobs:
     
     - name: Run coverage analysis
       run: |
+        echo "Starting coverage analysis..."
+        
         # Generate LCOV report
+        echo "Generating LCOV report..."
         cargo llvm-cov --workspace --all-features --lcov --output-path lcov.info
+        echo "LCOV report generated: $(ls -la lcov.info)"
         
         # Generate HTML report
+        echo "Generating HTML report..."
         cargo llvm-cov --workspace --all-features --html --output-dir target/llvm-cov/html
+        echo "HTML report generated in target/llvm-cov/html/"
         
         # Generate JSON report
+        echo "Generating JSON report..."
         cargo llvm-cov --workspace --all-features --json --output-path coverage.json
+        echo "JSON report generated: $(ls -la coverage.json)"
         
         # Generate Cobertura report
+        echo "Generating Cobertura report..."
         cargo llvm-cov --workspace --all-features --cobertura --output-path cobertura.xml
+        echo "Cobertura report generated: $(ls -la cobertura.xml)"
         
         # Generate text report
+        echo "Generating text report..."
         cargo llvm-cov --workspace --all-features --text --output-path coverage.txt
+        echo "Text report generated: $(ls -la coverage.txt)"
+        
+        echo "Coverage analysis completed successfully!"
     
-    - name: Upload coverage to Codecov
+    - name: Verify coverage artifacts
+      run: |
+        echo "Verifying coverage artifacts..."
+        ls -la lcov.info coverage.json cobertura.xml coverage.txt
+        ls -la target/llvm-cov/html/
+        echo "All coverage artifacts verified!"
+    
+    - name: Upload coverage to Codecov (LCOV)
       uses: codecov/codecov-action@v4
       with:
         file: lcov.info
@@ -66,6 +87,7 @@ jobs:
         name: codecov-umbrella
         fail_ci_if_error: false
         verbose: true
+      continue-on-error: true
     
     - name: Upload coverage to Codecov (Cobertura)
       uses: codecov/codecov-action@v4
@@ -75,6 +97,7 @@ jobs:
         name: codecov-cobertura
         fail_ci_if_error: false
         verbose: true
+      continue-on-error: true
     
     - name: Upload coverage artifacts
       uses: actions/upload-artifact@v4
