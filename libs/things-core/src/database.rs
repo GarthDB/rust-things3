@@ -174,7 +174,8 @@ impl ThingsDatabase {
 
         let rows = stmt.query_map([today.format("%Y-%m-%d").to_string()], |row| {
             Ok(Task {
-                uuid: Uuid::parse_str(&row.get::<_, String>("uuid")?).unwrap(),
+                uuid: Uuid::parse_str(&row.get::<_, String>("uuid")?)
+                    .unwrap_or_else(|_| Uuid::new_v4()),
                 title: row.get("title")?,
                 task_type: match row.get::<_, i32>("type")? {
                     1 => TaskType::Project,
@@ -283,7 +284,8 @@ impl ThingsDatabase {
 
         let rows = stmt.query_map([], |row| {
             Ok(Area {
-                uuid: Uuid::parse_str(&row.get::<_, String>("uuid")?).unwrap(),
+                uuid: Uuid::parse_str(&row.get::<_, String>("uuid")?)
+                    .unwrap_or_else(|_| Uuid::new_v4()),
                 title: row.get("title")?,
                 notes: row.get("notes")?,
                 created: {
@@ -328,8 +330,13 @@ impl ThingsDatabase {
         )?;
 
         let rows = stmt.query_map([&search_pattern, &search_pattern], |row| {
+            let uuid_str = row.get::<_, String>("uuid")?;
+            let uuid = Uuid::parse_str(&uuid_str).unwrap_or_else(|_| {
+                // Generate a new UUID if parsing fails
+                Uuid::new_v4()
+            });
             Ok(Task {
-                uuid: Uuid::parse_str(&row.get::<_, String>("uuid")?).unwrap(),
+                uuid,
                 title: row.get("title")?,
                 task_type: match row.get::<_, i32>("type")? {
                     1 => TaskType::Project,

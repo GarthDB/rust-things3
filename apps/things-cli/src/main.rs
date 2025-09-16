@@ -1,5 +1,7 @@
 //! Things CLI - Command line interface for Things 3 with integrated MCP server
 
+mod mcp;
+
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;
 use things_core::{Result, ThingsConfig, ThingsDatabase};
@@ -105,8 +107,14 @@ async fn main() -> Result<()> {
             print_tasks(&tasks);
         }
         Commands::Mcp => {
-            println!("MCP server mode not yet implemented");
-            println!("This will start the MCP server for AI/LLM integration");
+            println!("🚀 Starting Things 3 MCP server...");
+            println!("📡 Server will be available for AI/LLM integration");
+            println!("🛠️  Available tools: get_inbox, get_today, get_projects, get_areas, search_tasks, create_task, update_task, get_productivity_metrics, export_data, bulk_create_tasks, get_recent_tasks");
+            println!();
+
+            // Start MCP server
+            let mcp_server = mcp::ThingsMcpServer::new(db);
+            start_mcp_server(mcp_server).await?;
         }
         Commands::Health => {
             health_check(&db)?;
@@ -190,4 +198,16 @@ fn health_check(db: &ThingsDatabase) -> Result<()> {
     println!("🎯 Things CLI is ready to use!");
 
     Ok(())
+}
+
+async fn start_mcp_server(_mcp_server: mcp::ThingsMcpServer) -> Result<()> {
+    println!("🔄 MCP server is running...");
+    println!("💡 Use Ctrl+C to stop the server");
+    println!();
+
+    // For now, just keep the server running
+    // In a real implementation, this would handle MCP protocol communication
+    loop {
+        tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+    }
 }

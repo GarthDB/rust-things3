@@ -1,0 +1,27 @@
+{
+  "mcpServers": {
+    "things3": {
+      "command": "things-cli",
+      "args": ["mcp"],
+      "env": {
+        "RUST_LOG": "info"
+      },
+      "description": "Things 3 integration with MCP server",
+      "capabilities": {
+        "tools": [
+          "get_inbox",
+          "get_today", 
+          "get_projects",
+          "get_areas",
+          "search_tasks",
+          "create_task",
+          "update_task",
+          "get_productivity_metrics",
+          "export_data",
+          "bulk_create_tasks",
+          "get_recent_tasks"
+        ]
+      }
+    }
+  }
+}

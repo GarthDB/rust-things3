@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "things3": {
+      "command": "things-cli",
+      "args": ["mcp"],
+      "env": {
+        "RUST_LOG": "info"
+      }
+    }
+  }
+}

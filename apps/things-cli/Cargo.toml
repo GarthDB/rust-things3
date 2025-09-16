@@ -19,7 +19,7 @@ things-common = { path = "../../libs/things-common" }
 # CLI
 clap.workspace = true
 
-# MCP (commented out for now)
+# MCP (using custom implementation for now)
 # mcp.workspace = true
 
 # Async
@@ -39,3 +39,6 @@ log = "0.4"
 
 # UUID
 uuid = { version = "1.0", features = ["v4", "serde"] }
+
+# Date/Time
+chrono = { version = "0.4", features = ["serde"] }
