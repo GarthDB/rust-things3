@@ -74,7 +74,3 @@ codecov:
 # GitHub integration
 github_checks:
   annotations: true
-  notify:
-    - comment
-    - status
-    - checks
