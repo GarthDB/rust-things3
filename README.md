@@ -235,26 +235,207 @@ rust-things/
 
 ### Core Library
 
+#### Basic Usage
+
 ```rust
-use things_core::{ThingsDatabase, Task, Project, Area};
+use things3_core::{ThingsDatabase, Task, Project, Area, ThingsConfig};
+use anyhow::Result;
 
-// Create database connection
-let db = ThingsDatabase::with_default_path()?;
+#[tokio::main]
+async fn main() -> Result<()> {
+    // Create database connection
+    let db = ThingsDatabase::with_default_path()?;
+    
+    // Get inbox tasks
+    let tasks = db.get_inbox(Some(10)).await?;
+    
+    // Get today's tasks
+    let today_tasks = db.get_today(None).await?;
+    
+    // Get all projects
+    let projects = db.get_projects(None, None).await?;
+    
+    // Search tasks
+    let search_results = db.search_tasks("meeting", Some(5)).await?;
+    
+    Ok(())
+}
+```
 
-// Get inbox tasks
-let tasks = db.get_inbox(Some(10)).await?;
+#### Advanced Configuration
 
-// Get today's tasks
-let today_tasks = db.get_today(None).await?;
+```rust
+use things3_core::{ThingsDatabase, ThingsConfig};
+use std::path::PathBuf;
 
-// Get all projects
-let projects = db.get_projects(None).await?;
+// Custom database path
+let config = ThingsConfig::new(
+    PathBuf::from("/custom/path/to/things.db"),
+    true // fallback to default if custom path fails
+);
+let db = ThingsDatabase::with_config(config)?;
 
-// Search tasks
-let search_results = db.search_tasks("meeting", Some(5)).await?;
+// From environment variables
+let config = ThingsConfig::from_env();
+let db = ThingsDatabase::with_config(config)?;
+```
+
+#### Error Handling
+
+```rust
+use things3_core::{ThingsDatabase, ThingsError};
+use anyhow::Result;
+
+async fn handle_errors() -> Result<()> {
+    let db = ThingsDatabase::with_default_path()?;
+    
+    match db.get_inbox(Some(5)).await {
+        Ok(tasks) => println!("Found {} tasks", tasks.len()),
+        Err(ThingsError::DatabaseNotFound) => {
+            eprintln!("Things 3 database not found");
+        }
+        Err(ThingsError::Database(e)) => {
+            eprintln!("Database error: {}", e);
+        }
+        Err(e) => {
+            eprintln!("Other error: {}", e);
+        }
+    }
+    
+    Ok(())
+}
+```
+
+#### Caching and Performance
+
+```rust
+use things3_core::{ThingsDatabase, CacheConfig};
+use std::time::Duration;
+
+// Configure caching
+let cache_config = CacheConfig {
+    max_capacity: 1000,
+    time_to_live: Duration::from_secs(300),
+    time_to_idle: Duration::from_secs(60),
+};
+let db = ThingsDatabase::with_cache_config(cache_config)?;
+
+// Get cache statistics
+let stats = db.get_cache_stats().await?;
+println!("Cache hits: {}, misses: {}", stats.hits, stats.misses);
+```
+
+#### Data Export
+
+```rust
+use things3_core::{DataExporter, ExportFormat, ExportConfig};
+
+// Export to JSON
+let exporter = DataExporter::new_default();
+let json_data = exporter.export_json(&tasks, &projects, &areas).await?;
+
+// Export to CSV
+let csv_data = exporter.export_csv(&tasks, &projects, &areas).await?;
+
+// Custom export configuration
+let config = ExportConfig {
+    include_completed: false,
+    date_format: "%Y-%m-%d".to_string(),
+    time_format: "%H:%M:%S".to_string(),
+};
+let exporter = DataExporter::new(config);
+```
+
+#### MCP Server Integration
+
+```rust
+use things3_cli::mcp::{ThingsMcpServer, CallToolRequest};
+use serde_json::json;
+
+// Create MCP server
+let server = ThingsMcpServer::new(config)?;
+
+// List available tools
+let tools = server.list_tools().await?;
+println!("Available tools: {:?}", tools.tools);
+
+// Call a tool
+let request = CallToolRequest {
+    name: "get_inbox".to_string(),
+    arguments: Some(json!({
+        "limit": 10
+    })),
+};
+let result = server.call_tool(request).await?;
+```
+
+### CLI Library
+
+```rust
+use things3_cli::{Cli, Commands, print_tasks, print_projects};
+use std::io::stdout;
+
+// Parse CLI arguments
+let cli = Cli::parse();
+
+// Use CLI functions programmatically
+match cli.command {
+    Commands::Inbox { limit } => {
+        let tasks = db.get_inbox(limit).await?;
+        print_tasks(&mut stdout(), &tasks)?;
+    }
+    Commands::Projects { area_uuid, limit } => {
+        let projects = db.get_projects(area_uuid, limit).await?;
+        print_projects(&mut stdout(), &projects)?;
+    }
+    // ... other commands
+}
+```
+
+### Common Utilities
+
+```rust
+use things3_common::utils::{
+    get_default_database_path,
+    format_date,
+    format_datetime,
+    parse_date,
+    is_valid_uuid,
+    truncate_string
+};
+
+// Get default database path
+let db_path = get_default_database_path();
+println!("Default path: {}", db_path.display());
+
+// Format dates
+let formatted = format_date(chrono::Utc::now().date_naive());
+println!("Today: {}", formatted);
+
+// Parse dates
+let date = parse_date("2024-01-15")?;
+println!("Parsed date: {}", date);
+
+// Validate UUIDs
+let is_valid = is_valid_uuid("550e8400-e29b-41d4-a716-446655440000");
+println!("Valid UUID: {}", is_valid);
+
+// Truncate strings
+let truncated = truncate_string("Very long string", 10);
+println!("Truncated: {}", truncated);
 ```
 
 ## Contributing
+
+We welcome contributions! Please see our [Contributing Guidelines](CONTRIBUTING.md) for detailed information on:
+
+- Development setup
+- Code style guidelines
+- Testing requirements
+- Pull request process
+- Issue reporting
+
+### Quick Start
 
 1. Fork the repository
 2. Create a feature branch
@@ -262,6 +443,8 @@ let search_results = db.search_tasks("meeting", Some(5)).await?;
 4. Add tests
 5. Run the development pipeline: `moon run :dev-pipeline`
 6. Submit a pull request
+
+For more details, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
 
