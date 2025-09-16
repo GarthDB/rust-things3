@@ -217,12 +217,12 @@ mod tests {
     #[test]
     fn test_config_from_env_with_fallback() {
         std::env::set_var("THINGS_DATABASE_PATH", "/env/path");
-        std::env::set_var("THINGS_FALLBACK_ENABLED", "true");
+        std::env::set_var("THINGS_FALLBACK_TO_DEFAULT", "true");
         let config = ThingsConfig::from_env();
         assert_eq!(config.database_path, PathBuf::from("/env/path"));
         assert!(config.fallback_to_default);
         std::env::remove_var("THINGS_DATABASE_PATH");
-        std::env::remove_var("THINGS_FALLBACK_ENABLED");
+        std::env::remove_var("THINGS_FALLBACK_TO_DEFAULT");
     }
 
     #[test]
