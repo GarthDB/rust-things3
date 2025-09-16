@@ -25,6 +25,19 @@ rusqlite.workspace = true
 # Async
 tokio.workspace = true
 
+# Caching and Performance
+moka.workspace = true
+dashmap.workspace = true
+parking_lot.workspace = true
+once_cell.workspace = true
+
+# Export formats
+csv.workspace = true
+quick-xml.workspace = true
+
+# Performance monitoring
+sysinfo.workspace = true
+
 # Testing
 proptest.workspace = true
 tempfile.workspace = true

@@ -109,11 +109,11 @@ async fn main() -> Result<()> {
         Commands::Mcp => {
             println!("🚀 Starting Things 3 MCP server...");
             println!("📡 Server will be available for AI/LLM integration");
-            println!("🛠️  Available tools: get_inbox, get_today, get_projects, get_areas, search_tasks, create_task, update_task, get_productivity_metrics, export_data, bulk_create_tasks, get_recent_tasks");
+            println!("🛠️  Available tools: get_inbox, get_today, get_projects, get_areas, search_tasks, create_task, update_task, get_productivity_metrics, export_data, bulk_create_tasks, get_recent_tasks, backup_database, restore_database, list_backups, get_performance_stats, get_system_metrics, get_cache_stats");
             println!();
 
             // Start MCP server
-            let mcp_server = mcp::ThingsMcpServer::new(db);
+            let mcp_server = mcp::ThingsMcpServer::new(db, config);
             start_mcp_server(mcp_server).await?;
         }
         Commands::Health => {

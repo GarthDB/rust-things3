@@ -3,7 +3,9 @@
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use things_core::ThingsDatabase;
+use things_core::{
+    BackupManager, DataExporter, PerformanceMonitor, ThingsCache, ThingsConfig, ThingsDatabase,
+};
 
 /// Simplified MCP types for our implementation
 #[derive(Debug, Serialize, Deserialize)]
@@ -39,12 +41,31 @@ pub struct ListToolsResult {
 pub struct ThingsMcpServer {
     #[allow(dead_code)]
     db: ThingsDatabase,
+    #[allow(dead_code)]
+    cache: ThingsCache,
+    #[allow(dead_code)]
+    performance_monitor: PerformanceMonitor,
+    #[allow(dead_code)]
+    exporter: DataExporter,
+    #[allow(dead_code)]
+    backup_manager: BackupManager,
 }
 
 #[allow(dead_code)]
 impl ThingsMcpServer {
-    pub fn new(db: ThingsDatabase) -> Self {
-        Self { db }
+    pub fn new(db: ThingsDatabase, config: ThingsConfig) -> Self {
+        let cache = ThingsCache::new_default();
+        let performance_monitor = PerformanceMonitor::new_default();
+        let exporter = DataExporter::new_default();
+        let backup_manager = BackupManager::new(config);
+
+        Self {
+            db,
+            cache,
+            performance_monitor,
+            exporter,
+            backup_manager,
+        }
     }
 
     /// List available MCP tools
@@ -254,6 +275,76 @@ impl ThingsMcpServer {
                     }
                 }),
             },
+            Tool {
+                name: "backup_database".to_string(),
+                description: "Create a backup of the Things 3 database".to_string(),
+                input_schema: serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "backup_dir": {
+                            "type": "string",
+                            "description": "Directory to store the backup"
+                        },
+                        "description": {
+                            "type": "string",
+                            "description": "Optional description for the backup"
+                        }
+                    },
+                    "required": ["backup_dir"]
+                }),
+            },
+            Tool {
+                name: "restore_database".to_string(),
+                description: "Restore from a backup".to_string(),
+                input_schema: serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "backup_path": {
+                            "type": "string",
+                            "description": "Path to the backup file"
+                        }
+                    },
+                    "required": ["backup_path"]
+                }),
+            },
+            Tool {
+                name: "list_backups".to_string(),
+                description: "List available backups".to_string(),
+                input_schema: serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "backup_dir": {
+                            "type": "string",
+                            "description": "Directory containing backups"
+                        }
+                    },
+                    "required": ["backup_dir"]
+                }),
+            },
+            Tool {
+                name: "get_performance_stats".to_string(),
+                description: "Get performance statistics and metrics".to_string(),
+                input_schema: serde_json::json!({
+                    "type": "object",
+                    "properties": {}
+                }),
+            },
+            Tool {
+                name: "get_system_metrics".to_string(),
+                description: "Get current system resource metrics".to_string(),
+                input_schema: serde_json::json!({
+                    "type": "object",
+                    "properties": {}
+                }),
+            },
+            Tool {
+                name: "get_cache_stats".to_string(),
+                description: "Get cache statistics and hit rates".to_string(),
+                input_schema: serde_json::json!({
+                    "type": "object",
+                    "properties": {}
+                }),
+            },
         ])
     }
 
@@ -274,6 +365,12 @@ impl ThingsMcpServer {
             "export_data" => self.handle_export_data(arguments).await?,
             "bulk_create_tasks" => self.handle_bulk_create_tasks(arguments).await?,
             "get_recent_tasks" => self.handle_get_recent_tasks(arguments).await?,
+            "backup_database" => self.handle_backup_database(arguments).await?,
+            "restore_database" => self.handle_restore_database(arguments).await?,
+            "list_backups" => self.handle_list_backups(arguments).await?,
+            "get_performance_stats" => self.handle_get_performance_stats(arguments).await?,
+            "get_system_metrics" => self.handle_get_system_metrics(arguments).await?,
+            "get_cache_stats" => self.handle_get_cache_stats(arguments).await?,
             _ => {
                 return Ok(CallToolResult {
                     content: vec![Content::Text {
@@ -519,6 +616,117 @@ impl ThingsMcpServer {
         Ok(CallToolResult {
             content: vec![Content::Text {
                 text: serde_json::to_string_pretty(&response)?,
+            }],
+            is_error: false,
+        })
+    }
+
+    async fn handle_backup_database(&self, args: Value) -> Result<CallToolResult> {
+        let backup_dir = args
+            .get("backup_dir")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| anyhow::anyhow!("Missing required parameter: backup_dir"))?;
+        let description = args.get("description").and_then(|v| v.as_str());
+
+        let backup_path = std::path::Path::new(backup_dir);
+        let metadata = self
+            .backup_manager
+            .create_backup(backup_path, description)
+            .await?;
+
+        let response = serde_json::json!({
+            "message": "Backup created successfully",
+            "backup_path": metadata.backup_path,
+            "file_size": metadata.file_size,
+            "created_at": metadata.created_at
+        });
+
+        Ok(CallToolResult {
+            content: vec![Content::Text {
+                text: serde_json::to_string_pretty(&response)?,
+            }],
+            is_error: false,
+        })
+    }
+
+    async fn handle_restore_database(&self, args: Value) -> Result<CallToolResult> {
+        let backup_path = args
+            .get("backup_path")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| anyhow::anyhow!("Missing required parameter: backup_path"))?;
+
+        let backup_file = std::path::Path::new(backup_path);
+        self.backup_manager.restore_backup(backup_file).await?;
+
+        let response = serde_json::json!({
+            "message": "Database restored successfully",
+            "backup_path": backup_path
+        });
+
+        Ok(CallToolResult {
+            content: vec![Content::Text {
+                text: serde_json::to_string_pretty(&response)?,
+            }],
+            is_error: false,
+        })
+    }
+
+    async fn handle_list_backups(&self, args: Value) -> Result<CallToolResult> {
+        let backup_dir = args
+            .get("backup_dir")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| anyhow::anyhow!("Missing required parameter: backup_dir"))?;
+
+        let backup_path = std::path::Path::new(backup_dir);
+        let backups = self.backup_manager.list_backups(backup_path)?;
+
+        let response = serde_json::json!({
+            "backups": backups,
+            "count": backups.len()
+        });
+
+        Ok(CallToolResult {
+            content: vec![Content::Text {
+                text: serde_json::to_string_pretty(&response)?,
+            }],
+            is_error: false,
+        })
+    }
+
+    async fn handle_get_performance_stats(&self, _args: Value) -> Result<CallToolResult> {
+        let stats = self.performance_monitor.get_all_stats();
+        let summary = self.performance_monitor.get_summary();
+
+        let response = serde_json::json!({
+            "summary": summary,
+            "operation_stats": stats
+        });
+
+        Ok(CallToolResult {
+            content: vec![Content::Text {
+                text: serde_json::to_string_pretty(&response)?,
+            }],
+            is_error: false,
+        })
+    }
+
+    async fn handle_get_system_metrics(&self, _args: Value) -> Result<CallToolResult> {
+        let metrics = self.performance_monitor.get_system_metrics()?;
+
+        Ok(CallToolResult {
+            content: vec![Content::Text {
+                text: serde_json::to_string_pretty(&metrics)?,
+            }],
+            is_error: false,
+        })
+    }
+
+    async fn handle_get_cache_stats(&self, _args: Value) -> Result<CallToolResult> {
+        let stats = self.cache.get_stats();
+
+        Ok(CallToolResult {
+            content: vec![Content::Text {
+                text: serde_json::to_string_pretty(&stats)?,
             }],
             is_error: false,
         })

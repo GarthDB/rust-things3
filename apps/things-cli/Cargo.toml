@@ -42,3 +42,16 @@ uuid = { version = "1.0", features = ["v4", "serde"] }
 
 # Date/Time
 chrono = { version = "0.4", features = ["serde"] }
+
+# Caching and Performance
+moka.workspace = true
+dashmap.workspace = true
+parking_lot.workspace = true
+once_cell.workspace = true
+
+# Export formats
+csv.workspace = true
+quick-xml.workspace = true
+
+# Performance monitoring
+sysinfo.workspace = true
