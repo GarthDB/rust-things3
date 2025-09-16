@@ -96,6 +96,28 @@ tasks:
     - TUTORIAL.md
     deps:
     - build
+  coverage:
+    command: bash
+    args: ['-c', 'cargo llvm-cov --lcov --output-path lcov.info && cargo llvm-cov --html --output-dir target/llvm-cov/html && cargo llvm-cov --json --output-path coverage.json && cargo llvm-cov --cobertura --output-path cobertura.xml && cargo llvm-cov --text --output-path coverage.txt']
+    inputs:
+    - src/**/*.rs
+    - src/**/*.md
+    - benches/**/*.rs
+    - tests/**/*.rs
+    - Cargo.toml
+    - README.md
+    - API.md
+    - TUTORIAL.md
+    outputs:
+    - lcov.info
+    - coverage.json
+    - cobertura.xml
+    - coverage.txt
+    - target/llvm-cov/html/**/*
+    options:
+      cache: true
+      outputStyle: stream
+    deps: []
 tags:
 - core
 - library

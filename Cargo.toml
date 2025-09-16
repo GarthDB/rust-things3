@@ -57,3 +57,24 @@ criterion = "0.5"
 # Development
 xtask = { path = "tools/xtask" }
 cargo-husky = "1.5"
+
+# Coverage
+[workspace.metadata.coverage]
+# Coverage configuration for the workspace
+tool = "cargo-llvm-cov"
+config-file = ".llvm-cov.toml"
+output-dir = "target/llvm-cov"
+lcov-file = "lcov.info"
+html-dir = "target/llvm-cov/html"
+json-file = "coverage.json"
+cobertura-file = "cobertura.xml"
+text-file = "coverage.txt"
+
+# Coverage thresholds
+[workspace.metadata.coverage.thresholds]
+lines = 80
+functions = 80
+regions = 80
+uncovered-lines = 50
+uncovered-regions = 50
+uncovered-functions = 10

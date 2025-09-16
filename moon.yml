@@ -160,3 +160,75 @@ tasks:
     options:
       cache: false
       outputStyle: 'stream'
+
+  # Code coverage tasks
+  coverage:
+    command: 'bash'
+    args: ['-c', 'cargo llvm-cov --workspace --all-features --lcov --output-path lcov.info && cargo llvm-cov --workspace --all-features --html --output-dir target/llvm-cov/html && cargo llvm-cov --workspace --all-features --json --output-path coverage.json && cargo llvm-cov --workspace --all-features --cobertura --output-path cobertura.xml && cargo llvm-cov --workspace --all-features --text --output-path coverage.txt']
+    inputs:
+      - 'libs/**/*.rs'
+      - 'apps/**/*.rs'
+      - 'tools/**/*.rs'
+      - 'tests/**/*.rs'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+    outputs:
+      - 'lcov.info'
+      - 'coverage.json'
+      - 'cobertura.xml'
+      - 'coverage.txt'
+      - 'target/llvm-cov/html/**/*'
+    options:
+      cache: true
+      outputStyle: 'stream'
+    env:
+      RUST_LOG: 'info'
+
+  coverage-lcov:
+    command: 'cargo'
+    args: ['llvm-cov', '--workspace', '--all-features', '--lcov', '--output-path', 'lcov.info']
+    inputs:
+      - 'libs/**/*.rs'
+      - 'apps/**/*.rs'
+      - 'tools/**/*.rs'
+      - 'tests/**/*.rs'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+    outputs:
+      - 'lcov.info'
+    options:
+      cache: true
+      outputStyle: 'stream'
+
+  coverage-html:
+    command: 'cargo'
+    args: ['llvm-cov', '--workspace', '--all-features', '--html', '--output-dir', 'target/llvm-cov/html']
+    inputs:
+      - 'libs/**/*.rs'
+      - 'apps/**/*.rs'
+      - 'tools/**/*.rs'
+      - 'tests/**/*.rs'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+    outputs:
+      - 'target/llvm-cov/html/**/*'
+    options:
+      cache: true
+      outputStyle: 'stream'
+
+  coverage-clean:
+    command: 'cargo'
+    args: ['llvm-cov', 'clean']
+    inputs: []
+    options:
+      cache: false
+      outputStyle: 'stream'
+
+  coverage-open:
+    command: 'open'
+    args: ['target/llvm-cov/html/index.html']
+    inputs: []
+    options:
+      cache: false
+      outputStyle: 'stream'
+    platform: 'darwin'

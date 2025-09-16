@@ -1,0 +1,116 @@
+# cargo-llvm-cov configuration for Rust Things monorepo
+
+[llvm-cov]
+# Enable branch coverage (unstable feature)
+branch = false
+
+# Enable MCDC coverage (unstable feature)  
+mcdc = false
+
+# Include doc tests (unstable feature)
+doctests = false
+
+# Include build scripts in coverage
+include-build-script = false
+
+# Show missing lines in reports
+show-missing-lines = true
+
+# Show instantiations in reports
+show-instantiations = false
+
+# Include FFI coverage
+include-ffi = false
+
+# Ignore filename regex patterns
+ignore-filename-regex = [
+    "target/.*",
+    ".*\\.rs\\.orig",
+    ".*\\.rs\\.rej",
+    ".*/tests/.*",
+    ".*/benches/.*",
+    ".*/examples/.*",
+]
+
+# Coverage thresholds
+fail-under-lines = 80
+fail-under-functions = 80
+fail-under-regions = 80
+
+# Maximum uncovered lines/regions/functions
+fail-uncovered-lines = 50
+fail-uncovered-regions = 50
+fail-uncovered-functions = 10
+
+# Output configuration
+[output]
+# HTML output directory
+html-dir = "target/llvm-cov/html"
+
+# LCOV output file
+lcov-file = "lcov.info"
+
+# JSON output file
+json-file = "coverage.json"
+
+# Cobertura output file
+cobertura-file = "cobertura.xml"
+
+# Text output file
+text-file = "coverage.txt"
+
+# Workspace configuration
+[workspace]
+# Include all packages in workspace
+all-packages = true
+
+# Exclude specific packages from coverage
+exclude = [
+    "xtask",  # Build tools don't need coverage
+]
+
+# Features to enable during coverage
+features = ["test-utils"]
+
+# Test configuration
+[test]
+# Run all tests
+all-targets = true
+
+# Include integration tests
+tests = true
+
+# Include unit tests
+lib = true
+
+# Include binary tests
+bins = true
+
+# Include example tests
+examples = true
+
+# Include benchmark tests
+benches = true
+
+# Don't fail fast - run all tests
+no-fail-fast = true
+
+# Ignore test failures for coverage generation
+ignore-run-fail = false
+
+# Performance configuration
+[performance]
+# Number of parallel jobs
+jobs = 0  # 0 = number of CPUs
+
+# Build in release mode for performance
+release = false
+
+# Profile to use
+profile = "test"
+
+# Verbosity level
+verbose = false
+
+# Color output
+color = "auto"

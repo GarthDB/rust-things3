@@ -1,0 +1,182 @@
+name: Code Coverage
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  coverage:
+    name: Code Coverage
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0  # Needed for coverage reports
+    
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        components: llvm-tools-preview
+    
+    - name: Cache cargo registry
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git
+          target
+        key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+        restore-keys: |
+          ${{ runner.os }}-cargo-
+    
+    - name: Install cargo-llvm-cov
+      run: cargo install cargo-llvm-cov
+    
+    - name: Run coverage analysis
+      run: |
+        cargo llvm-cov --workspace --all-features \
+          --lcov --output-path lcov.info \
+          --html --output-dir target/llvm-cov/html \
+          --json --output-path coverage.json \
+          --cobertura --output-path cobertura.xml \
+          --text --output-path coverage.txt
+    
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v4
+      with:
+        file: lcov.info
+        flags: unittests
+        name: codecov-umbrella
+        fail_ci_if_error: false
+        verbose: true
+    
+    - name: Upload coverage to Codecov (Cobertura)
+      uses: codecov/codecov-action@v4
+      with:
+        file: cobertura.xml
+        flags: unittests
+        name: codecov-cobertura
+        fail_ci_if_error: false
+        verbose: true
+    
+    - name: Upload coverage artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: coverage-reports
+        path: |
+          lcov.info
+          coverage.json
+          cobertura.xml
+          coverage.txt
+          target/llvm-cov/html/
+        retention-days: 30
+    
+    - name: Comment PR with coverage
+      if: github.event_name == 'pull_request'
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const fs = require('fs');
+          
+          // Read coverage summary
+          let coverageSummary = 'Coverage analysis completed.';
+          
+          if (fs.existsSync('coverage.txt')) {
+            const coverageText = fs.readFileSync('coverage.txt', 'utf8');
+            const lines = coverageText.split('\n');
+            const summaryLines = lines.filter(line => 
+              line.includes('TOTAL') || 
+              line.includes('Summary') ||
+              line.includes('Coverage')
+            );
+            
+            if (summaryLines.length > 0) {
+              coverageSummary = '## 📊 Coverage Summary\n\n```\n' + 
+                summaryLines.join('\n') + 
+                '\n```\n\n' +
+                '📁 [View detailed HTML report](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})';
+            }
+          }
+          
+          // Find existing coverage comment
+          const { data: comments } = await github.rest.issues.listComments({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            issue_number: context.issue.number,
+          });
+          
+          const botComment = comments.find(comment => 
+            comment.user.type === 'Bot' && 
+            comment.body.includes('Coverage Summary')
+          );
+          
+          if (botComment) {
+            // Update existing comment
+            await github.rest.issues.updateComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              comment_id: botComment.id,
+              body: coverageSummary
+            });
+          } else {
+            // Create new comment
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: coverageSummary
+            });
+          }
+
+  coverage-summary:
+    name: Coverage Summary
+    runs-on: ubuntu-latest
+    needs: coverage
+    if: always()
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Download coverage artifacts
+      uses: actions/download-artifact@v4
+      with:
+        name: coverage-reports
+        path: coverage/
+    
+    - name: Display coverage summary
+      run: |
+        echo "## 📊 Coverage Report Summary"
+        echo
+        if [ -f "coverage/coverage.txt" ]; then
+          echo "### Text Report"
+          cat coverage/coverage.txt
+          echo
+        fi
+        
+        if [ -f "coverage/lcov.info" ]; then
+          echo "### LCOV Report"
+          echo "LCOV file generated: $(wc -l < coverage/lcov.info) lines"
+          echo
+        fi
+        
+        if [ -f "coverage/coverage.json" ]; then
+          echo "### JSON Report"
+          echo "JSON file generated: $(wc -c < coverage/coverage.json) bytes"
+          echo
+        fi
+        
+        echo "### Artifacts"
+        echo "- HTML Report: Available in coverage artifacts"
+        echo "- LCOV File: Available for Codecov integration"
+        echo "- JSON File: Available for custom processing"
+        echo "- Cobertura File: Available for CI integration"
