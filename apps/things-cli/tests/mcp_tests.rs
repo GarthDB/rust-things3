@@ -7,9 +7,7 @@ use tempfile::NamedTempFile;
 use things_cli::mcp::{
     CallToolRequest, CallToolResult, Content, ListToolsResult, ThingsMcpServer, Tool,
 };
-use things_core::{
-    config::ThingsConfig, database::ThingsDatabase, test_utils::create_test_database,
-};
+use things_core::{config::ThingsConfig, database::ThingsDatabase};
 
 /// Create a test MCP server with mock database
 fn create_test_mcp_server() -> ThingsMcpServer {

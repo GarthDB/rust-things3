@@ -165,6 +165,10 @@ impl ThingsDatabase {
     /// Panics if UUID parsing fails (should not happen with valid database)
     pub fn get_today(&self, limit: Option<usize>) -> Result<Vec<Task>> {
         let today = chrono::Utc::now().date_naive();
+        // Convert today to days since 2001-01-01 (Things 3 format)
+        let base_date = chrono::NaiveDate::from_ymd_opt(2001, 1, 1).unwrap();
+        let days_since_2001 = today.signed_duration_since(base_date).num_days();
+
         let mut stmt = self.conn.prepare(
             "SELECT uuid, title, type, status, notes, startDate, deadline, creationDate, userModificationDate, project, area, heading 
              FROM TMTask 
@@ -172,7 +176,7 @@ impl ThingsDatabase {
              ORDER BY creationDate DESC"
         )?;
 
-        let rows = stmt.query_map([today.format("%Y-%m-%d").to_string()], |row| {
+        let rows = stmt.query_map([days_since_2001], |row| {
             Ok(Task {
                 uuid: Uuid::parse_str(&row.get::<_, String>("uuid")?)
                     .unwrap_or_else(|_| Uuid::new_v4()),
