@@ -331,36 +331,351 @@ fn escape_xml(s: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_utils::{create_mock_areas, create_mock_projects, create_mock_tasks};
 
     #[test]
-    fn test_export_json() {
+    fn test_export_format_from_str() {
+        assert_eq!("json".parse::<ExportFormat>().unwrap(), ExportFormat::Json);
+        assert_eq!("JSON".parse::<ExportFormat>().unwrap(), ExportFormat::Json);
+        assert_eq!("csv".parse::<ExportFormat>().unwrap(), ExportFormat::Csv);
+        assert_eq!("CSV".parse::<ExportFormat>().unwrap(), ExportFormat::Csv);
+        assert_eq!("opml".parse::<ExportFormat>().unwrap(), ExportFormat::Opml);
+        assert_eq!("OPML".parse::<ExportFormat>().unwrap(), ExportFormat::Opml);
+        assert_eq!(
+            "markdown".parse::<ExportFormat>().unwrap(),
+            ExportFormat::Markdown
+        );
+        assert_eq!(
+            "Markdown".parse::<ExportFormat>().unwrap(),
+            ExportFormat::Markdown
+        );
+        assert_eq!(
+            "md".parse::<ExportFormat>().unwrap(),
+            ExportFormat::Markdown
+        );
+        assert_eq!(
+            "MD".parse::<ExportFormat>().unwrap(),
+            ExportFormat::Markdown
+        );
+
+        assert!("invalid".parse::<ExportFormat>().is_err());
+        assert!("".parse::<ExportFormat>().is_err());
+    }
+
+    #[test]
+    fn test_export_data_new() {
+        let tasks = create_mock_tasks();
+        let projects = create_mock_projects();
+        let areas = create_mock_areas();
+
+        let data = ExportData::new(tasks.clone(), projects.clone(), areas.clone());
+
+        assert_eq!(data.tasks.len(), tasks.len());
+        assert_eq!(data.projects.len(), projects.len());
+        assert_eq!(data.areas.len(), areas.len());
+        assert_eq!(data.total_items, tasks.len() + projects.len() + areas.len());
+        assert!(data.exported_at <= Utc::now());
+    }
+
+    #[test]
+    fn test_export_config_default() {
+        let config = ExportConfig::default();
+
+        assert!(config.include_metadata);
+        assert!(config.include_notes);
+        assert!(config.include_tags);
+        assert_eq!(config.date_format, "%Y-%m-%d %H:%M:%S");
+        assert_eq!(config.timezone, "UTC");
+    }
+
+    #[test]
+    fn test_data_exporter_new() {
+        let config = ExportConfig::default();
+        let _exporter = DataExporter::new(config);
+        // Just test that it can be created
+        assert!(true);
+    }
+
+    #[test]
+    fn test_data_exporter_new_default() {
+        let _exporter = DataExporter::new_default();
+        // Just test that it can be created
+        assert!(true);
+    }
+
+    #[test]
+    fn test_export_json_empty() {
         let exporter = DataExporter::new_default();
         let data = ExportData::new(vec![], vec![], vec![]);
         let result = exporter.export(&data, ExportFormat::Json);
         assert!(result.is_ok());
+
+        let json = result.unwrap();
+        assert!(json.contains("\"tasks\""));
+        assert!(json.contains("\"projects\""));
+        assert!(json.contains("\"areas\""));
+        assert!(json.contains("\"exported_at\""));
+        assert!(json.contains("\"total_items\""));
     }
 
     #[test]
-    fn test_export_csv() {
+    fn test_export_json_with_data() {
+        let exporter = DataExporter::new_default();
+        let tasks = create_mock_tasks();
+        let projects = create_mock_projects();
+        let areas = create_mock_areas();
+        let data = ExportData::new(tasks, projects, areas);
+
+        let result = exporter.export(&data, ExportFormat::Json);
+        assert!(result.is_ok());
+
+        let json = result.unwrap();
+        assert!(json.contains("\"Review quarterly reports\""));
+        assert!(json.contains("\"Website Redesign\""));
+        assert!(json.contains("\"Work\""));
+    }
+
+    #[test]
+    fn test_export_csv_empty() {
         let exporter = DataExporter::new_default();
         let data = ExportData::new(vec![], vec![], vec![]);
         let result = exporter.export(&data, ExportFormat::Csv);
         assert!(result.is_ok());
+
+        let csv = result.unwrap();
+        assert!(csv.is_empty());
     }
 
     #[test]
-    fn test_export_markdown() {
+    fn test_export_csv_with_data() {
+        let exporter = DataExporter::new_default();
+        let tasks = create_mock_tasks();
+        let projects = create_mock_projects();
+        let areas = create_mock_areas();
+        let data = ExportData::new(tasks, projects, areas);
+
+        let result = exporter.export(&data, ExportFormat::Csv);
+        assert!(result.is_ok());
+
+        let csv = result.unwrap();
+        assert!(csv.contains(
+            "Type,Title,Status,Notes,Start Date,Deadline,Created,Modified,Project,Area,Parent"
+        ));
+        assert!(csv.contains("Review quarterly reports"));
+        assert!(csv.contains("Projects"));
+        assert!(csv.contains("Website Redesign"));
+        assert!(csv.contains("Areas"));
+        assert!(csv.contains("Work"));
+    }
+
+    #[test]
+    fn test_export_markdown_empty() {
         let exporter = DataExporter::new_default();
         let data = ExportData::new(vec![], vec![], vec![]);
         let result = exporter.export(&data, ExportFormat::Markdown);
         assert!(result.is_ok());
+
+        let md = result.unwrap();
+        assert!(md.contains("# Things 3 Export"));
+        assert!(md.contains("**Total Items:** 0"));
     }
 
     #[test]
-    fn test_export_opml() {
+    fn test_export_markdown_with_data() {
+        let exporter = DataExporter::new_default();
+        let tasks = create_mock_tasks();
+        let projects = create_mock_projects();
+        let areas = create_mock_areas();
+        let data = ExportData::new(tasks, projects, areas);
+
+        let result = exporter.export(&data, ExportFormat::Markdown);
+        assert!(result.is_ok());
+
+        let md = result.unwrap();
+        assert!(md.contains("# Things 3 Export"));
+        assert!(md.contains("## Areas"));
+        assert!(md.contains("### Work"));
+        assert!(md.contains("## Projects"));
+        assert!(md.contains("### Website Redesign"));
+        assert!(md.contains("## Tasks"));
+        assert!(md.contains("- [ ] Review quarterly reports"));
+    }
+
+    #[test]
+    fn test_export_opml_empty() {
         let exporter = DataExporter::new_default();
         let data = ExportData::new(vec![], vec![], vec![]);
         let result = exporter.export(&data, ExportFormat::Opml);
         assert!(result.is_ok());
+
+        let opml = result.unwrap();
+        assert!(opml.contains("<?xml version=\"1.0\" encoding=\"UTF-8\"?>"));
+        assert!(opml.contains("<opml version=\"2.0\">"));
+        assert!(opml.contains("<head>"));
+        assert!(opml.contains("<body>"));
+        assert!(opml.contains("</opml>"));
+    }
+
+    #[test]
+    fn test_export_opml_with_data() {
+        let exporter = DataExporter::new_default();
+        let tasks = create_mock_tasks();
+        let projects = create_mock_projects();
+        let areas = create_mock_areas();
+        let data = ExportData::new(tasks, projects, areas);
+
+        let result = exporter.export(&data, ExportFormat::Opml);
+        assert!(result.is_ok());
+
+        let opml = result.unwrap();
+        assert!(opml.contains("<?xml version=\"1.0\" encoding=\"UTF-8\"?>"));
+        assert!(opml.contains("<opml version=\"2.0\">"));
+        assert!(opml.contains("Work"));
+        assert!(opml.contains("Website Redesign"));
+    }
+
+    #[test]
+    fn test_format_task_type_csv() {
+        assert_eq!(format_task_type_csv(&TaskType::Todo), "Todo");
+        assert_eq!(format_task_type_csv(&TaskType::Project), "Project");
+        assert_eq!(format_task_type_csv(&TaskType::Heading), "Heading");
+        assert_eq!(format_task_type_csv(&TaskType::Area), "Area");
+    }
+
+    #[test]
+    fn test_format_task_status_csv() {
+        assert_eq!(
+            format_task_status_csv(&TaskStatus::Incomplete),
+            "Incomplete"
+        );
+        assert_eq!(format_task_status_csv(&TaskStatus::Completed), "Completed");
+        assert_eq!(format_task_status_csv(&TaskStatus::Canceled), "Canceled");
+        assert_eq!(format_task_status_csv(&TaskStatus::Trashed), "Trashed");
+    }
+
+    #[test]
+    fn test_format_date_csv() {
+        use chrono::NaiveDate;
+
+        let date = NaiveDate::from_ymd_opt(2023, 12, 25).unwrap();
+        assert_eq!(format_date_csv(Some(date)), "2023-12-25");
+        assert_eq!(format_date_csv(None), "");
+    }
+
+    #[test]
+    fn test_format_datetime_csv() {
+        let datetime = Utc::now();
+        let formatted = format_datetime_csv(datetime);
+        assert!(
+            formatted.contains("2023") || formatted.contains("2024") || formatted.contains("2025")
+        );
+        assert!(formatted.contains("-"));
+        assert!(formatted.contains(" "));
+        assert!(formatted.contains(":"));
+    }
+
+    #[test]
+    fn test_escape_csv() {
+        // No special characters
+        assert_eq!(escape_csv("normal text"), "normal text");
+
+        // Contains comma
+        assert_eq!(escape_csv("text,with,comma"), "\"text,with,comma\"");
+
+        // Contains quote
+        assert_eq!(escape_csv("text\"with\"quote"), "\"text\"\"with\"\"quote\"");
+
+        // Contains newline
+        assert_eq!(escape_csv("text\nwith\nnewline"), "\"text\nwith\nnewline\"");
+
+        // Contains multiple special characters
+        assert_eq!(
+            escape_csv("text,\"with\",\nall"),
+            "\"text,\"\"with\"\",\nall\""
+        );
+    }
+
+    #[test]
+    fn test_escape_xml() {
+        assert_eq!(escape_xml("normal text"), "normal text");
+        assert_eq!(
+            escape_xml("text&with&ampersand"),
+            "text&amp;with&amp;ampersand"
+        );
+        assert_eq!(escape_xml("text<with>tags"), "text&lt;with&gt;tags");
+        assert_eq!(
+            escape_xml("text\"with\"quotes"),
+            "text&quot;with&quot;quotes"
+        );
+        assert_eq!(
+            escape_xml("text'with'apostrophe"),
+            "text&apos;with&apos;apostrophe"
+        );
+        assert_eq!(escape_xml("all<>&\"'"), "all&lt;&gt;&amp;&quot;&apos;");
+    }
+
+    #[test]
+    fn test_export_data_serialization() {
+        let tasks = create_mock_tasks();
+        let projects = create_mock_projects();
+        let areas = create_mock_areas();
+        let data = ExportData::new(tasks, projects, areas);
+
+        // Test that ExportData can be serialized and deserialized
+        let json = serde_json::to_string(&data).unwrap();
+        let deserialized: ExportData = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(data.tasks.len(), deserialized.tasks.len());
+        assert_eq!(data.projects.len(), deserialized.projects.len());
+        assert_eq!(data.areas.len(), deserialized.areas.len());
+        assert_eq!(data.total_items, deserialized.total_items);
+    }
+
+    #[test]
+    fn test_export_config_clone() {
+        let config = ExportConfig::default();
+        let cloned = config.clone();
+
+        assert_eq!(config.include_metadata, cloned.include_metadata);
+        assert_eq!(config.include_notes, cloned.include_notes);
+        assert_eq!(config.include_tags, cloned.include_tags);
+        assert_eq!(config.date_format, cloned.date_format);
+        assert_eq!(config.timezone, cloned.timezone);
+    }
+
+    #[test]
+    fn test_export_format_debug() {
+        let formats = vec![
+            ExportFormat::Json,
+            ExportFormat::Csv,
+            ExportFormat::Opml,
+            ExportFormat::Markdown,
+        ];
+
+        for format in formats {
+            let debug_str = format!("{:?}", format);
+            assert!(!debug_str.is_empty());
+        }
+    }
+
+    #[test]
+    fn test_export_format_equality() {
+        assert_eq!(ExportFormat::Json, ExportFormat::Json);
+        assert_eq!(ExportFormat::Csv, ExportFormat::Csv);
+        assert_eq!(ExportFormat::Opml, ExportFormat::Opml);
+        assert_eq!(ExportFormat::Markdown, ExportFormat::Markdown);
+
+        assert_ne!(ExportFormat::Json, ExportFormat::Csv);
+        assert_ne!(ExportFormat::Csv, ExportFormat::Opml);
+        assert_ne!(ExportFormat::Opml, ExportFormat::Markdown);
+        assert_ne!(ExportFormat::Markdown, ExportFormat::Json);
+    }
+
+    #[test]
+    fn test_export_data_debug() {
+        let data = ExportData::new(vec![], vec![], vec![]);
+        let debug_str = format!("{:?}", data);
+        assert!(!debug_str.is_empty());
+        assert!(debug_str.contains("ExportData"));
     }
 }

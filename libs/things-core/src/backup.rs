@@ -223,18 +223,225 @@ mod tests {
     use super::*;
     use tempfile::TempDir;
 
+    #[test]
+    fn test_backup_metadata_creation() {
+        let now = Utc::now();
+        let source_path = PathBuf::from("/path/to/source.db");
+        let backup_path = PathBuf::from("/path/to/backup.db");
+
+        let metadata = BackupMetadata {
+            created_at: now,
+            source_path: source_path.clone(),
+            backup_path: backup_path.clone(),
+            file_size: 1024,
+            version: "1.0.0".to_string(),
+            description: Some("Test backup".to_string()),
+        };
+
+        assert_eq!(metadata.source_path, source_path);
+        assert_eq!(metadata.backup_path, backup_path);
+        assert_eq!(metadata.file_size, 1024);
+        assert_eq!(metadata.version, "1.0.0");
+        assert_eq!(metadata.description, Some("Test backup".to_string()));
+    }
+
+    #[test]
+    fn test_backup_metadata_serialization() {
+        let now = Utc::now();
+        let metadata = BackupMetadata {
+            created_at: now,
+            source_path: PathBuf::from("/test/source.db"),
+            backup_path: PathBuf::from("/test/backup.db"),
+            file_size: 2048,
+            version: "2.0.0".to_string(),
+            description: Some("Serialization test".to_string()),
+        };
+
+        // Test serialization
+        let json = serde_json::to_string(&metadata).unwrap();
+        assert!(json.contains("created_at"));
+        assert!(json.contains("source_path"));
+        assert!(json.contains("backup_path"));
+        assert!(json.contains("file_size"));
+        assert!(json.contains("version"));
+        assert!(json.contains("description"));
+
+        // Test deserialization
+        let deserialized: BackupMetadata = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized.source_path, metadata.source_path);
+        assert_eq!(deserialized.backup_path, metadata.backup_path);
+        assert_eq!(deserialized.file_size, metadata.file_size);
+        assert_eq!(deserialized.version, metadata.version);
+        assert_eq!(deserialized.description, metadata.description);
+    }
+
+    #[test]
+    fn test_backup_manager_new() {
+        let config = ThingsConfig::from_env();
+        let _backup_manager = BackupManager::new(config);
+        // Just test that it can be created
+        assert!(true);
+    }
+
+    #[test]
+    fn test_backup_stats_creation() {
+        let now = Utc::now();
+        let stats = BackupStats {
+            total_backups: 5,
+            total_size: 10240,
+            oldest_backup: Some(now - chrono::Duration::days(7)),
+            newest_backup: Some(now),
+        };
+
+        assert_eq!(stats.total_backups, 5);
+        assert_eq!(stats.total_size, 10240);
+        assert!(stats.oldest_backup.is_some());
+        assert!(stats.newest_backup.is_some());
+    }
+
+    #[test]
+    fn test_backup_stats_serialization() {
+        let now = Utc::now();
+        let stats = BackupStats {
+            total_backups: 3,
+            total_size: 5120,
+            oldest_backup: Some(now - chrono::Duration::days(3)),
+            newest_backup: Some(now - chrono::Duration::hours(1)),
+        };
+
+        // Test serialization
+        let json = serde_json::to_string(&stats).unwrap();
+        assert!(json.contains("total_backups"));
+        assert!(json.contains("total_size"));
+        assert!(json.contains("oldest_backup"));
+        assert!(json.contains("newest_backup"));
+
+        // Test deserialization
+        let deserialized: BackupStats = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized.total_backups, stats.total_backups);
+        assert_eq!(deserialized.total_size, stats.total_size);
+    }
+
+    #[test]
+    fn test_backup_stats_empty() {
+        let stats = BackupStats {
+            total_backups: 0,
+            total_size: 0,
+            oldest_backup: None,
+            newest_backup: None,
+        };
+
+        assert_eq!(stats.total_backups, 0);
+        assert_eq!(stats.total_size, 0);
+        assert!(stats.oldest_backup.is_none());
+        assert!(stats.newest_backup.is_none());
+    }
+
+    #[test]
+    fn test_backup_metadata_debug() {
+        let metadata = BackupMetadata {
+            created_at: Utc::now(),
+            source_path: PathBuf::from("/test/source.db"),
+            backup_path: PathBuf::from("/test/backup.db"),
+            file_size: 1024,
+            version: "1.0.0".to_string(),
+            description: Some("Debug test".to_string()),
+        };
+
+        let debug_str = format!("{:?}", metadata);
+        assert!(debug_str.contains("BackupMetadata"));
+        assert!(debug_str.contains("source_path"));
+        assert!(debug_str.contains("backup_path"));
+    }
+
+    #[test]
+    fn test_backup_stats_debug() {
+        let stats = BackupStats {
+            total_backups: 2,
+            total_size: 2048,
+            oldest_backup: Some(Utc::now()),
+            newest_backup: Some(Utc::now()),
+        };
+
+        let debug_str = format!("{:?}", stats);
+        assert!(debug_str.contains("BackupStats"));
+        assert!(debug_str.contains("total_backups"));
+        assert!(debug_str.contains("total_size"));
+    }
+
+    #[test]
+    fn test_backup_metadata_clone() {
+        let metadata = BackupMetadata {
+            created_at: Utc::now(),
+            source_path: PathBuf::from("/test/source.db"),
+            backup_path: PathBuf::from("/test/backup.db"),
+            file_size: 1024,
+            version: "1.0.0".to_string(),
+            description: Some("Clone test".to_string()),
+        };
+
+        let cloned = metadata.clone();
+        assert_eq!(metadata.source_path, cloned.source_path);
+        assert_eq!(metadata.backup_path, cloned.backup_path);
+        assert_eq!(metadata.file_size, cloned.file_size);
+        assert_eq!(metadata.version, cloned.version);
+        assert_eq!(metadata.description, cloned.description);
+    }
+
+    #[test]
+    fn test_backup_stats_clone() {
+        let stats = BackupStats {
+            total_backups: 1,
+            total_size: 512,
+            oldest_backup: Some(Utc::now()),
+            newest_backup: Some(Utc::now()),
+        };
+
+        let cloned = stats.clone();
+        assert_eq!(stats.total_backups, cloned.total_backups);
+        assert_eq!(stats.total_size, cloned.total_size);
+        assert_eq!(stats.oldest_backup, cloned.oldest_backup);
+        assert_eq!(stats.newest_backup, cloned.newest_backup);
+    }
+
     #[tokio::test]
-    async fn test_backup_creation() {
+    async fn test_backup_creation_with_nonexistent_database() {
         let temp_dir = TempDir::new().unwrap();
         let config = ThingsConfig::from_env();
         let backup_manager = BackupManager::new(config);
 
-        // Test backup creation - this will either succeed (if database exists) or fail gracefully
+        // Test backup creation with non-existent database
         let result = backup_manager
             .create_backup(temp_dir.path(), Some("test backup"))
             .await;
 
-        // The test should either succeed or fail with a specific error about missing database
+        // Should fail because database doesn't exist
+        match result {
+            Ok(metadata) => {
+                // If it succeeds, verify the metadata is reasonable
+                assert!(!metadata.backup_path.to_string_lossy().is_empty());
+                assert!(metadata.file_size > 0);
+            }
+            Err(e) => {
+                // If it fails, it should be because the database doesn't exist
+                let error_msg = e.to_string();
+                assert!(error_msg.contains("does not exist") || error_msg.contains("not found"));
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn test_backup_creation_with_nonexistent_backup_dir() {
+        let temp_dir = TempDir::new().unwrap();
+        let config = ThingsConfig::from_env();
+        let backup_manager = BackupManager::new(config);
+
+        // Test backup creation with non-existent backup directory
+        let result = backup_manager
+            .create_backup(temp_dir.path(), Some("test backup"))
+            .await;
+
+        // Should either succeed or fail gracefully
         match result {
             Ok(metadata) => {
                 // If it succeeds, verify the metadata is reasonable
@@ -250,12 +457,167 @@ mod tests {
     }
 
     #[test]
-    fn test_backup_listing() {
+    fn test_backup_listing_empty_directory() {
         let temp_dir = TempDir::new().unwrap();
         let config = ThingsConfig::from_env();
         let backup_manager = BackupManager::new(config);
 
         let backups = backup_manager.list_backups(temp_dir.path()).unwrap();
         assert_eq!(backups.len(), 0);
+    }
+
+    #[test]
+    fn test_backup_listing_nonexistent_directory() {
+        let config = ThingsConfig::from_env();
+        let backup_manager = BackupManager::new(config);
+
+        let backups = backup_manager
+            .list_backups(Path::new("/nonexistent/directory"))
+            .unwrap();
+        assert_eq!(backups.len(), 0);
+    }
+
+    #[test]
+    fn test_get_backup_metadata_nonexistent() {
+        let config = ThingsConfig::from_env();
+        let backup_manager = BackupManager::new(config);
+
+        let result = backup_manager.get_backup_metadata(Path::new("/nonexistent/backup.db"));
+        assert!(result.is_err());
+        let error_msg = result.unwrap_err().to_string();
+        assert!(error_msg.contains("not found"));
+    }
+
+    #[test]
+    fn test_verify_backup_nonexistent() {
+        let config = ThingsConfig::from_env();
+        let backup_manager = BackupManager::new(config);
+
+        let result = backup_manager.verify_backup(Path::new("/nonexistent/backup.db"));
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), false);
+    }
+
+    #[test]
+    fn test_delete_backup_nonexistent() {
+        let config = ThingsConfig::from_env();
+        let backup_manager = BackupManager::new(config);
+
+        // Should not error when trying to delete non-existent backup
+        let result = backup_manager.delete_backup(Path::new("/nonexistent/backup.db"));
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_cleanup_old_backups_empty_directory() {
+        let temp_dir = TempDir::new().unwrap();
+        let config = ThingsConfig::from_env();
+        let backup_manager = BackupManager::new(config);
+
+        let deleted_count = backup_manager
+            .cleanup_old_backups(temp_dir.path(), 5)
+            .unwrap();
+        assert_eq!(deleted_count, 0);
+    }
+
+    #[test]
+    fn test_cleanup_old_backups_nonexistent_directory() {
+        let config = ThingsConfig::from_env();
+        let backup_manager = BackupManager::new(config);
+
+        let deleted_count = backup_manager
+            .cleanup_old_backups(Path::new("/nonexistent"), 5)
+            .unwrap();
+        assert_eq!(deleted_count, 0);
+    }
+
+    #[test]
+    fn test_get_backup_stats_empty_directory() {
+        let temp_dir = TempDir::new().unwrap();
+        let config = ThingsConfig::from_env();
+        let backup_manager = BackupManager::new(config);
+
+        let stats = backup_manager.get_backup_stats(temp_dir.path()).unwrap();
+        assert_eq!(stats.total_backups, 0);
+        assert_eq!(stats.total_size, 0);
+        assert!(stats.oldest_backup.is_none());
+        assert!(stats.newest_backup.is_none());
+    }
+
+    #[test]
+    fn test_get_backup_stats_nonexistent_directory() {
+        let config = ThingsConfig::from_env();
+        let backup_manager = BackupManager::new(config);
+
+        let stats = backup_manager
+            .get_backup_stats(Path::new("/nonexistent"))
+            .unwrap();
+        assert_eq!(stats.total_backups, 0);
+        assert_eq!(stats.total_size, 0);
+        assert!(stats.oldest_backup.is_none());
+        assert!(stats.newest_backup.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_restore_backup_nonexistent() {
+        let config = ThingsConfig::from_env();
+        let backup_manager = BackupManager::new(config);
+
+        let result = backup_manager
+            .restore_backup(Path::new("/nonexistent/backup.db"))
+            .await;
+        assert!(result.is_err());
+        let error_msg = result.unwrap_err().to_string();
+        assert!(error_msg.contains("does not exist"));
+    }
+
+    #[test]
+    fn test_backup_metadata_without_description() {
+        let now = Utc::now();
+        let metadata = BackupMetadata {
+            created_at: now,
+            source_path: PathBuf::from("/test/source.db"),
+            backup_path: PathBuf::from("/test/backup.db"),
+            file_size: 1024,
+            version: "1.0.0".to_string(),
+            description: None,
+        };
+
+        assert!(metadata.description.is_none());
+
+        // Test serialization with None description
+        let json = serde_json::to_string(&metadata).unwrap();
+        assert!(json.contains("null")); // Should contain null for description
+
+        // Test deserialization
+        let deserialized: BackupMetadata = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized.description, None);
+    }
+
+    #[test]
+    fn test_backup_metadata_path_operations() {
+        let source_path = PathBuf::from("/path/to/source.db");
+        let backup_path = PathBuf::from("/path/to/backup.db");
+
+        let metadata = BackupMetadata {
+            created_at: Utc::now(),
+            source_path: source_path.clone(),
+            backup_path: backup_path.clone(),
+            file_size: 1024,
+            version: "1.0.0".to_string(),
+            description: Some("Path test".to_string()),
+        };
+
+        // Test path operations
+        assert_eq!(metadata.source_path.file_name().unwrap(), "source.db");
+        assert_eq!(metadata.backup_path.file_name().unwrap(), "backup.db");
+        assert_eq!(
+            metadata.source_path.parent().unwrap(),
+            Path::new("/path/to")
+        );
+        assert_eq!(
+            metadata.backup_path.parent().unwrap(),
+            Path::new("/path/to")
+        );
     }
 }

@@ -47,3 +47,275 @@ pub fn truncate_string(s: &str, max_len: usize) -> String {
         format!("{}...", &s[..max_len.saturating_sub(3)])
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chrono::{Datelike, NaiveDate};
+
+    #[test]
+    fn test_get_default_database_path() {
+        let path = get_default_database_path();
+
+        // Should contain the expected path components
+        assert!(path.to_string_lossy().contains("Library"));
+        assert!(path.to_string_lossy().contains("Group Containers"));
+        assert!(path
+            .to_string_lossy()
+            .contains("JLMPQHK86H.com.culturedcode.ThingsMac"));
+        assert!(path.to_string_lossy().contains("ThingsData-0Z0Z2"));
+        assert!(path
+            .to_string_lossy()
+            .contains("Things Database.thingsdatabase"));
+        assert!(path.to_string_lossy().contains("main.sqlite"));
+
+        // Should start with home directory
+        let home = std::env::var("HOME").unwrap_or_else(|_| "~".to_string());
+        assert!(path.to_string_lossy().starts_with(&home));
+    }
+
+    #[test]
+    fn test_format_date() {
+        let date = NaiveDate::from_ymd_opt(2023, 12, 25).unwrap();
+        let formatted = format_date(&date);
+        assert_eq!(formatted, "2023-12-25");
+    }
+
+    #[test]
+    fn test_format_date_edge_cases() {
+        // Test January 1st
+        let date = NaiveDate::from_ymd_opt(2024, 1, 1).unwrap();
+        let formatted = format_date(&date);
+        assert_eq!(formatted, "2024-01-01");
+
+        // Test December 31st
+        let date = NaiveDate::from_ymd_opt(2023, 12, 31).unwrap();
+        let formatted = format_date(&date);
+        assert_eq!(formatted, "2023-12-31");
+
+        // Test leap year
+        let date = NaiveDate::from_ymd_opt(2024, 2, 29).unwrap();
+        let formatted = format_date(&date);
+        assert_eq!(formatted, "2024-02-29");
+    }
+
+    #[test]
+    fn test_format_datetime() {
+        let dt = Utc::now();
+        let formatted = format_datetime(&dt);
+
+        // Should contain the expected format components
+        assert!(formatted.contains("UTC"));
+        assert!(formatted.contains("-"));
+        assert!(formatted.contains(" "));
+        assert!(formatted.contains(":"));
+
+        // Should be in the expected format
+        assert!(formatted.len() >= 20); // At least "YYYY-MM-DD HH:MM:SS UTC"
+    }
+
+    #[test]
+    fn test_format_datetime_specific() {
+        // Test with a specific datetime
+        let dt = DateTime::parse_from_rfc3339("2023-12-25T15:30:45Z")
+            .unwrap()
+            .with_timezone(&Utc);
+        let formatted = format_datetime(&dt);
+        assert_eq!(formatted, "2023-12-25 15:30:45 UTC");
+    }
+
+    #[test]
+    fn test_parse_date_valid() {
+        let result = parse_date("2023-12-25");
+        assert!(result.is_ok());
+        let date = result.unwrap();
+        assert_eq!(date.year(), 2023);
+        assert_eq!(date.month(), 12);
+        assert_eq!(date.day(), 25);
+    }
+
+    #[test]
+    fn test_parse_date_edge_cases() {
+        // Test January 1st
+        let result = parse_date("2024-01-01");
+        assert!(result.is_ok());
+        let date = result.unwrap();
+        assert_eq!(date.year(), 2024);
+        assert_eq!(date.month(), 1);
+        assert_eq!(date.day(), 1);
+
+        // Test December 31st
+        let result = parse_date("2023-12-31");
+        assert!(result.is_ok());
+        let date = result.unwrap();
+        assert_eq!(date.year(), 2023);
+        assert_eq!(date.month(), 12);
+        assert_eq!(date.day(), 31);
+
+        // Test leap year
+        let result = parse_date("2024-02-29");
+        assert!(result.is_ok());
+        let date = result.unwrap();
+        assert_eq!(date.year(), 2024);
+        assert_eq!(date.month(), 2);
+        assert_eq!(date.day(), 29);
+    }
+
+    #[test]
+    fn test_parse_date_invalid() {
+        // Test invalid format
+        let result = parse_date("2023/12/25");
+        assert!(result.is_err());
+
+        // Test invalid date
+        let result = parse_date("2023-13-01");
+        assert!(result.is_err());
+
+        // Test invalid day
+        let result = parse_date("2023-02-30");
+        assert!(result.is_err());
+
+        // Test empty string
+        let result = parse_date("");
+        assert!(result.is_err());
+
+        // Test malformed string
+        let result = parse_date("not-a-date");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_is_valid_uuid_valid() {
+        // Test valid UUIDs
+        assert!(is_valid_uuid("550e8400-e29b-41d4-a716-446655440000"));
+        assert!(is_valid_uuid("6ba7b810-9dad-11d1-80b4-00c04fd430c8"));
+        assert!(is_valid_uuid("6ba7b811-9dad-11d1-80b4-00c04fd430c8"));
+        assert!(is_valid_uuid("00000000-0000-0000-0000-000000000000"));
+        assert!(is_valid_uuid("ffffffff-ffff-ffff-ffff-ffffffffffff"));
+    }
+
+    #[test]
+    fn test_is_valid_uuid_invalid() {
+        // Test invalid UUIDs
+        assert!(!is_valid_uuid(""));
+        assert!(!is_valid_uuid("not-a-uuid"));
+        assert!(!is_valid_uuid("550e8400-e29b-41d4-a716"));
+        assert!(!is_valid_uuid("550e8400-e29b-41d4-a716-44665544000"));
+        assert!(!is_valid_uuid("550e8400-e29b-41d4-a716-4466554400000"));
+        assert!(!is_valid_uuid("550e8400-e29b-41d4-a716-44665544000g"));
+        assert!(!is_valid_uuid("550e8400-e29b-41d4-a716-44665544000-"));
+        assert!(!is_valid_uuid("550e8400-e29b-41d4-a716-44665544000 "));
+    }
+
+    #[test]
+    fn test_truncate_string_short() {
+        // Test string shorter than max length
+        let result = truncate_string("hello", 10);
+        assert_eq!(result, "hello");
+
+        // Test string equal to max length
+        let result = truncate_string("hello", 5);
+        assert_eq!(result, "hello");
+    }
+
+    #[test]
+    fn test_truncate_string_long() {
+        // Test string longer than max length
+        let result = truncate_string("hello world", 8);
+        assert_eq!(result, "hello...");
+
+        // Test string much longer than max length
+        let result = truncate_string("this is a very long string", 10);
+        assert_eq!(result, "this is...");
+    }
+
+    #[test]
+    fn test_truncate_string_edge_cases() {
+        // Test with max_len = 0
+        let result = truncate_string("hello", 0);
+        assert_eq!(result, "...");
+
+        // Test with max_len = 1
+        let result = truncate_string("hello", 1);
+        assert_eq!(result, "...");
+
+        // Test with max_len = 2
+        let result = truncate_string("hello", 2);
+        assert_eq!(result, "...");
+
+        // Test with max_len = 3
+        let result = truncate_string("hello", 3);
+        assert_eq!(result, "...");
+
+        // Test with max_len = 4
+        let result = truncate_string("hello", 4);
+        assert_eq!(result, "h...");
+
+        // Test with max_len = 5
+        let result = truncate_string("hello", 5);
+        assert_eq!(result, "hello");
+    }
+
+    #[test]
+    fn test_truncate_string_empty() {
+        // Test empty string
+        let result = truncate_string("", 10);
+        assert_eq!(result, "");
+
+        // Test empty string with max_len = 0
+        let result = truncate_string("", 0);
+        assert_eq!(result, "");
+    }
+
+    #[test]
+    fn test_truncate_string_unicode() {
+        // Test with unicode characters
+        let result = truncate_string("hello 世界", 8);
+        assert_eq!(result, "hello...");
+
+        // Test with emoji
+        let result = truncate_string("hello 😀", 8);
+        assert_eq!(result, "hello...");
+    }
+
+    #[test]
+    fn test_truncate_string_very_long() {
+        // Test with very long string
+        let long_string = "a".repeat(1000);
+        let result = truncate_string(&long_string, 10);
+        assert_eq!(result, "aaaaaaa...");
+        assert_eq!(result.len(), 10);
+    }
+
+    #[test]
+    fn test_utils_integration() {
+        // Test integration between functions
+        let date_str = "2023-12-25";
+        let parsed_date = parse_date(date_str).unwrap();
+        let formatted_date = format_date(&parsed_date);
+        assert_eq!(formatted_date, date_str);
+
+        // Test UUID validation with truncation
+        let uuid = "550e8400-e29b-41d4-a716-446655440000";
+        assert!(is_valid_uuid(uuid));
+        let truncated = truncate_string(uuid, 20);
+        assert_eq!(truncated, "550e8400-e29b-41d...");
+    }
+
+    #[test]
+    fn test_get_default_database_path_consistency() {
+        // Test that the function returns the same path on multiple calls
+        let path1 = get_default_database_path();
+        let path2 = get_default_database_path();
+        assert_eq!(path1, path2);
+    }
+
+    #[test]
+    fn test_format_date_consistency() {
+        // Test that formatting and parsing are consistent
+        let date = NaiveDate::from_ymd_opt(2023, 12, 25).unwrap();
+        let formatted = format_date(&date);
+        let parsed = parse_date(&formatted).unwrap();
+        assert_eq!(date, parsed);
+    }
+}
