@@ -354,23 +354,23 @@ impl ThingsMcpServer {
         let arguments = request.arguments.unwrap_or_default();
 
         let result = match tool_name.as_str() {
-            "get_inbox" => self.handle_get_inbox(arguments).await?,
-            "get_today" => self.handle_get_today(arguments).await?,
-            "get_projects" => self.handle_get_projects(arguments).await?,
-            "get_areas" => self.handle_get_areas(arguments).await?,
-            "search_tasks" => self.handle_search_tasks(arguments).await?,
-            "create_task" => self.handle_create_task(arguments).await?,
-            "update_task" => self.handle_update_task(arguments).await?,
-            "get_productivity_metrics" => self.handle_get_productivity_metrics(arguments).await?,
-            "export_data" => self.handle_export_data(arguments).await?,
-            "bulk_create_tasks" => self.handle_bulk_create_tasks(arguments).await?,
-            "get_recent_tasks" => self.handle_get_recent_tasks(arguments).await?,
-            "backup_database" => self.handle_backup_database(arguments).await?,
-            "restore_database" => self.handle_restore_database(arguments).await?,
-            "list_backups" => self.handle_list_backups(arguments).await?,
-            "get_performance_stats" => self.handle_get_performance_stats(arguments).await?,
-            "get_system_metrics" => self.handle_get_system_metrics(arguments).await?,
-            "get_cache_stats" => self.handle_get_cache_stats(arguments).await?,
+            "get_inbox" => self.handle_get_inbox(arguments).await,
+            "get_today" => self.handle_get_today(arguments).await,
+            "get_projects" => self.handle_get_projects(arguments).await,
+            "get_areas" => self.handle_get_areas(arguments).await,
+            "search_tasks" => self.handle_search_tasks(arguments).await,
+            "create_task" => self.handle_create_task(arguments).await,
+            "update_task" => self.handle_update_task(arguments).await,
+            "get_productivity_metrics" => self.handle_get_productivity_metrics(arguments).await,
+            "export_data" => self.handle_export_data(arguments).await,
+            "bulk_create_tasks" => self.handle_bulk_create_tasks(arguments).await,
+            "get_recent_tasks" => self.handle_get_recent_tasks(arguments).await,
+            "backup_database" => self.handle_backup_database(arguments).await,
+            "restore_database" => self.handle_restore_database(arguments).await,
+            "list_backups" => self.handle_list_backups(arguments).await,
+            "get_performance_stats" => self.handle_get_performance_stats(arguments).await,
+            "get_system_metrics" => self.handle_get_system_metrics(arguments).await,
+            "get_cache_stats" => self.handle_get_cache_stats(arguments).await,
             _ => {
                 return Ok(CallToolResult {
                     content: vec![Content::Text {
@@ -381,7 +381,15 @@ impl ThingsMcpServer {
             }
         };
 
-        Ok(result)
+        match result {
+            Ok(call_result) => Ok(call_result),
+            Err(e) => Ok(CallToolResult {
+                content: vec![Content::Text {
+                    text: format!("Error: {}", e),
+                }],
+                is_error: true,
+            }),
+        }
     }
 
     async fn handle_get_inbox(&self, args: Value) -> Result<CallToolResult> {

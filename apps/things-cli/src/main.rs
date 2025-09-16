@@ -1,6 +1,6 @@
 //! Things CLI - Command line interface for Things 3 with integrated MCP server
 
-mod mcp;
+use things_cli::mcp;
 
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;

@@ -55,3 +55,8 @@ quick-xml.workspace = true
 
 # Performance monitoring
 sysinfo.workspace = true
+
+# Testing
+[dev-dependencies]
+tempfile = "3.8"
+rusqlite = "0.31"

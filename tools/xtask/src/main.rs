@@ -262,3 +262,174 @@ echo "✅ All pre-push checks passed!"
 
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use clap::Parser;
+
+    #[test]
+    fn test_cli_parsing() {
+        // Test that CLI can be parsed without panicking
+        let cli = Cli::try_parse_from(&["xtask", "analyze"]).unwrap();
+        assert!(matches!(cli.command, Commands::Analyze));
+
+        let cli = Cli::try_parse_from(&["xtask", "perf-test"]).unwrap();
+        assert!(matches!(cli.command, Commands::PerfTest));
+
+        let cli = Cli::try_parse_from(&["xtask", "setup-hooks"]).unwrap();
+        assert!(matches!(cli.command, Commands::SetupHooks));
+    }
+
+    #[test]
+    fn test_generate_tests_command() {
+        let cli = Cli::try_parse_from(&["xtask", "generate-tests", "things-core"]).unwrap();
+        if let Commands::GenerateTests { target } = cli.command {
+            assert_eq!(target, "things-core");
+        } else {
+            panic!("Expected GenerateTests command");
+        }
+    }
+
+    #[test]
+    fn test_generate_code_command() {
+        let cli = Cli::try_parse_from(&["xtask", "generate-code", "test"]).unwrap();
+        if let Commands::GenerateCode { code } = cli.command {
+            assert_eq!(code, "test");
+        } else {
+            panic!("Expected GenerateCode command");
+        }
+    }
+
+    #[test]
+    fn test_local_dev_commands() {
+        let cli = Cli::try_parse_from(&["xtask", "local-dev", "setup"]).unwrap();
+        if let Commands::LocalDev { action } = cli.command {
+            assert!(matches!(action, LocalDevAction::Setup));
+        } else {
+            panic!("Expected LocalDev command");
+        }
+
+        let cli = Cli::try_parse_from(&["xtask", "local-dev", "health"]).unwrap();
+        if let Commands::LocalDev { action } = cli.command {
+            assert!(matches!(action, LocalDevAction::Health));
+        } else {
+            panic!("Expected LocalDev command");
+        }
+
+        let cli = Cli::try_parse_from(&["xtask", "local-dev", "clean"]).unwrap();
+        if let Commands::LocalDev { action } = cli.command {
+            assert!(matches!(action, LocalDevAction::Clean));
+        } else {
+            panic!("Expected LocalDev command");
+        }
+    }
+
+    #[test]
+    fn test_things_commands() {
+        let cli = Cli::try_parse_from(&["xtask", "things", "validate"]).unwrap();
+        if let Commands::Things { action } = cli.command {
+            assert!(matches!(action, ThingsAction::Validate));
+        } else {
+            panic!("Expected Things command");
+        }
+
+        let cli = Cli::try_parse_from(&["xtask", "things", "backup"]).unwrap();
+        if let Commands::Things { action } = cli.command {
+            assert!(matches!(action, ThingsAction::Backup));
+        } else {
+            panic!("Expected Things command");
+        }
+
+        let cli = Cli::try_parse_from(&["xtask", "things", "db-location"]).unwrap();
+        if let Commands::Things { action } = cli.command {
+            assert!(matches!(action, ThingsAction::DbLocation));
+        } else {
+            panic!("Expected Things command");
+        }
+    }
+
+    #[test]
+    fn test_generate_tests_function() {
+        // Test that the function doesn't panic
+        generate_tests("test-target");
+    }
+
+    #[test]
+    fn test_generate_code_function() {
+        // Test that the function doesn't panic
+        generate_code("test-code");
+    }
+
+    #[test]
+    fn test_local_dev_setup_function() {
+        // Test that the function doesn't panic
+        local_dev_setup();
+    }
+
+    #[test]
+    fn test_local_dev_health_function() {
+        // Test that the function doesn't panic
+        local_dev_health();
+    }
+
+    #[test]
+    fn test_local_dev_clean_function() {
+        // Test that the function doesn't panic
+        local_dev_clean();
+    }
+
+    #[test]
+    fn test_things_validate_function() {
+        // Test that the function doesn't panic
+        things_validate();
+    }
+
+    #[test]
+    fn test_things_backup_function() {
+        // Test that the function doesn't panic
+        things_backup();
+    }
+
+    #[test]
+    fn test_things_db_location_function() {
+        // Test that the function doesn't panic
+        things_db_location();
+    }
+
+    #[test]
+    fn test_analyze_function() {
+        // Test that the function doesn't panic
+        analyze();
+    }
+
+    #[test]
+    fn test_perf_test_function() {
+        // Test that the function doesn't panic
+        perf_test();
+    }
+
+    #[test]
+    fn test_setup_git_hooks_function() {
+        // Test that the function works with a temporary directory
+        let temp_dir = tempfile::tempdir().unwrap();
+        let original_dir = std::env::current_dir().unwrap();
+
+        // Change to temp directory
+        std::env::set_current_dir(temp_dir.path()).unwrap();
+
+        // Create .git directory
+        std::fs::create_dir_all(".git/hooks").unwrap();
+
+        // Test the function
+        let result = setup_git_hooks();
+        assert!(result.is_ok());
+
+        // Verify hooks were created
+        assert!(std::path::Path::new(".git/hooks/pre-commit").exists());
+        assert!(std::path::Path::new(".git/hooks/pre-push").exists());
+
+        // Restore original directory
+        std::env::set_current_dir(original_dir).unwrap();
+    }
+}

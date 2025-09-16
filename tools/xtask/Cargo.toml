@@ -34,3 +34,6 @@ syn = { version = "2.0", features = ["full"] }
 # Serialization
 serde.workspace = true
 serde_json.workspace = true
+
+# Testing
+tempfile = "3.8"

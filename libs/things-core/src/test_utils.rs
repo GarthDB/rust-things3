@@ -461,4 +461,127 @@ mod tests {
         assert_eq!(areas.len(), 2);
         assert_eq!(areas[0].title, "Work");
     }
+
+    #[test]
+    fn test_create_test_database_error_handling() {
+        // Test with invalid path (should fail)
+        let invalid_path = "/invalid/path/that/does/not/exist/database.sqlite";
+        let result = create_test_database(invalid_path);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_mock_tasks_structure() {
+        let tasks = create_mock_tasks();
+
+        // Test first task
+        let task1 = &tasks[0];
+        assert_eq!(task1.title, "Review quarterly reports");
+        assert_eq!(task1.status, TaskStatus::Incomplete);
+        assert_eq!(task1.task_type, TaskType::Todo);
+        assert!(task1.notes.is_some());
+        assert!(task1.deadline.is_some());
+        assert!(task1.start_date.is_none());
+        assert!(task1.project_uuid.is_none());
+        assert!(task1.area_uuid.is_none());
+        assert!(task1.parent_uuid.is_none());
+        assert!(task1.tags.is_empty());
+        assert!(task1.children.is_empty());
+
+        // Test second task
+        let task2 = &tasks[1];
+        assert_eq!(task2.title, "Call dentist");
+        assert_eq!(task2.status, TaskStatus::Incomplete);
+        assert_eq!(task2.task_type, TaskType::Todo);
+        assert!(task2.notes.is_some());
+        assert!(task2.deadline.is_none());
+        assert!(task2.start_date.is_none());
+        assert!(task2.project_uuid.is_none());
+        assert!(task2.area_uuid.is_none());
+        assert!(task2.parent_uuid.is_none());
+        assert!(task2.tags.is_empty());
+        assert!(task2.children.is_empty());
+    }
+
+    #[test]
+    fn test_mock_projects_structure() {
+        let projects = create_mock_projects();
+        let project = &projects[0];
+
+        assert_eq!(project.title, "Website Redesign");
+        assert_eq!(project.status, TaskStatus::Incomplete);
+        assert!(project.notes.is_some());
+        assert!(project.start_date.is_some());
+        assert!(project.deadline.is_some());
+        assert!(project.area_uuid.is_some());
+        assert!(project.tags.is_empty());
+        assert!(project.tasks.is_empty());
+    }
+
+    #[test]
+    fn test_mock_areas_structure() {
+        let areas = create_mock_areas();
+
+        // Test first area
+        let area1 = &areas[0];
+        assert_eq!(area1.title, "Work");
+        assert!(area1.notes.is_some());
+        assert!(area1.tags.is_empty());
+        assert!(area1.projects.is_empty());
+
+        // Test second area
+        let area2 = &areas[1];
+        assert_eq!(area2.title, "Personal");
+        assert!(area2.notes.is_some());
+        assert!(area2.tags.is_empty());
+        assert!(area2.projects.is_empty());
+    }
+
+    #[test]
+    fn test_mock_data_timestamps() {
+        let tasks = create_mock_tasks();
+        let projects = create_mock_projects();
+        let areas = create_mock_areas();
+
+        let now = Utc::now();
+
+        // All entities should have recent timestamps
+        for task in &tasks {
+            assert!(task.created <= now);
+            assert!(task.modified <= now);
+        }
+
+        for project in &projects {
+            assert!(project.created <= now);
+            assert!(project.modified <= now);
+        }
+
+        for area in &areas {
+            assert!(area.created <= now);
+            assert!(area.modified <= now);
+        }
+    }
+
+    #[test]
+    fn test_mock_data_uuid_parsing() {
+        let tasks = create_mock_tasks();
+        let projects = create_mock_projects();
+        let areas = create_mock_areas();
+
+        // All UUIDs should be valid
+        for task in &tasks {
+            assert!(!task.uuid.is_nil());
+        }
+
+        for project in &projects {
+            assert!(!project.uuid.is_nil());
+            if let Some(area_uuid) = project.area_uuid {
+                assert!(!area_uuid.is_nil());
+            }
+        }
+
+        for area in &areas {
+            assert!(!area.uuid.is_nil());
+        }
+    }
 }
