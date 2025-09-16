@@ -1,0 +1,41 @@
+[package]
+name = "things-cli"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "CLI tool for Things 3 with integrated MCP server"
+
+[[bin]]
+name = "things-cli"
+path = "src/main.rs"
+
+[dependencies]
+# Core
+things-core = { path = "../../libs/things-core" }
+things-common = { path = "../../libs/things-common" }
+
+# CLI
+clap.workspace = true
+
+# MCP (commented out for now)
+# mcp.workspace = true
+
+# Async
+tokio.workspace = true
+
+# Serialization
+serde.workspace = true
+serde_json.workspace = true
+
+# Error handling
+anyhow.workspace = true
+thiserror.workspace = true
+
+# Logging
+env_logger = "0.10"
+log = "0.4"
+
+# UUID
+uuid = { version = "1.0", features = ["v4", "serde"] }

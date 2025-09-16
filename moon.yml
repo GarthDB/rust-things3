@@ -1,0 +1,161 @@
+# Root-level Moon configuration for workspace tasks
+$schema: './.moon/cache/schemas/project.json'
+
+type: 'application'
+language: 'rust'
+platform: 'system'
+
+# Workspace configuration
+workspace:
+  inheritedTasks:
+    include: []  # Don't inherit workspace tasks for root project
+
+tasks:
+  # Health check for entire development environment
+  health:
+    command: './target/debug/things-cli health'
+    inputs: []
+    options:
+      cache: false
+      outputStyle: 'stream'
+    env:
+      RUST_LOG: 'info'
+
+  # Generate comprehensive test suite using xtask
+  generate-tests:
+    command: 'cargo'
+    args: ['run', '--package', 'xtask', '--', 'generate-tests']
+    inputs:
+      - 'tools/xtask/**/*.rs'
+      - 'libs/**/*.rs'
+      - 'apps/**/*.rs'
+    options:
+      cache: false
+      outputStyle: 'stream'
+
+  # Run full development pipeline - optimized for performance
+  dev-pipeline:
+    command: 'moon'
+    args: ['run', ':format', ':lint', ':test', ':build']
+    inputs: 
+      - '.moon/**/*.yml'
+      - '.moon/**/*.pkl'
+    options:
+      cache: true
+      outputStyle: 'stream'
+      runDepsInParallel: true
+      persistent: false
+
+  # Run comprehensive test suite
+  test-all:
+    command: 'moon'
+    args: ['run', ':test']
+    inputs: 
+      - '.moon/**/*.yml'
+      - '.moon/**/*.pkl'
+    options:
+      cache: true
+      outputStyle: 'stream'
+      runDepsInParallel: true
+
+  # Run benchmarks
+  bench-all:
+    command: 'moon'
+    args: ['run', ':bench']
+    inputs: 
+      - '.moon/**/*.yml'
+      - '.moon/**/*.pkl'
+    options:
+      cache: true
+      outputStyle: 'stream'
+      runDepsInParallel: true
+
+  # Generate documentation
+  docs:
+    command: 'moon'
+    args: ['run', ':doc']
+    inputs: 
+      - '.moon/**/*.yml'
+      - '.moon/**/*.pkl'
+    options:
+      cache: true
+      outputStyle: 'stream'
+      runDepsInParallel: true
+
+  # Local development setup and management
+  local-dev-setup:
+    command: 'cargo'
+    args: ['run', '--package', 'xtask', '--', 'local-dev', 'setup']
+    inputs:
+      - 'tools/xtask/**/*.rs'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+    options:
+      cache: false
+      outputStyle: 'stream'
+    env:
+      RUST_LOG: 'info'
+
+  # Things-specific tasks
+  things-db-location:
+    command: 'echo'
+    args: ['~/Library/Group Containers/JLMPQHK8H4.com.culturedcode.Things3/Things Database.thingsdatabase/main.sqlite']
+    inputs: []
+    options:
+      cache: false
+      outputStyle: 'stream'
+
+  things-backup:
+    command: 'cargo'
+    args: ['run', '--package', 'xtask', '--', 'backup', 'things-db']
+    inputs:
+      - 'tools/xtask/**/*.rs'
+    options:
+      cache: false
+      outputStyle: 'stream'
+    env:
+      RUST_LOG: 'info'
+
+  things-validate:
+    command: 'cargo'
+    args: ['run', '--package', 'xtask', '--', 'things', 'validate']
+    inputs:
+      - 'tools/xtask/**/*.rs'
+      - 'libs/things-core/**/*.rs'
+    options:
+      cache: false
+      outputStyle: 'stream'
+
+  # Code quality and analysis
+  analyze:
+    command: 'cargo'
+    args: ['run', '--package', 'xtask', '--', 'analyze']
+    inputs:
+      - 'tools/xtask/**/*.rs'
+      - 'libs/**/*.rs'
+      - 'apps/**/*.rs'
+    options:
+      cache: true
+      outputStyle: 'stream'
+
+  # Performance testing
+  perf-test:
+    command: 'cargo'
+    args: ['run', '--package', 'xtask', '--', 'perf-test']
+    inputs:
+      - 'tools/xtask/**/*.rs'
+      - 'libs/**/*.rs'
+      - 'apps/**/*.rs'
+    options:
+      cache: false
+      outputStyle: 'stream'
+
+  # Show available workflow commands
+  workflows-help:
+    command: 'cargo'
+    args: ['run', '--package', 'xtask', '--', 'help']
+    inputs:
+      - 'tools/xtask/**/*.rs'
+    options:
+      cache: false
+      outputStyle: 'stream'

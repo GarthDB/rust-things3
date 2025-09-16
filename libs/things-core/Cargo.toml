@@ -1,0 +1,34 @@
+[package]
+name = "things-core"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Core library for Things 3 database access and data models"
+
+[dependencies]
+# Core
+serde.workspace = true
+serde_json.workspace = true
+chrono.workspace = true
+uuid.workspace = true
+thiserror.workspace = true
+anyhow.workspace = true
+
+# Database
+rusqlite.workspace = true
+
+# Async
+tokio.workspace = true
+
+# Testing
+proptest.workspace = true
+tempfile.workspace = true
+
+[dev-dependencies]
+criterion.workspace = true
+
+# [[bench]]
+# name = "database_bench"
+# harness = false

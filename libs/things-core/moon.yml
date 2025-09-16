@@ -1,0 +1,103 @@
+$schema: ../.moon/cache/schemas/project.json
+type: library
+language: rust
+platform: system
+project:
+  name: Things Core
+  description: Core library providing Things 3 database access and data models
+  owner: things-core-team
+  maintainers:
+  - garthdb
+owners:
+  defaultOwner: things-core-team
+  requiredApprovals: 1
+  paths:
+  - src/**/*.rs
+  - tests/**/*.rs
+tasks:
+  format:
+    command: cargo fmt
+    inputs:
+    - src/**/*.rs
+    - src/**/*.md
+    - benches/**/*.rs
+    - tests/**/*.rs
+    - Cargo.toml
+    - Cargo.lock
+    - README.md
+    - API.md
+    - TUTORIAL.md
+    outputs:
+    - "**/*.rs"
+  lint:
+    command: cargo clippy --all-targets --no-default-features -- -D warnings -D clippy::pedantic -D clippy::nursery -A clippy::missing_docs_in_private_items -A clippy::module_name_repetitions
+    inputs:
+    - src/**/*.rs
+    - src/**/*.md
+    - benches/**/*.rs
+    - tests/**/*.rs
+    - Cargo.toml
+    - Cargo.lock
+    - README.md
+    - API.md
+    - TUTORIAL.md
+    outputs: []
+  test:
+    command: cargo test --all-features
+    inputs:
+    - src/**/*.rs
+    - src/**/*.md
+    - benches/**/*.rs
+    - tests/**/*.rs
+    - Cargo.toml
+    - README.md
+    - API.md
+    - TUTORIAL.md
+    deps:
+    - lint
+  build:
+    command: cargo build --lib
+    inputs:
+    - src/**/*.rs
+    - src/**/*.md
+    - benches/**/*.rs
+    - tests/**/*.rs
+    - Cargo.toml
+    - Cargo.lock
+    - README.md
+    - API.md
+    - TUTORIAL.md
+    deps:
+    - test
+    outputs:
+    - target/**/*
+    options:
+      cache: true
+      runDepsInParallel: true
+  doc:
+    command: cargo doc --no-deps
+    inputs:
+    - src/**/*.rs
+    - src/**/*.md
+    - Cargo.toml
+    - README.md
+    - API.md
+    - TUTORIAL.md
+  bench:
+    command: cargo bench
+    inputs:
+    - src/**/*.rs
+    - src/**/*.md
+    - benches/**/*.rs
+    - tests/**/*.rs
+    - Cargo.toml
+    - README.md
+    - API.md
+    - TUTORIAL.md
+    deps:
+    - build
+tags:
+- core
+- library
+- things3
+- database

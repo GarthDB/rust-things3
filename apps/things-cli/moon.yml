@@ -1,0 +1,75 @@
+$schema: ../.moon/cache/schemas/project.json
+type: application
+language: rust
+platform: system
+project:
+  name: Things CLI
+  description: CLI tool for Things 3 with integrated MCP server
+  owner: things-cli-team
+  maintainers:
+  - garthdb
+owners:
+  defaultOwner: things-cli-team
+  requiredApprovals: 1
+  paths:
+  - src/**/*.rs
+  - tests/**/*.rs
+tasks:
+  format:
+    command: cargo fmt
+    inputs:
+    - src/**/*.rs
+    - src/**/*.md
+    - tests/**/*.rs
+    - Cargo.toml
+    - Cargo.lock
+    - README.md
+    outputs:
+    - "**/*.rs"
+  lint:
+    command: cargo clippy --all-targets -- -D warnings -D clippy::pedantic -D clippy::nursery -A clippy::missing_docs_in_private_items -A clippy::module_name_repetitions
+    inputs:
+    - src/**/*.rs
+    - src/**/*.md
+    - tests/**/*.rs
+    - Cargo.toml
+    - Cargo.lock
+    - README.md
+    outputs: []
+  test:
+    command: cargo test --all-features
+    inputs:
+    - src/**/*.rs
+    - src/**/*.md
+    - tests/**/*.rs
+    - Cargo.toml
+    - README.md
+    deps:
+    - lint
+  build:
+    command: cargo build --bin things-cli
+    inputs:
+    - src/**/*.rs
+    - src/**/*.md
+    - tests/**/*.rs
+    - Cargo.toml
+    - Cargo.lock
+    - README.md
+    deps:
+    - test
+    outputs:
+    - target/**/*
+    options:
+      cache: true
+      runDepsInParallel: true
+  doc:
+    command: cargo doc --bin things-cli
+    inputs:
+    - src/**/*.rs
+    - src/**/*.md
+    - Cargo.toml
+    - README.md
+tags:
+- cli
+- things3
+- mcp
