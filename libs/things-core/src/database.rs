@@ -276,10 +276,10 @@ impl ThingsDatabase {
     /// Panics if UUID parsing fails (should not happen with valid database)
     pub fn get_areas(&self) -> Result<Vec<Area>> {
         let mut stmt = self.conn.prepare(
-            "SELECT uuid, title, notes, creationDate, userModificationDate 
-             FROM TMTask 
-             WHERE type = 3 
-             ORDER BY creationDate DESC",
+            "SELECT uuid, title, visible, \"index\" 
+             FROM TMArea 
+             WHERE visible IS NULL OR visible = 1 
+             ORDER BY \"index\"",
         )?;
 
         let rows = stmt.query_map([], |row| {
@@ -287,25 +287,11 @@ impl ThingsDatabase {
                 uuid: Uuid::parse_str(&row.get::<_, String>("uuid")?)
                     .unwrap_or_else(|_| Uuid::new_v4()),
                 title: row.get("title")?,
-                notes: row.get("notes")?,
-                created: {
-                    let timestamp = row.get::<_, f64>("creationDate")?;
-                    // Convert from Core Data timestamp (seconds since 2001-01-01) to DateTime<Utc>
-                    let base_date = chrono::DateTime::parse_from_rfc3339("2001-01-01T00:00:00Z")
-                        .unwrap()
-                        .with_timezone(&chrono::Utc);
-                    base_date + chrono::Duration::seconds(timestamp as i64)
-                },
-                modified: {
-                    let timestamp = row.get::<_, f64>("userModificationDate")?;
-                    // Convert from Core Data timestamp (seconds since 2001-01-01) to DateTime<Utc>
-                    let base_date = chrono::DateTime::parse_from_rfc3339("2001-01-01T00:00:00Z")
-                        .unwrap()
-                        .with_timezone(&chrono::Utc);
-                    base_date + chrono::Duration::seconds(timestamp as i64)
-                },
-                tags: vec![],     // TODO: Load tags separately
-                projects: vec![], // TODO: Load projects separately
+                notes: None,                  // TMArea doesn't have notes field
+                created: chrono::Utc::now(),  // TMArea doesn't track creation date
+                modified: chrono::Utc::now(), // TMArea doesn't track modification date
+                tags: vec![],                 // TODO: Load tags separately
+                projects: vec![],             // TODO: Load projects separately
             })
         })?;
 
@@ -403,7 +389,8 @@ impl ThingsDatabase {
     /// Helper method to map a database row to a Project
     fn map_project_row(row: &rusqlite::Row) -> rusqlite::Result<Project> {
         Ok(Project {
-            uuid: Uuid::parse_str(&row.get::<_, String>("uuid")?).unwrap(),
+            uuid: Uuid::parse_str(&row.get::<_, String>("uuid")?)
+                .unwrap_or_else(|_| Uuid::new_v4()),
             title: row.get("title")?,
             notes: row.get("notes")?,
             start_date: row.get::<_, Option<i32>>("startDate")?.and_then(|days| {
