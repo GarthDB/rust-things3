@@ -9,7 +9,7 @@ class Things3Cli < Formula
   depends_on "rust" => :build
 
   def install
-    system "cargo", "build", "--release", "--bin", "things3"
+    system "cargo", "install", "--path", "apps/things3-cli", "--bin", "things3"
     bin.install "target/release/things3" => "things3"
   end
 

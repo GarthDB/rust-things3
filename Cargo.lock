@@ -1357,8 +1357,8 @@ dependencies = [
  "serde_json",
  "sysinfo",
  "tempfile",
- "things3-common",
- "things3-core",
+ "things3-common 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "things3-core 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "thiserror",
  "tokio",
  "uuid",
@@ -1377,12 +1377,51 @@ dependencies = [
 ]
 
 [[package]]
+name = "things3-common"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8a6e011847251d07101a57b54d27fea3a8d63aa3eeaaa6ab447885f1aa9c8f91"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "uuid",
+]
+
+[[package]]
 name = "things3-core"
 version = "0.1.0"
 dependencies = [
  "anyhow",
  "chrono",
  "criterion",
+ "csv",
+ "dashmap",
+ "moka",
+ "once_cell",
+ "parking_lot",
+ "proptest",
+ "quick-xml",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "sysinfo",
+ "tempfile",
+ "thiserror",
+ "tokio",
+ "uuid",
+]
+
+[[package]]
+name = "things3-core"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "21aae7630b3e18999272ac353224bc95bda5f58151e0325ed3ea695c1c08e932"
+dependencies = [
+ "anyhow",
+ "chrono",
  "csv",
  "dashmap",
  "moka",

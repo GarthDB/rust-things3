@@ -13,8 +13,8 @@ path = "src/main.rs"
 
 [dependencies]
 # Core
-things3-core = { path = "../../libs/things3-core", features = ["test-utils"] }
-things3-common = { path = "../../libs/things3-common" }
+things3-core = { version = "0.1.0", features = ["test-utils"] }
+things3-common = "0.1.0"
 
 # CLI
 clap.workspace = true
