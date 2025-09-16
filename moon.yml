@@ -13,7 +13,8 @@ workspace:
 tasks:
   # Health check for entire development environment
   health:
-    command: './target/debug/things-cli health'
+    command: 'cargo'
+    args: ['run', '--bin', 'things-cli', '--', 'health']
     inputs: []
     options:
       cache: false

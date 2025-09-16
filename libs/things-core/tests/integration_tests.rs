@@ -1,30 +1,29 @@
 //! Integration tests for things-core
 
-use things_core::{ThingsDatabase, Result};
+use tempfile::NamedTempFile;
+use things_core::{Result, ThingsDatabase};
+
+#[cfg(feature = "test-utils")]
+use things_core::test_utils;
 
 #[tokio::test]
 async fn test_database_connection() -> Result<()> {
     // This test will only work if Things 3 is installed and has data
     // For now, we'll just test that we can create a database instance
     let db_path = ThingsDatabase::default_path();
-    println!("Testing database connection to: {}", db_path);
-    
+    println!("Testing database connection to: {db_path}");
+
     // Try to connect (this might fail in CI, which is expected)
     match ThingsDatabase::new(&db_path) {
         Ok(_db) => {
             println!("✅ Database connection successful");
         }
         Err(e) => {
-            println!("⚠️  Database connection failed (expected in CI): {}", e);
-            // Don't fail the test in CI environments
-            if std::env::var("CI").is_ok() {
-                println!("Skipping test in CI environment");
-                return Ok(());
-            }
+            println!("⚠️  Database connection failed: {e}");
             return Err(e);
         }
     }
-    
+
     Ok(())
 }
 
@@ -33,4 +32,70 @@ async fn test_default_database_path() {
     let path = ThingsDatabase::default_path();
     assert!(path.ends_with("main.sqlite"));
     assert!(path.contains("Things Database.thingsdatabase"));
+}
+
+#[tokio::test]
+async fn test_mock_database() -> Result<()> {
+    // Create a temporary database with mock data
+    let temp_file = NamedTempFile::new()?;
+    let db_path = temp_file.path();
+
+    // Create test database with mock data
+    #[cfg(feature = "test-utils")]
+    let _conn = test_utils::create_test_database(db_path)?;
+
+    #[cfg(not(feature = "test-utils"))]
+    return Err(things_core::ThingsError::configuration(
+        "test-utils feature not enabled",
+    ));
+
+    // Test that we can connect to the mock database
+    let db = ThingsDatabase::new(db_path)?;
+
+    // Test basic queries
+    let inbox_tasks = db.get_inbox(Some(10))?;
+    println!("Found {} inbox tasks in mock database", inbox_tasks.len());
+
+    let today_tasks = db.get_today(Some(10))?;
+    println!("Found {} today tasks in mock database", today_tasks.len());
+
+    let projects = db.get_projects(None)?;
+    println!("Found {} projects in mock database", projects.len());
+
+    let areas = db.get_areas()?;
+    println!("Found {} areas in mock database", areas.len());
+
+    // Test search functionality
+    let search_results = db.search_tasks("review", Some(5))?;
+    println!("Found {} search results for 'review'", search_results.len());
+
+    println!("✅ Mock database test successful");
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_mock_data_creation() {
+    #[cfg(feature = "test-utils")]
+    {
+        use test_utils::{create_mock_areas, create_mock_projects, create_mock_tasks};
+
+        let tasks = create_mock_tasks();
+        assert_eq!(tasks.len(), 2);
+        assert_eq!(tasks[0].title, "Review quarterly reports");
+
+        let projects = create_mock_projects();
+        assert_eq!(projects.len(), 1);
+        assert_eq!(projects[0].title, "Website Redesign");
+
+        let areas = create_mock_areas();
+        assert_eq!(areas.len(), 2);
+        assert_eq!(areas[0].title, "Work");
+
+        println!("✅ Mock data creation test successful");
+    }
+
+    #[cfg(not(feature = "test-utils"))]
+    {
+        println!("⚠️  test-utils feature not enabled, skipping mock data creation test");
+    }
 }

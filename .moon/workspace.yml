@@ -5,4 +5,5 @@ $schema: './cache/schemas/workspace.json'
 
 projects:
   - 'apps/*'
-  - 'packages/*'
+  - 'libs/*'
+  - 'tools/*'

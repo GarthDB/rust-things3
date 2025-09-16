@@ -1,6 +1,6 @@
 //! Data models for Things 3 entities
 
-use chrono::{DateTime, Utc, NaiveDate};
+use chrono::{DateTime, NaiveDate, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -161,7 +161,7 @@ pub struct UpdateTaskRequest {
 }
 
 /// Task filters for queries
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct TaskFilters {
     /// Filter by status
     pub status: Option<TaskStatus>,
@@ -185,23 +185,4 @@ pub struct TaskFilters {
     pub limit: Option<usize>,
     /// Offset for pagination
     pub offset: Option<usize>,
-}
-
-impl Default for TaskFilters {
-    fn default() -> Self {
-        Self {
-            status: None,
-            task_type: None,
-            project_uuid: None,
-            area_uuid: None,
-            tags: None,
-            start_date_from: None,
-            start_date_to: None,
-            deadline_from: None,
-            deadline_to: None,
-            search_query: None,
-            limit: None,
-            offset: None,
-        }
-    }
 }

@@ -7,6 +7,9 @@ license.workspace = true
 repository.workspace = true
 description = "Core library for Things 3 database access and data models"
 
+[features]
+test-utils = []
+
 [dependencies]
 # Core
 serde.workspace = true

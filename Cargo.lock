@@ -1571,7 +1571,6 @@ dependencies = [
  "serde_json",
  "syn",
  "thiserror",
- "tokio",
  "walkdir",
 ]
 
