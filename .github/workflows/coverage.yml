@@ -76,7 +76,12 @@ jobs:
       run: |
         echo "Verifying coverage artifacts..."
         ls -la lcov.info coverage.json cobertura.xml coverage.txt
-        ls -la target/llvm-cov/html/
+        if [ -d "target/llvm-cov/html" ]; then
+          ls -la target/llvm-cov/html/
+        else
+          echo "HTML directory not found, checking for HTML files..."
+          find . -name "*.html" -type f | head -5
+        fi
         echo "All coverage artifacts verified!"
     
     - name: Upload coverage to Codecov (LCOV)

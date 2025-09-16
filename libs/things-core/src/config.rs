@@ -216,13 +216,30 @@ mod tests {
 
     #[test]
     fn test_config_from_env_with_fallback() {
+        // Save original values
+        let original_db_path = std::env::var("THINGS_DATABASE_PATH").ok();
+        let original_fallback = std::env::var("THINGS_FALLBACK_TO_DEFAULT").ok();
+
+        // Set test values
         std::env::set_var("THINGS_DATABASE_PATH", "/env/path");
         std::env::set_var("THINGS_FALLBACK_TO_DEFAULT", "true");
+
         let config = ThingsConfig::from_env();
         assert_eq!(config.database_path, PathBuf::from("/env/path"));
         assert!(config.fallback_to_default);
-        std::env::remove_var("THINGS_DATABASE_PATH");
-        std::env::remove_var("THINGS_FALLBACK_TO_DEFAULT");
+
+        // Restore original values
+        if let Some(db_path) = original_db_path {
+            std::env::set_var("THINGS_DATABASE_PATH", db_path);
+        } else {
+            std::env::remove_var("THINGS_DATABASE_PATH");
+        }
+
+        if let Some(fallback) = original_fallback {
+            std::env::set_var("THINGS_FALLBACK_TO_DEFAULT", fallback);
+        } else {
+            std::env::remove_var("THINGS_FALLBACK_TO_DEFAULT");
+        }
     }
 
     #[test]
