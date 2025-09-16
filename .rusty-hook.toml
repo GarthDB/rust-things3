@@ -6,7 +6,7 @@ pre-commit = "cargo fmt && git add -u && cargo clippy -- -D warnings"
 commit-msg = "./tools/scripts/validate-commit-msg.sh"
 
 # Pre-push: Run full test suite and security checks
-pre-push = "cargo test && cargo audit"
+pre-push = "cargo test --features test-utils && cargo audit"
 
 [logging]
 verbose = true
