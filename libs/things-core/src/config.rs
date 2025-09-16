@@ -181,4 +181,127 @@ mod tests {
         // Should always fail when fallback is disabled and path doesn't exist
         assert!(result.is_err());
     }
+
+    #[test]
+    fn test_config_with_fallback_enabled() {
+        let config = ThingsConfig::new("/nonexistent/path", true);
+        assert_eq!(config.database_path, PathBuf::from("/nonexistent/path"));
+        assert!(config.fallback_to_default);
+    }
+
+    #[test]
+    fn test_config_from_env_with_custom_path() {
+        // Save original values
+        let original_db_path = std::env::var("THINGS_DATABASE_PATH").ok();
+        let original_fallback = std::env::var("THINGS_FALLBACK_TO_DEFAULT").ok();
+
+        std::env::set_var("THINGS_DATABASE_PATH", "/env/custom/path");
+        std::env::set_var("THINGS_FALLBACK_TO_DEFAULT", "false");
+        let config = ThingsConfig::from_env();
+        assert_eq!(config.database_path, PathBuf::from("/env/custom/path"));
+        assert!(!config.fallback_to_default);
+
+        // Restore original values
+        if let Some(path) = original_db_path {
+            std::env::set_var("THINGS_DATABASE_PATH", path);
+        } else {
+            std::env::remove_var("THINGS_DATABASE_PATH");
+        }
+        if let Some(fallback) = original_fallback {
+            std::env::set_var("THINGS_FALLBACK_TO_DEFAULT", fallback);
+        } else {
+            std::env::remove_var("THINGS_FALLBACK_TO_DEFAULT");
+        }
+    }
+
+    #[test]
+    fn test_config_from_env_with_fallback() {
+        std::env::set_var("THINGS_DATABASE_PATH", "/env/path");
+        std::env::set_var("THINGS_FALLBACK_ENABLED", "true");
+        let config = ThingsConfig::from_env();
+        assert_eq!(config.database_path, PathBuf::from("/env/path"));
+        assert!(config.fallback_to_default);
+        std::env::remove_var("THINGS_DATABASE_PATH");
+        std::env::remove_var("THINGS_FALLBACK_ENABLED");
+    }
+
+    #[test]
+    fn test_config_from_env_with_invalid_fallback() {
+        // Save original values
+        let original_db_path = std::env::var("THINGS_DATABASE_PATH").ok();
+        let original_fallback = std::env::var("THINGS_FALLBACK_TO_DEFAULT").ok();
+
+        std::env::set_var("THINGS_DATABASE_PATH", "/env/path");
+        std::env::set_var("THINGS_FALLBACK_TO_DEFAULT", "invalid");
+        let config = ThingsConfig::from_env();
+        assert_eq!(config.database_path, PathBuf::from("/env/path"));
+        assert!(!config.fallback_to_default); // Should default to false for invalid value
+
+        // Restore original values
+        if let Some(path) = original_db_path {
+            std::env::set_var("THINGS_DATABASE_PATH", path);
+        } else {
+            std::env::remove_var("THINGS_DATABASE_PATH");
+        }
+        if let Some(fallback) = original_fallback {
+            std::env::set_var("THINGS_FALLBACK_TO_DEFAULT", fallback);
+        } else {
+            std::env::remove_var("THINGS_FALLBACK_TO_DEFAULT");
+        }
+    }
+
+    #[test]
+    fn test_config_debug_formatting() {
+        let config = ThingsConfig::new("/test/path", true);
+        let debug_str = format!("{:?}", config);
+        assert!(debug_str.contains("/test/path"));
+        assert!(debug_str.contains("true"));
+    }
+
+    #[test]
+    fn test_config_clone() {
+        let config1 = ThingsConfig::new("/test/path", true);
+        let config2 = config1.clone();
+
+        assert_eq!(config1.database_path, config2.database_path);
+        assert_eq!(config1.fallback_to_default, config2.fallback_to_default);
+    }
+
+    #[test]
+    fn test_config_with_different_path_types() {
+        // Test with relative path
+        let config = ThingsConfig::new("relative/path", false);
+        assert_eq!(config.database_path, PathBuf::from("relative/path"));
+
+        // Test with absolute path
+        let config = ThingsConfig::new("/absolute/path", false);
+        assert_eq!(config.database_path, PathBuf::from("/absolute/path"));
+
+        // Test with current directory
+        let config = ThingsConfig::new(".", false);
+        assert_eq!(config.database_path, PathBuf::from("."));
+    }
+
+    #[test]
+    fn test_config_edge_cases() {
+        // Test with empty string path
+        let config = ThingsConfig::new("", false);
+        assert_eq!(config.database_path, PathBuf::from(""));
+
+        // Test with very long path
+        let long_path = "/".repeat(1000);
+        let config = ThingsConfig::new(&long_path, false);
+        assert_eq!(config.database_path, PathBuf::from(&long_path));
+    }
+
+    #[test]
+    fn test_get_default_database_path() {
+        let default_path = ThingsConfig::get_default_database_path();
+
+        // Should be a valid path (may or may not exist)
+        assert!(!default_path.to_string_lossy().is_empty());
+
+        // Should be a reasonable path (may or may not contain "Things3" depending on system)
+        assert!(!default_path.to_string_lossy().is_empty());
+    }
 }

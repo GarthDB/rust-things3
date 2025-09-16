@@ -280,7 +280,7 @@ mod tests {
         let config = ThingsConfig::from_env();
         let _backup_manager = BackupManager::new(config);
         // Just test that it can be created
-        assert!(true);
+        // Test passes if we reach this point
     }
 
     #[test]
@@ -495,7 +495,7 @@ mod tests {
 
         let result = backup_manager.verify_backup(Path::new("/nonexistent/backup.db"));
         assert!(result.is_ok());
-        assert_eq!(result.unwrap(), false);
+        assert!(!result.unwrap());
     }
 
     #[test]

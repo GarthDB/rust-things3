@@ -1,12 +1,9 @@
 //! Comprehensive tests for MCP server functionality
 
-use anyhow::Result;
 use serde_json::json;
 use std::path::Path;
 use tempfile::NamedTempFile;
-use things_cli::mcp::{
-    CallToolRequest, CallToolResult, Content, ListToolsResult, ThingsMcpServer, Tool,
-};
+use things_cli::mcp::{CallToolRequest, Content, ThingsMcpServer};
 use things_core::{config::ThingsConfig, database::ThingsDatabase};
 
 /// Create a test MCP server with mock database
@@ -171,9 +168,8 @@ fn create_comprehensive_test_database<P: AsRef<Path>>(db_path: P) -> rusqlite::C
 
 #[tokio::test]
 async fn test_mcp_server_creation() {
-    let server = create_test_mcp_server();
-    // Server should be created successfully
-    assert!(true); // If we get here, creation succeeded
+    let _server = create_test_mcp_server();
+    // Server should be created successfully - if we get here, creation succeeded
 }
 
 #[tokio::test]

@@ -393,14 +393,14 @@ mod tests {
         let config = ExportConfig::default();
         let _exporter = DataExporter::new(config);
         // Just test that it can be created
-        assert!(true);
+        // Test passes if we reach this point
     }
 
     #[test]
     fn test_data_exporter_new_default() {
         let _exporter = DataExporter::new_default();
         // Just test that it can be created
-        assert!(true);
+        // Test passes if we reach this point
     }
 
     #[test]

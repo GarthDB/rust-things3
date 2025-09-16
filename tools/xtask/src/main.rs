@@ -271,19 +271,19 @@ mod tests {
     #[test]
     fn test_cli_parsing() {
         // Test that CLI can be parsed without panicking
-        let cli = Cli::try_parse_from(&["xtask", "analyze"]).unwrap();
+        let cli = Cli::try_parse_from(["xtask", "analyze"]).unwrap();
         assert!(matches!(cli.command, Commands::Analyze));
 
-        let cli = Cli::try_parse_from(&["xtask", "perf-test"]).unwrap();
+        let cli = Cli::try_parse_from(["xtask", "perf-test"]).unwrap();
         assert!(matches!(cli.command, Commands::PerfTest));
 
-        let cli = Cli::try_parse_from(&["xtask", "setup-hooks"]).unwrap();
+        let cli = Cli::try_parse_from(["xtask", "setup-hooks"]).unwrap();
         assert!(matches!(cli.command, Commands::SetupHooks));
     }
 
     #[test]
     fn test_generate_tests_command() {
-        let cli = Cli::try_parse_from(&["xtask", "generate-tests", "things-core"]).unwrap();
+        let cli = Cli::try_parse_from(["xtask", "generate-tests", "things-core"]).unwrap();
         if let Commands::GenerateTests { target } = cli.command {
             assert_eq!(target, "things-core");
         } else {
@@ -293,7 +293,7 @@ mod tests {
 
     #[test]
     fn test_generate_code_command() {
-        let cli = Cli::try_parse_from(&["xtask", "generate-code", "test"]).unwrap();
+        let cli = Cli::try_parse_from(["xtask", "generate-code", "test"]).unwrap();
         if let Commands::GenerateCode { code } = cli.command {
             assert_eq!(code, "test");
         } else {
@@ -303,21 +303,21 @@ mod tests {
 
     #[test]
     fn test_local_dev_commands() {
-        let cli = Cli::try_parse_from(&["xtask", "local-dev", "setup"]).unwrap();
+        let cli = Cli::try_parse_from(["xtask", "local-dev", "setup"]).unwrap();
         if let Commands::LocalDev { action } = cli.command {
             assert!(matches!(action, LocalDevAction::Setup));
         } else {
             panic!("Expected LocalDev command");
         }
 
-        let cli = Cli::try_parse_from(&["xtask", "local-dev", "health"]).unwrap();
+        let cli = Cli::try_parse_from(["xtask", "local-dev", "health"]).unwrap();
         if let Commands::LocalDev { action } = cli.command {
             assert!(matches!(action, LocalDevAction::Health));
         } else {
             panic!("Expected LocalDev command");
         }
 
-        let cli = Cli::try_parse_from(&["xtask", "local-dev", "clean"]).unwrap();
+        let cli = Cli::try_parse_from(["xtask", "local-dev", "clean"]).unwrap();
         if let Commands::LocalDev { action } = cli.command {
             assert!(matches!(action, LocalDevAction::Clean));
         } else {
@@ -327,21 +327,21 @@ mod tests {
 
     #[test]
     fn test_things_commands() {
-        let cli = Cli::try_parse_from(&["xtask", "things", "validate"]).unwrap();
+        let cli = Cli::try_parse_from(["xtask", "things", "validate"]).unwrap();
         if let Commands::Things { action } = cli.command {
             assert!(matches!(action, ThingsAction::Validate));
         } else {
             panic!("Expected Things command");
         }
 
-        let cli = Cli::try_parse_from(&["xtask", "things", "backup"]).unwrap();
+        let cli = Cli::try_parse_from(["xtask", "things", "backup"]).unwrap();
         if let Commands::Things { action } = cli.command {
             assert!(matches!(action, ThingsAction::Backup));
         } else {
             panic!("Expected Things command");
         }
 
-        let cli = Cli::try_parse_from(&["xtask", "things", "db-location"]).unwrap();
+        let cli = Cli::try_parse_from(["xtask", "things", "db-location"]).unwrap();
         if let Commands::Things { action } = cli.command {
             assert!(matches!(action, ThingsAction::DbLocation));
         } else {

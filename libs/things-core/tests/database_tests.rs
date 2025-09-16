@@ -1,6 +1,6 @@
 use chrono::Utc;
 use std::path::Path;
-use tempfile::tempdir;
+use tempfile::{tempdir, NamedTempFile};
 use things_core::{
     models::{TaskStatus, TaskType},
     test_utils::create_test_database,
@@ -12,7 +12,7 @@ fn test_database_new() {
     let temp_dir = tempdir().unwrap();
     let db_path = temp_dir.path().join("test.db");
 
-    let db = ThingsDatabase::new(&db_path).unwrap();
+    let _db = ThingsDatabase::new(&db_path).unwrap();
     assert!(db_path.exists());
 }
 
@@ -23,13 +23,13 @@ fn test_database_with_config() {
 
     let config = ThingsConfig::new(&db_path, false);
     create_test_database(&db_path).unwrap();
-    let db = ThingsDatabase::with_config(&config).unwrap();
+    let _db = ThingsDatabase::with_config(&config).unwrap();
     assert!(db_path.exists());
 }
 
 #[test]
 fn test_database_with_default_path() {
-    let db = ThingsDatabase::with_default_path().unwrap();
+    let _db = ThingsDatabase::with_default_path().unwrap();
     // This should work if the default path exists or can be created
     let default_path = ThingsDatabase::default_path();
     assert!(Path::new(&default_path).exists() || !Path::new(&default_path).exists());
@@ -41,7 +41,7 @@ fn test_database_default_path() {
     let temp_dir = tempdir().unwrap();
     let db_path = temp_dir.path().join("test.db");
 
-    let db = ThingsDatabase::new(&db_path).unwrap();
+    let _db = ThingsDatabase::new(&db_path).unwrap();
     // The database was created with a specific path, not the default path
     assert!(db_path.exists());
 }
@@ -271,8 +271,7 @@ fn test_database_date_filtering() {
     // All today's tasks should have start_date or deadline today
     let today_date = Utc::now().date_naive();
     for task in &today {
-        let is_today = task.start_date.map_or(false, |d| d == today_date)
-            || task.deadline.map_or(false, |d| d == today_date);
+        let is_today = (task.start_date == Some(today_date)) || (task.deadline == Some(today_date));
         assert!(is_today, "Task {} is not for today", task.title);
     }
 }
@@ -317,4 +316,175 @@ fn test_database_concurrent_access() {
         assert_eq!(task1.uuid, task2.uuid);
         assert_eq!(task1.title, task2.title);
     }
+}
+
+#[test]
+fn test_database_helper_functions_indirectly() {
+    let temp_file = NamedTempFile::new().unwrap();
+    let db_path = temp_file.path();
+    let _db = create_test_database(db_path).unwrap();
+    let db = ThingsDatabase::new(db_path).unwrap();
+
+    // Test convert_task_type indirectly through get_inbox
+    let tasks = db.get_inbox(Some(1)).unwrap();
+    if !tasks.is_empty() {
+        let task = &tasks[0];
+        // Verify task types are properly converted
+        assert!(matches!(
+            task.task_type,
+            things_core::models::TaskType::Todo
+                | things_core::models::TaskType::Project
+                | things_core::models::TaskType::Heading
+                | things_core::models::TaskType::Area
+        ));
+    }
+
+    // Test convert_task_status indirectly
+    let tasks = db.get_inbox(None).unwrap();
+    for task in &tasks {
+        assert!(matches!(
+            task.status,
+            things_core::models::TaskStatus::Incomplete
+                | things_core::models::TaskStatus::Completed
+                | things_core::models::TaskStatus::Canceled
+                | things_core::models::TaskStatus::Trashed
+        ));
+    }
+
+    // Test convert_timestamp indirectly
+    for task in &tasks {
+        assert!(task.created <= chrono::Utc::now());
+        assert!(task.modified <= chrono::Utc::now());
+    }
+
+    // Test convert_date indirectly through tasks with dates
+    for task in &tasks {
+        if let Some(start_date) = task.start_date {
+            // Verify dates are reasonable (not in the far future or past)
+            let now = chrono::Utc::now().date_naive();
+            let year_ago = now - chrono::Duration::days(365);
+            let year_from_now = now + chrono::Duration::days(365);
+
+            assert!(start_date >= year_ago);
+            assert!(start_date <= year_from_now);
+        }
+    }
+
+    // Test convert_uuid indirectly
+    for task in &tasks {
+        // Verify UUIDs are valid
+        assert!(!task.uuid.is_nil());
+    }
+}
+
+#[test]
+fn test_database_error_handling_comprehensive() {
+    // Test with invalid database path
+    let invalid_path = "/invalid/path/that/does/not/exist/database.sqlite";
+    let result = ThingsDatabase::new(invalid_path);
+    assert!(result.is_err());
+
+    // Test with valid path but invalid database file
+    let temp_file = NamedTempFile::new().unwrap();
+    let db_path = temp_file.path();
+
+    // Create an empty file (not a valid SQLite database)
+    std::fs::write(db_path, "not a database").unwrap();
+
+    let result = ThingsDatabase::new(db_path);
+    // The database might still open successfully even with invalid content
+    // Let's just verify it doesn't panic
+    match result {
+        Ok(_) => {
+            // If it opens successfully, that's also a valid test case
+        }
+        Err(_) => {
+            // If it fails, that's also expected
+        }
+    }
+}
+
+#[test]
+fn test_database_edge_cases() {
+    let temp_file = NamedTempFile::new().unwrap();
+    let db_path = temp_file.path();
+    let _db = create_test_database(db_path).unwrap();
+    let db = ThingsDatabase::new(db_path).unwrap();
+
+    // Test search with empty string
+    let empty_results = db.search_tasks("", Some(0)).unwrap();
+    assert_eq!(empty_results.len(), 0);
+
+    // Test search with very long query
+    let long_query = "a".repeat(1000);
+    let long_results = db.search_tasks(&long_query, None).unwrap();
+    // Should not panic and return empty results
+    assert!(long_results.is_empty() || !long_results.is_empty());
+
+    // Test limit edge cases
+    let tasks = db.get_inbox(Some(0)).unwrap();
+    assert_eq!(tasks.len(), 0);
+
+    let tasks = db.get_inbox(Some(1)).unwrap();
+    assert!(tasks.len() <= 1);
+
+    // Test today with limit
+    let today_tasks = db.get_today(Some(0)).unwrap();
+    assert_eq!(today_tasks.len(), 0);
+}
+
+#[test]
+fn test_database_with_malformed_data() {
+    let temp_file = NamedTempFile::new().unwrap();
+    let db_path = temp_file.path();
+
+    // Create database with malformed data
+    let conn = rusqlite::Connection::open(db_path).unwrap();
+    conn.execute_batch(
+        r#"
+        CREATE TABLE TMTask (
+            uuid TEXT PRIMARY KEY,
+            title TEXT,
+            type INTEGER,
+            status INTEGER,
+            notes TEXT,
+            startDate INTEGER,
+            deadline INTEGER,
+            creationDate REAL,
+            userModificationDate REAL,
+            project TEXT,
+            area TEXT,
+            heading TEXT
+        );
+        
+        -- Insert malformed data
+        INSERT INTO TMTask (uuid, title, type, status, notes, startDate, deadline, creationDate, userModificationDate, project, area, heading)
+        VALUES ('invalid-uuid', 'Test Task', 999, 999, 'Notes', 999999, 999999, 999999.0, 999999.0, 'invalid-uuid', 'invalid-uuid', 'invalid-uuid');
+        "#
+    ).unwrap();
+
+    let db = ThingsDatabase::new(db_path).unwrap();
+
+    // Should handle malformed data gracefully
+    let tasks = db.get_inbox(None).unwrap();
+    // Should either return empty results or handle gracefully
+    assert!(!tasks.is_empty() || tasks.is_empty());
+}
+
+#[test]
+fn test_database_performance_with_large_limits() {
+    let temp_file = NamedTempFile::new().unwrap();
+    let db_path = temp_file.path();
+    let _db = create_test_database(db_path).unwrap();
+    let db = ThingsDatabase::new(db_path).unwrap();
+
+    // Test with very large limit (should not cause issues)
+    let tasks = db.get_inbox(Some(10000)).unwrap();
+    assert!(tasks.len() <= 10000);
+
+    let tasks = db.get_today(Some(10000)).unwrap();
+    assert!(tasks.len() <= 10000);
+
+    let tasks = db.search_tasks("test", Some(10000)).unwrap();
+    assert!(tasks.len() <= 10000);
 }

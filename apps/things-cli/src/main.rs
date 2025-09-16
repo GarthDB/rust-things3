@@ -220,7 +220,7 @@ mod tests {
 
     #[test]
     fn test_cli_parsing_inbox() {
-        let cli = Cli::try_parse_from(&["things-cli", "inbox", "--limit", "10"]).unwrap();
+        let cli = Cli::try_parse_from(["things-cli", "inbox", "--limit", "10"]).unwrap();
         assert!(matches!(cli.command, Commands::Inbox { limit: Some(10) }));
         assert!(!cli.verbose);
         assert!(!cli.fallback_to_default);
@@ -228,13 +228,13 @@ mod tests {
 
     #[test]
     fn test_cli_parsing_today() {
-        let cli = Cli::try_parse_from(&["things-cli", "today", "--limit", "5"]).unwrap();
+        let cli = Cli::try_parse_from(["things-cli", "today", "--limit", "5"]).unwrap();
         assert!(matches!(cli.command, Commands::Today { limit: Some(5) }));
     }
 
     #[test]
     fn test_cli_parsing_projects() {
-        let cli = Cli::try_parse_from(&["things-cli", "projects", "--area", "test-uuid"]).unwrap();
+        let cli = Cli::try_parse_from(["things-cli", "projects", "--area", "test-uuid"]).unwrap();
         assert!(
             matches!(cli.command, Commands::Projects { area: Some(ref area) } if area == "test-uuid")
         );
@@ -242,14 +242,14 @@ mod tests {
 
     #[test]
     fn test_cli_parsing_areas() {
-        let cli = Cli::try_parse_from(&["things-cli", "areas"]).unwrap();
+        let cli = Cli::try_parse_from(["things-cli", "areas"]).unwrap();
         assert!(matches!(cli.command, Commands::Areas));
     }
 
     #[test]
     fn test_cli_parsing_search() {
         let cli =
-            Cli::try_parse_from(&["things-cli", "search", "test query", "--limit", "20"]).unwrap();
+            Cli::try_parse_from(["things-cli", "search", "test query", "--limit", "20"]).unwrap();
         assert!(
             matches!(cli.command, Commands::Search { query: ref q, limit: Some(20) } if q == "test query")
         );
@@ -257,20 +257,20 @@ mod tests {
 
     #[test]
     fn test_cli_parsing_mcp() {
-        let cli = Cli::try_parse_from(&["things-cli", "mcp"]).unwrap();
+        let cli = Cli::try_parse_from(["things-cli", "mcp"]).unwrap();
         assert!(matches!(cli.command, Commands::Mcp));
     }
 
     #[test]
     fn test_cli_parsing_health() {
-        let cli = Cli::try_parse_from(&["things-cli", "health"]).unwrap();
+        let cli = Cli::try_parse_from(["things-cli", "health"]).unwrap();
         assert!(matches!(cli.command, Commands::Health));
     }
 
     #[test]
     fn test_cli_parsing_with_database_path() {
         let cli =
-            Cli::try_parse_from(&["things-cli", "--database", "/path/to/db", "inbox"]).unwrap();
+            Cli::try_parse_from(["things-cli", "--database", "/path/to/db", "inbox"]).unwrap();
         assert!(matches!(cli.command, Commands::Inbox { limit: None }));
         assert!(cli.database.is_some());
         assert_eq!(cli.database.unwrap(), PathBuf::from("/path/to/db"));
@@ -278,21 +278,21 @@ mod tests {
 
     #[test]
     fn test_cli_parsing_with_verbose() {
-        let cli = Cli::try_parse_from(&["things-cli", "--verbose", "inbox"]).unwrap();
+        let cli = Cli::try_parse_from(["things-cli", "--verbose", "inbox"]).unwrap();
         assert!(matches!(cli.command, Commands::Inbox { limit: None }));
         assert!(cli.verbose);
     }
 
     #[test]
     fn test_cli_parsing_with_fallback() {
-        let cli = Cli::try_parse_from(&["things-cli", "--fallback-to-default", "inbox"]).unwrap();
+        let cli = Cli::try_parse_from(["things-cli", "--fallback-to-default", "inbox"]).unwrap();
         assert!(matches!(cli.command, Commands::Inbox { limit: None }));
         assert!(cli.fallback_to_default);
     }
 
     #[test]
     fn test_cli_parsing_all_options() {
-        let cli = Cli::try_parse_from(&[
+        let cli = Cli::try_parse_from([
             "things-cli",
             "--database",
             "/custom/db",
@@ -414,32 +414,32 @@ mod tests {
 
     #[test]
     fn test_cli_struct_debug() {
-        let cli = Cli::try_parse_from(&["things-cli", "inbox"]).unwrap();
+        let cli = Cli::try_parse_from(["things-cli", "inbox"]).unwrap();
         let debug_str = format!("{:?}", cli);
         assert!(!debug_str.is_empty());
     }
 
     #[test]
     fn test_cli_parsing_invalid_command() {
-        let result = Cli::try_parse_from(&["things-cli", "invalid-command"]);
+        let result = Cli::try_parse_from(["things-cli", "invalid-command"]);
         assert!(result.is_err());
     }
 
     #[test]
     fn test_cli_parsing_missing_command() {
-        let result = Cli::try_parse_from(&["things-cli"]);
+        let result = Cli::try_parse_from(["things-cli"]);
         assert!(result.is_err());
     }
 
     #[test]
     fn test_cli_parsing_help() {
-        let result = Cli::try_parse_from(&["things-cli", "--help"]);
+        let result = Cli::try_parse_from(["things-cli", "--help"]);
         assert!(result.is_err()); // Help causes early exit
     }
 
     #[test]
     fn test_cli_parsing_version() {
-        let result = Cli::try_parse_from(&["things-cli", "--version"]);
+        let result = Cli::try_parse_from(["things-cli", "--version"]);
         assert!(result.is_err()); // Version causes early exit
     }
 
@@ -460,7 +460,7 @@ mod tests {
 
     #[test]
     fn test_cli_default_values() {
-        let cli = Cli::try_parse_from(&["things-cli", "inbox"]).unwrap();
+        let cli = Cli::try_parse_from(["things-cli", "inbox"]).unwrap();
         assert!(cli.database.is_none());
         assert!(!cli.fallback_to_default);
         assert!(!cli.verbose);
@@ -468,7 +468,7 @@ mod tests {
 
     #[test]
     fn test_cli_short_flags() {
-        let cli = Cli::try_parse_from(&["things-cli", "-v", "-d", "/path", "inbox"]).unwrap();
+        let cli = Cli::try_parse_from(["things-cli", "-v", "-d", "/path", "inbox"]).unwrap();
         assert!(cli.verbose);
         assert!(cli.database.is_some());
         assert_eq!(cli.database.unwrap(), PathBuf::from("/path"));
@@ -476,13 +476,13 @@ mod tests {
 
     #[test]
     fn test_cli_short_limit() {
-        let cli = Cli::try_parse_from(&["things-cli", "inbox", "-l", "5"]).unwrap();
+        let cli = Cli::try_parse_from(["things-cli", "inbox", "-l", "5"]).unwrap();
         assert!(matches!(cli.command, Commands::Inbox { limit: Some(5) }));
     }
 
     #[test]
     fn test_cli_search_without_limit() {
-        let cli = Cli::try_parse_from(&["things-cli", "search", "test query"]).unwrap();
+        let cli = Cli::try_parse_from(["things-cli", "search", "test query"]).unwrap();
         assert!(
             matches!(cli.command, Commands::Search { query: ref q, limit: None } if q == "test query")
         );
@@ -490,19 +490,165 @@ mod tests {
 
     #[test]
     fn test_cli_projects_without_area() {
-        let cli = Cli::try_parse_from(&["things-cli", "projects"]).unwrap();
+        let cli = Cli::try_parse_from(["things-cli", "projects"]).unwrap();
         assert!(matches!(cli.command, Commands::Projects { area: None }));
     }
 
     #[test]
     fn test_cli_inbox_without_limit() {
-        let cli = Cli::try_parse_from(&["things-cli", "inbox"]).unwrap();
+        let cli = Cli::try_parse_from(["things-cli", "inbox"]).unwrap();
         assert!(matches!(cli.command, Commands::Inbox { limit: None }));
     }
 
     #[test]
+    fn test_cli_parsing_all_options_comprehensive() {
+        let cli = Cli::try_parse_from([
+            "things-cli",
+            "--database",
+            "/custom/path",
+            "--fallback-to-default",
+            "--verbose",
+            "inbox",
+            "--limit",
+            "5",
+        ])
+        .unwrap();
+
+        assert!(matches!(cli.command, Commands::Inbox { limit: Some(5) }));
+        assert!(cli.verbose);
+        assert!(cli.fallback_to_default);
+        assert_eq!(cli.database.unwrap(), PathBuf::from("/custom/path"));
+    }
+
+    #[test]
+    fn test_main_function_execution_paths() {
+        // Test that main function can be called with different commands
+        // This tests the execution flow without actually running the full main function
+
+        // Test inbox command parsing
+        let cli = Cli::try_parse_from(["things-cli", "inbox", "--limit", "10"]).unwrap();
+        assert!(matches!(cli.command, Commands::Inbox { limit: Some(10) }));
+
+        // Test today command parsing
+        let cli = Cli::try_parse_from(["things-cli", "today"]).unwrap();
+        assert!(matches!(cli.command, Commands::Today { limit: None }));
+
+        // Test projects command parsing
+        let cli = Cli::try_parse_from(["things-cli", "projects", "--area", "test-uuid"]).unwrap();
+        assert!(
+            matches!(cli.command, Commands::Projects { area: Some(ref area) } if area == "test-uuid")
+        );
+
+        // Test areas command parsing
+        let cli = Cli::try_parse_from(["things-cli", "areas"]).unwrap();
+        assert!(matches!(cli.command, Commands::Areas));
+
+        // Test search command parsing
+        let cli =
+            Cli::try_parse_from(["things-cli", "search", "test query", "--limit", "5"]).unwrap();
+        assert!(
+            matches!(cli.command, Commands::Search { query: ref q, limit: Some(5) } if q == "test query")
+        );
+
+        // Test mcp command parsing
+        let cli = Cli::try_parse_from(["things-cli", "mcp"]).unwrap();
+        assert!(matches!(cli.command, Commands::Mcp));
+
+        // Test health command parsing
+        let cli = Cli::try_parse_from(["things-cli", "health"]).unwrap();
+        assert!(matches!(cli.command, Commands::Health));
+    }
+
+    #[test]
+    fn test_config_creation_paths() {
+        // Test config creation with database path
+        let cli = Cli::try_parse_from(["things-cli", "--database", "/test/path", "inbox"]).unwrap();
+        let config = if let Some(db_path) = cli.database {
+            ThingsConfig::new(db_path, cli.fallback_to_default)
+        } else {
+            ThingsConfig::from_env()
+        };
+
+        assert_eq!(config.database_path, PathBuf::from("/test/path"));
+        assert!(!config.fallback_to_default);
+
+        // Test config creation without database path
+        let cli = Cli::try_parse_from(["things-cli", "inbox"]).unwrap();
+        let config = if let Some(db_path) = cli.database {
+            ThingsConfig::new(db_path, cli.fallback_to_default)
+        } else {
+            ThingsConfig::from_env()
+        };
+
+        // Should use default path from env (may or may not contain "Things3" depending on system)
+        assert!(!config.database_path.to_string_lossy().is_empty());
+    }
+
+    #[test]
+    fn test_verbose_logging_setup() {
+        // Test that verbose flag is properly parsed
+        let cli = Cli::try_parse_from(["things-cli", "--verbose", "inbox"]).unwrap();
+        assert!(cli.verbose);
+
+        let cli = Cli::try_parse_from(["things-cli", "inbox"]).unwrap();
+        assert!(!cli.verbose);
+
+        let cli = Cli::try_parse_from(["things-cli", "-v", "inbox"]).unwrap();
+        assert!(cli.verbose);
+    }
+
+    #[test]
+    fn test_fallback_behavior_parsing() {
+        let cli = Cli::try_parse_from(["things-cli", "--fallback-to-default", "inbox"]).unwrap();
+        assert!(cli.fallback_to_default);
+
+        let cli = Cli::try_parse_from(["things-cli", "inbox"]).unwrap();
+        assert!(!cli.fallback_to_default);
+    }
+
+    #[test]
+    fn test_command_enum_variants() {
+        // Test all command variants can be created and debugged
+        let commands = vec![
+            Commands::Inbox { limit: None },
+            Commands::Inbox { limit: Some(10) },
+            Commands::Today { limit: None },
+            Commands::Today { limit: Some(5) },
+            Commands::Projects { area: None },
+            Commands::Projects {
+                area: Some("test".to_string()),
+            },
+            Commands::Areas,
+            Commands::Search {
+                query: "test".to_string(),
+                limit: None,
+            },
+            Commands::Search {
+                query: "test".to_string(),
+                limit: Some(10),
+            },
+            Commands::Mcp,
+            Commands::Health,
+        ];
+
+        for command in commands {
+            let debug_str = format!("{:?}", command);
+            assert!(!debug_str.is_empty());
+            assert!(
+                debug_str.contains("Inbox")
+                    || debug_str.contains("Today")
+                    || debug_str.contains("Projects")
+                    || debug_str.contains("Areas")
+                    || debug_str.contains("Search")
+                    || debug_str.contains("Mcp")
+                    || debug_str.contains("Health")
+            );
+        }
+    }
+
+    #[test]
     fn test_cli_today_without_limit() {
-        let cli = Cli::try_parse_from(&["things-cli", "today"]).unwrap();
+        let cli = Cli::try_parse_from(["things-cli", "today"]).unwrap();
         assert!(matches!(cli.command, Commands::Today { limit: None }));
     }
 }

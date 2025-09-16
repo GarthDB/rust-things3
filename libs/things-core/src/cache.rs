@@ -465,7 +465,7 @@ mod tests {
         let _cache = ThingsCache::new(config);
 
         // Just test that it can be created
-        assert!(true);
+        // Test passes if we reach this point
     }
 
     #[tokio::test]
@@ -473,7 +473,7 @@ mod tests {
         let _cache = ThingsCache::new_default();
 
         // Just test that it can be created
-        assert!(true);
+        // Test passes if we reach this point
     }
 
     #[tokio::test]
@@ -775,7 +775,8 @@ mod tests {
         // The entry count might not be immediately updated due to async nature
         // Let's just verify that we can get stats without panicking
         let stats = cache.get_stats();
-        assert!(stats.entries >= 0); // Should be non-negative
+        // Verify stats can be retrieved without panicking
+        let _ = stats.entries;
     }
 
     #[tokio::test]
