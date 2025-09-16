@@ -1,10 +1,10 @@
 //! CI-friendly tests that use mock data when Things 3 is not available
 
 use tempfile::NamedTempFile;
-use things_core::{Result, ThingsDatabase};
+use things3_core::{Result, ThingsDatabase};
 
 #[cfg(feature = "test-utils")]
-use things_core::test_utils;
+use things3_core::test_utils;
 
 /// Test that works in CI environments using mock data
 #[tokio::test]

@@ -1,9 +1,9 @@
 [workspace]
 resolver = "2"
 members = [
-    "libs/things-core",
-    "libs/things-common",
-    "apps/things-cli",
+    "libs/things3-core",
+    "libs/things3-common",
+    "apps/things3-cli",
     "tools/xtask",
 ]
 

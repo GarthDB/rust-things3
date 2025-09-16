@@ -5,10 +5,10 @@ pub mod mcp;
 use clap::{Parser, Subcommand};
 use std::io::Write;
 use std::path::PathBuf;
-use things_core::{Result, ThingsConfig, ThingsDatabase};
+use things3_core::{Result, ThingsConfig, ThingsDatabase};
 
 #[derive(Parser, Debug)]
-#[command(name = "things-cli")]
+#[command(name = "things3")]
 #[command(about = "Things 3 CLI with integrated MCP server")]
 #[command(version)]
 pub struct Cli {
@@ -73,7 +73,7 @@ pub enum Commands {
 
 pub fn print_tasks<W: Write>(
     _db: &ThingsDatabase,
-    tasks: &[things_core::Task],
+    tasks: &[things3_core::Task],
     writer: &mut W,
 ) -> Result<()> {
     if tasks.is_empty() {
@@ -100,7 +100,7 @@ pub fn print_tasks<W: Write>(
 
 pub fn print_projects<W: Write>(
     _db: &ThingsDatabase,
-    projects: &[things_core::Project],
+    projects: &[things3_core::Project],
     writer: &mut W,
 ) -> Result<()> {
     if projects.is_empty() {
@@ -127,7 +127,7 @@ pub fn print_projects<W: Write>(
 
 pub fn print_areas<W: Write>(
     _db: &ThingsDatabase,
-    areas: &[things_core::Area],
+    areas: &[things3_core::Area],
     writer: &mut W,
 ) -> Result<()> {
     if areas.is_empty() {

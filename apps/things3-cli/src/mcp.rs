@@ -3,7 +3,7 @@
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use things_core::{
+use things3_core::{
     BackupManager, DataExporter, PerformanceMonitor, ThingsCache, ThingsConfig, ThingsDatabase,
 };
 
@@ -516,8 +516,8 @@ impl ThingsMcpServer {
             "today_tasks_count": today_tasks.len(),
             "projects_count": projects.len(),
             "areas_count": areas.len(),
-            "completed_tasks": projects.iter().filter(|p| p.status == things_core::TaskStatus::Completed).count(),
-            "incomplete_tasks": projects.iter().filter(|p| p.status == things_core::TaskStatus::Incomplete).count(),
+            "completed_tasks": projects.iter().filter(|p| p.status == things3_core::TaskStatus::Completed).count(),
+            "incomplete_tasks": projects.iter().filter(|p| p.status == things3_core::TaskStatus::Incomplete).count(),
             "timestamp": chrono::Utc::now()
         });
 

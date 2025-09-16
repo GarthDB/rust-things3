@@ -3,13 +3,13 @@ type: application
 language: rust
 platform: system
 project:
-  name: Things CLI
+  name: Things3 CLI
   description: CLI tool for Things 3 with integrated MCP server
-  owner: things-cli-team
+  owner: things3-cli-team
   maintainers:
   - garthdb
 owners:
-  defaultOwner: things-cli-team
+  defaultOwner: things3-cli-team
   requiredApprovals: 1
   paths:
   - src/**/*.rs

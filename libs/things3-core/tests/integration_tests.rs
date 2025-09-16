@@ -1,10 +1,10 @@
 //! Integration tests for things-core
 
 use tempfile::NamedTempFile;
-use things_core::{Result, ThingsDatabase};
+use things3_core::{Result, ThingsDatabase};
 
 #[cfg(feature = "test-utils")]
-use things_core::test_utils;
+use things3_core::test_utils;
 
 #[tokio::test]
 async fn test_database_connection() -> Result<()> {

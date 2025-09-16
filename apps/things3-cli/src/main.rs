@@ -1,10 +1,10 @@
 //! Things CLI - Command line interface for Things 3 with integrated MCP server
 
 use clap::Parser;
-use things_cli::{
+use things3_cli::{
     health_check, print_areas, print_projects, print_tasks, start_mcp_server, Cli, Commands,
 };
-use things_core::{Result, ThingsConfig, ThingsDatabase};
+use things3_core::{Result, ThingsConfig, ThingsDatabase};
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -75,7 +75,7 @@ mod tests {
     use super::*;
     use std::io::Cursor;
     use tempfile::NamedTempFile;
-    use things_core::test_utils::create_test_database;
+    use things3_core::test_utils::create_test_database;
 
     /// Test the main function with various command combinations
     #[tokio::test]

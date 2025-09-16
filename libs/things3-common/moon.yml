@@ -3,13 +3,13 @@ type: library
 language: rust
 platform: system
 project:
-  name: Things Common
+  name: Things3 Common
   description: Shared utilities and types for Things 3 integration
-  owner: things-common-team
+  owner: things3-common-team
   maintainers:
   - garthdb
 owners:
-  defaultOwner: things-common-team
+  defaultOwner: things3-common-team
   requiredApprovals: 1
   paths:
   - src/**/*.rs

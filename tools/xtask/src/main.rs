@@ -283,9 +283,9 @@ mod tests {
 
     #[test]
     fn test_generate_tests_command() {
-        let cli = Cli::try_parse_from(["xtask", "generate-tests", "things-core"]).unwrap();
+        let cli = Cli::try_parse_from(["xtask", "generate-tests", "things3-core"]).unwrap();
         if let Commands::GenerateTests { target } = cli.command {
-            assert_eq!(target, "things-core");
+            assert_eq!(target, "things3-core");
         } else {
             panic!("Expected GenerateTests command");
         }

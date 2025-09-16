@@ -2,7 +2,7 @@
 
 use std::io::Cursor;
 use tempfile::NamedTempFile;
-use things_core::{
+use things3_core::{
     config::ThingsConfig, database::ThingsDatabase, test_utils::create_test_database,
 };
 
@@ -19,14 +19,14 @@ fn test_print_tasks_integration() {
 
     // Test with empty tasks
     let mut output = Cursor::new(Vec::new());
-    things_cli::print_tasks(&db, &[], &mut output).unwrap();
+    things3_cli::print_tasks(&db, &[], &mut output).unwrap();
     let result = String::from_utf8(output.into_inner()).unwrap();
     assert!(result.contains("No tasks found"));
 
     // Test with some tasks
     let tasks = db.get_inbox(None).unwrap();
     let mut output = Cursor::new(Vec::new());
-    things_cli::print_tasks(&db, &tasks, &mut output).unwrap();
+    things3_cli::print_tasks(&db, &tasks, &mut output).unwrap();
     let result = String::from_utf8(output.into_inner()).unwrap();
     assert!(!result.is_empty());
 }
@@ -44,14 +44,14 @@ fn test_print_projects_integration() {
 
     // Test with empty projects
     let mut output = Cursor::new(Vec::new());
-    things_cli::print_projects(&db, &[], &mut output).unwrap();
+    things3_cli::print_projects(&db, &[], &mut output).unwrap();
     let result = String::from_utf8(output.into_inner()).unwrap();
     assert!(result.contains("No projects found"));
 
     // Test with some projects
     let projects = db.get_projects(None).unwrap();
     let mut output = Cursor::new(Vec::new());
-    things_cli::print_projects(&db, &projects, &mut output).unwrap();
+    things3_cli::print_projects(&db, &projects, &mut output).unwrap();
     let result = String::from_utf8(output.into_inner()).unwrap();
     assert!(!result.is_empty());
 }
@@ -69,14 +69,14 @@ fn test_print_areas_integration() {
 
     // Test with empty areas
     let mut output = Cursor::new(Vec::new());
-    things_cli::print_areas(&db, &[], &mut output).unwrap();
+    things3_cli::print_areas(&db, &[], &mut output).unwrap();
     let result = String::from_utf8(output.into_inner()).unwrap();
     assert!(result.contains("No areas found"));
 
     // Test with some areas
     let areas = db.get_areas().unwrap();
     let mut output = Cursor::new(Vec::new());
-    things_cli::print_areas(&db, &areas, &mut output).unwrap();
+    things3_cli::print_areas(&db, &areas, &mut output).unwrap();
     let result = String::from_utf8(output.into_inner()).unwrap();
     assert!(!result.is_empty());
 }
@@ -93,14 +93,14 @@ fn test_health_check_integration() {
     let db = ThingsDatabase::with_config(&config).unwrap();
 
     // Test successful health check
-    let result = things_cli::health_check(&db);
+    let result = things3_cli::health_check(&db);
     assert!(result.is_ok());
 
     // Test health check with invalid database
     let invalid_config = ThingsConfig::new("/nonexistent/path", false);
     let invalid_db = ThingsDatabase::with_config(&invalid_config);
     if let Ok(db) = invalid_db {
-        let result = things_cli::health_check(&db);
+        let result = things3_cli::health_check(&db);
         // This might succeed or fail depending on the database state
         let _ = result; // Just ensure it doesn't panic
     }
@@ -118,7 +118,7 @@ async fn test_mcp_server_integration() {
     let db = ThingsDatabase::with_config(&config).unwrap();
 
     // Test MCP server creation
-    let server = things_cli::mcp::ThingsMcpServer::new(db, config);
+    let server = things3_cli::mcp::ThingsMcpServer::new(db, config);
 
     // Test tool listing
     let tools = server.list_tools().await.unwrap();
@@ -132,15 +132,18 @@ async fn test_mcp_server_integration() {
 #[test]
 fn test_cli_parsing_integration() {
     use clap::Parser;
-    use things_cli::Cli;
+    use things3_cli::Cli;
 
     // Test basic parsing
     let cli = Cli::try_parse_from(["things-cli", "inbox"]).unwrap();
-    assert_eq!(cli.command, things_cli::Commands::Inbox { limit: None });
+    assert_eq!(cli.command, things3_cli::Commands::Inbox { limit: None });
 
     // Test with limit
     let cli = Cli::try_parse_from(["things-cli", "inbox", "--limit", "10"]).unwrap();
-    assert_eq!(cli.command, things_cli::Commands::Inbox { limit: Some(10) });
+    assert_eq!(
+        cli.command,
+        things3_cli::Commands::Inbox { limit: Some(10) }
+    );
 
     // Test with database path
     let cli = Cli::try_parse_from(["things-cli", "--database", "/tmp/test.db", "inbox"]).unwrap();
@@ -177,48 +180,48 @@ fn test_cli_error_handling_integration() {
 #[test]
 fn test_cli_commands_integration() {
     use clap::Parser;
-    use things_cli::Cli;
+    use things3_cli::Cli;
 
     // Test all command types
     let cli = Cli::try_parse_from(["things-cli", "inbox"]).unwrap();
-    assert_eq!(cli.command, things_cli::Commands::Inbox { limit: None });
+    assert_eq!(cli.command, things3_cli::Commands::Inbox { limit: None });
 
     let cli = Cli::try_parse_from(["things-cli", "today"]).unwrap();
-    assert_eq!(cli.command, things_cli::Commands::Today { limit: None });
+    assert_eq!(cli.command, things3_cli::Commands::Today { limit: None });
 
     let cli = Cli::try_parse_from(["things-cli", "projects"]).unwrap();
     assert_eq!(
         cli.command,
-        things_cli::Commands::Projects {
+        things3_cli::Commands::Projects {
             area: None,
             limit: None
         }
     );
 
     let cli = Cli::try_parse_from(["things-cli", "areas"]).unwrap();
-    assert_eq!(cli.command, things_cli::Commands::Areas { limit: None });
+    assert_eq!(cli.command, things3_cli::Commands::Areas { limit: None });
 
     let cli = Cli::try_parse_from(["things-cli", "search", "test"]).unwrap();
     assert_eq!(
         cli.command,
-        things_cli::Commands::Search {
+        things3_cli::Commands::Search {
             query: "test".to_string(),
             limit: None
         }
     );
 
     let cli = Cli::try_parse_from(["things-cli", "health"]).unwrap();
-    assert_eq!(cli.command, things_cli::Commands::Health);
+    assert_eq!(cli.command, things3_cli::Commands::Health);
 
     let cli = Cli::try_parse_from(["things-cli", "mcp"]).unwrap();
-    assert_eq!(cli.command, things_cli::Commands::Mcp);
+    assert_eq!(cli.command, things3_cli::Commands::Mcp);
 }
 
 /// Test CLI with various flag combinations
 #[test]
 fn test_cli_flag_combinations_integration() {
     use clap::Parser;
-    use things_cli::Cli;
+    use things3_cli::Cli;
 
     // Test multiple flags together
     let cli = Cli::try_parse_from([
@@ -233,7 +236,7 @@ fn test_cli_flag_combinations_integration() {
     ])
     .unwrap();
 
-    assert_eq!(cli.command, things_cli::Commands::Inbox { limit: Some(5) });
+    assert_eq!(cli.command, things3_cli::Commands::Inbox { limit: Some(5) });
     assert!(cli.verbose);
     assert!(cli.fallback_to_default);
     assert_eq!(cli.database, Some(std::path::PathBuf::from("/tmp/test.db")));
@@ -243,7 +246,7 @@ fn test_cli_flag_combinations_integration() {
 #[test]
 fn test_cli_help_version_integration() {
     use clap::Parser;
-    use things_cli::Cli;
+    use things3_cli::Cli;
 
     // Test help parsing (should not panic)
     let _ = Cli::try_parse_from(["things-cli", "--help"]);

@@ -3,8 +3,8 @@
 use serde_json::json;
 use std::path::Path;
 use tempfile::NamedTempFile;
-use things_cli::mcp::{CallToolRequest, Content, ThingsMcpServer};
-use things_core::{config::ThingsConfig, database::ThingsDatabase};
+use things3_cli::mcp::{CallToolRequest, Content, ThingsMcpServer};
+use things3_core::{config::ThingsConfig, database::ThingsDatabase};
 
 /// Create a test MCP server with mock database
 fn create_test_mcp_server() -> ThingsMcpServer {

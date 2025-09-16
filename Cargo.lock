@@ -1338,7 +1338,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "things-cli"
+name = "things3-cli"
 version = "0.1.0"
 dependencies = [
  "anyhow",
@@ -1357,15 +1357,15 @@ dependencies = [
  "serde_json",
  "sysinfo",
  "tempfile",
- "things-common",
- "things-core",
+ "things3-common",
+ "things3-core",
  "thiserror",
  "tokio",
  "uuid",
 ]
 
 [[package]]
-name = "things-common"
+name = "things3-common"
 version = "0.1.0"
 dependencies = [
  "anyhow",
@@ -1377,7 +1377,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "things-core"
+name = "things3-core"
 version = "0.1.0"
 dependencies = [
  "anyhow",

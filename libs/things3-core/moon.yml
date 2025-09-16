@@ -3,13 +3,13 @@ type: library
 language: rust
 platform: system
 project:
-  name: Things Core
+  name: Things3 Core
   description: Core library providing Things 3 database access and data models
-  owner: things-core-team
+  owner: things3-core-team
   maintainers:
   - garthdb
 owners:
-  defaultOwner: things-core-team
+  defaultOwner: things3-core-team
   requiredApprovals: 1
   paths:
   - src/**/*.rs

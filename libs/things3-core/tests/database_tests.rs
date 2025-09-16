@@ -1,7 +1,7 @@
 use chrono::Utc;
 use std::path::Path;
 use tempfile::{tempdir, NamedTempFile};
-use things_core::{
+use things3_core::{
     models::{TaskStatus, TaskType},
     test_utils::create_test_database,
     ThingsConfig, ThingsDatabase,
@@ -344,10 +344,10 @@ fn test_database_helper_functions_indirectly() {
         // Verify task types are properly converted
         assert!(matches!(
             task.task_type,
-            things_core::models::TaskType::Todo
-                | things_core::models::TaskType::Project
-                | things_core::models::TaskType::Heading
-                | things_core::models::TaskType::Area
+            things3_core::models::TaskType::Todo
+                | things3_core::models::TaskType::Project
+                | things3_core::models::TaskType::Heading
+                | things3_core::models::TaskType::Area
         ));
     }
 
@@ -356,10 +356,10 @@ fn test_database_helper_functions_indirectly() {
     for task in &tasks {
         assert!(matches!(
             task.status,
-            things_core::models::TaskStatus::Incomplete
-                | things_core::models::TaskStatus::Completed
-                | things_core::models::TaskStatus::Canceled
-                | things_core::models::TaskStatus::Trashed
+            things3_core::models::TaskStatus::Incomplete
+                | things3_core::models::TaskStatus::Completed
+                | things3_core::models::TaskStatus::Canceled
+                | things3_core::models::TaskStatus::Trashed
         ));
     }
 

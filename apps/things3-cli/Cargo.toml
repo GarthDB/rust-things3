@@ -1,5 +1,5 @@
 [package]
-name = "things-cli"
+name = "things3-cli"
 version.workspace = true
 edition.workspace = true
 authors.workspace = true
@@ -8,13 +8,13 @@ repository.workspace = true
 description = "CLI tool for Things 3 with integrated MCP server"
 
 [[bin]]
-name = "things-cli"
+name = "things3"
 path = "src/main.rs"
 
 [dependencies]
 # Core
-things-core = { path = "../../libs/things-core", features = ["test-utils"] }
-things-common = { path = "../../libs/things-common" }
+things3-core = { path = "../../libs/things3-core", features = ["test-utils"] }
+things3-common = { path = "../../libs/things3-common" }
 
 # CLI
 clap.workspace = true

@@ -4,7 +4,7 @@ A high-performance Rust library and CLI for Things 3 integration with integrated
 
 [![CI](https://github.com/GarthDB/rust-things/workflows/CI/badge.svg)](https://github.com/GarthDB/rust-things/actions)
 [![codecov](https://codecov.io/gh/GarthDB/rust-things/branch/main/graph/badge.svg)](https://codecov.io/gh/GarthDB/rust-things)
-[![Crates.io](https://img.shields.io/crates/v/things-cli.svg)](https://crates.io/crates/things-cli)
+[![Crates.io](https://img.shields.io/crates/v/things3-cli.svg)](https://crates.io/crates/things3-cli)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Rust](https://img.shields.io/badge/rust-1.70+-orange.svg)](https://www.rust-lang.org)
 
@@ -31,14 +31,14 @@ A high-performance Rust library and CLI for Things 3 integration with integrated
 brew tap GarthDB/rust-things
 
 # Install
-brew install things-cli
+brew install things3-cli
 ```
 
 ### Cargo (Rust)
 
 ```bash
 # Install from crates.io (when published)
-cargo install things-cli
+cargo install things3-cli
 
 # Or install from source
 cargo install --git https://github.com/GarthDB/rust-things
@@ -73,32 +73,32 @@ moon run :dev-pipeline
 
 ```bash
 # Show help
-things-cli --help
+things3 --help
 
 # Health check
-things-cli health
+things3 health
 
 # Show inbox tasks
-things-cli inbox
-things-cli inbox --limit 5
+things3 inbox
+things3 inbox --limit 5
 
 # Show today's tasks
-things-cli today
-things-cli today --limit 3
+things3 today
+things3 today --limit 3
 
 # Show all projects
-things-cli projects
-things-cli projects --area <AREA_UUID>
+things3 projects
+things3 projects --area <AREA_UUID>
 
 # Show all areas
-things-cli areas
+things3 areas
 
 # Search for tasks
-things-cli search "meeting"
-things-cli search "report" --limit 10
+things3 search "meeting"
+things3 search "report" --limit 10
 
 # Start MCP server (for AI/LLM integration)
-things-cli mcp
+things3 mcp
 ```
 
 ### Environment Variables
@@ -147,8 +147,8 @@ The MCP (Model Context Protocol) server provides 17 tools for AI/LLM integration
 // .cursor/mcp.json
 {
   "mcpServers": {
-    "things-cli": {
-      "command": "things-cli",
+    "things3": {
+      "command": "things3",
       "args": ["mcp"],
       "env": {
         "THINGS_DB_PATH": "/path/to/things.db"
@@ -163,9 +163,9 @@ The MCP (Model Context Protocol) server provides 17 tools for AI/LLM integration
 // .vscode/mcp.json
 {
   "servers": {
-    "things-cli": {
+    "things3": {
       "type": "stdio",
-      "command": "things-cli",
+      "command": "things3",
       "args": ["mcp"],
       "cwd": "${workspaceFolder}",
       "env": {
@@ -181,8 +181,8 @@ The MCP (Model Context Protocol) server provides 17 tools for AI/LLM integration
 // .zed/settings.json
 {
   "mcp": {
-    "things-cli": {
-      "command": "things-cli",
+    "things3": {
+      "command": "things3",
       "args": ["mcp"],
       "env": {
         "THINGS_DB_PATH": "/path/to/things.db"
@@ -222,7 +222,7 @@ moon run :dev-pipeline
 ```
 rust-things/
 ├── apps/
-│   └── things-cli/          # CLI application with MCP server
+│   └── things3/          # CLI application with MCP server
 ├── libs/
 │   ├── things-core/         # Core library
 │   └── things-common/       # Shared utilities
@@ -269,7 +269,7 @@ MIT License - see [LICENSE](LICENSE) file for details.
 
 ## Acknowledgments
 
-- Inspired by [things-cli](https://github.com/thingsapi/things-cli)
+- Inspired by [things3](https://github.com/thingsapi/things3)
 - Built with [Moon](https://moonrepo.dev) workspace management
 - Follows [evelion-apps/things-api](https://github.com/evelion-apps/things-api) patterns
 # Test commit

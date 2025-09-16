@@ -1,5 +1,5 @@
 [package]
-name = "things-common"
+name = "things3-common"
 version.workspace = true
 edition.workspace = true
 authors.workspace = true

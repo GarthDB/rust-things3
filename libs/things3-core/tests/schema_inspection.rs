@@ -1,7 +1,7 @@
 //! Schema inspection test to understand the real Things 3 database structure
 
 use rusqlite::Connection;
-use things_core::{Result, ThingsDatabase};
+use things3_core::{Result, ThingsDatabase};
 
 #[tokio::test]
 async fn test_inspect_things_schema() -> Result<()> {
