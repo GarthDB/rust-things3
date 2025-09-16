@@ -43,12 +43,20 @@ jobs:
     
     - name: Run coverage analysis
       run: |
-        cargo llvm-cov --workspace --all-features \
-          --lcov --output-path lcov.info \
-          --html --output-dir target/llvm-cov/html \
-          --json --output-path coverage.json \
-          --cobertura --output-path cobertura.xml \
-          --text --output-path coverage.txt
+        # Generate LCOV report
+        cargo llvm-cov --workspace --all-features --lcov --output-path lcov.info
+        
+        # Generate HTML report
+        cargo llvm-cov --workspace --all-features --html --output-dir target/llvm-cov/html
+        
+        # Generate JSON report
+        cargo llvm-cov --workspace --all-features --json --output-path coverage.json
+        
+        # Generate Cobertura report
+        cargo llvm-cov --workspace --all-features --cobertura --output-path cobertura.xml
+        
+        # Generate text report
+        cargo llvm-cov --workspace --all-features --text --output-path coverage.txt
     
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v4

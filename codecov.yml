@@ -1,0 +1,80 @@
+# Codecov configuration for Rust Things monorepo
+# https://docs.codecov.com/docs/codecov-yaml
+
+coverage:
+  status:
+    project:
+      default:
+        target: 80%
+        threshold: 5%
+        informational: true
+      things-core:
+        target: 85%
+        threshold: 3%
+      things-common:
+        target: 90%
+        threshold: 2%
+      things-cli:
+        target: 80%
+        threshold: 5%
+    patch:
+      default:
+        target: 70%
+        threshold: 5%
+        informational: true
+      things-core:
+        target: 75%
+        threshold: 3%
+      things-common:
+        target: 85%
+        threshold: 2%
+      things-cli:
+        target: 70%
+        threshold: 5%
+
+# Comment configuration
+comment:
+  layout: "header,diff,files,footer"
+  behavior: default
+  require_changes: false
+  require_base: false
+  require_head: true
+
+# Ignore patterns
+ignore:
+  - "target/**/*"
+  - "**/target/**/*"
+  - "**/Cargo.lock"
+  - "**/Cargo.toml"
+  - "**/README.md"
+  - "**/CHANGELOG.md"
+  - "**/LICENSE*"
+  - "**/.gitignore"
+  - "**/.github/**/*"
+  - "**/moon.yml"
+  - "**/.moon/**/*"
+  - "**/docs/**/*"
+  - "**/scripts/**/*"
+  - "**/tools/xtask/**/*"
+  - "**/benches/**/*"
+  - "**/examples/**/*"
+  - "**/tests/**/*"
+  - "**/test_*.rs"
+  - "**/*_test.rs"
+  - "**/test_utils.rs"
+  - "**/mock_*.rs"
+
+# Coverage processing
+codecov:
+  require_ci_to_pass: yes
+  notify:
+    wait_for_ci: yes
+  max_report_age: off
+
+# GitHub integration
+github_checks:
+  annotations: true
+  notify:
+    - comment
+    - status
+    - checks

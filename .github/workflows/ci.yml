@@ -1,140 +1,303 @@
-name: CI
+name: CI/CD Pipeline
 
 on:
   push:
     branches: [ main, develop ]
   pull_request:
     branches: [ main, develop ]
+  workflow_dispatch:
 
 env:
   CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
 
 jobs:
-  test:
-    name: Test
+  # Lint and format check
+  lint:
+    name: Lint and Format
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        rust: [stable, beta, nightly]
-        include:
-          - rust: stable
-            cache-key: stable
-          - rust: beta
-            cache-key: beta
-          - rust: nightly
-            cache-key: nightly
-
+    
     steps:
-    - uses: actions/checkout@v4
-
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
     - name: Install Rust
-      uses: dtolnay/rust-toolchain@master
-      with:
-        toolchain: ${{ matrix.rust }}
-        components: rustfmt, clippy
-
+      uses: dtolnay/rust-toolchain@stable
+    
     - name: Cache cargo registry
-      uses: actions/cache@v3
+      uses: actions/cache@v4
       with:
-        path: ~/.cargo/registry
-        key: ${{ runner.os }}-cargo-registry-${{ matrix.cache-key }}
-
-    - name: Cache cargo index
-      uses: actions/cache@v3
-      with:
-        path: ~/.cargo/git
-        key: ${{ runner.os }}-cargo-index-${{ matrix.cache-key }}
-
-    - name: Cache cargo build
-      uses: actions/cache@v3
-      with:
-        path: target
-        key: ${{ runner.os }}-cargo-build-target-${{ matrix.cache-key }}-${{ hashFiles('**/Cargo.lock') }}
-
-    - name: Install cargo-audit
-      run: cargo install cargo-audit
-
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git
+          target
+        key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+        restore-keys: |
+          ${{ runner.os }}-cargo-
+    
     - name: Check formatting
       run: cargo fmt --all -- --check
-
+    
     - name: Run clippy
       run: cargo clippy --all-targets --all-features -- -D warnings
 
+  # Run tests
+  test:
+    name: Test Suite
+    runs-on: ubuntu-latest
+    needs: lint
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        components: llvm-tools-preview
+    
+    - name: Cache cargo registry
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git
+          target
+        key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+        restore-keys: |
+          ${{ runner.os }}-cargo-
+    
     - name: Run tests
-      run: cargo test --features test-utils
+      run: cargo test --workspace --all-features
+    
+    - name: Run integration tests
+      run: cargo test --workspace --all-features --test '*'
 
+  # Security audit
+  security:
+    name: Security Audit
+    runs-on: ubuntu-latest
+    needs: lint
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@stable
+    
+    - name: Install cargo-audit
+      run: cargo install cargo-audit
+    
     - name: Run security audit
       run: cargo audit
 
-  build:
-    name: Build
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
-        target:
-          - ubuntu-latest: x86_64-unknown-linux-gnu
-          - macos-latest: x86_64-apple-darwin
-          - windows-latest: x86_64-pc-windows-msvc
-
-    steps:
-    - uses: actions/checkout@v4
-
-    - name: Install Rust
-      uses: dtolnay/rust-toolchain@master
-      with:
-        toolchain: stable
-
-    - name: Cache cargo registry
-      uses: actions/cache@v3
-      with:
-        path: ~/.cargo/registry
-        key: ${{ runner.os }}-cargo-registry
-
-    - name: Cache cargo index
-      uses: actions/cache@v3
-      with:
-        path: ~/.cargo/git
-        key: ${{ runner.os }}-cargo-index
-
-    - name: Cache cargo build
-      uses: actions/cache@v3
-      with:
-        path: target
-        key: ${{ runner.os }}-cargo-build-target-${{ hashFiles('**/Cargo.lock') }}
-
-    - name: Build release
-      run: cargo build --release --bin things-cli
-
-    - name: Upload artifacts
-      uses: actions/upload-artifact@v3
-      with:
-        name: things-cli-${{ matrix.target }}
-        path: target/release/things-cli*
-
-  release:
-    name: Release
+  # Code coverage
+  coverage:
+    name: Code Coverage
     runs-on: ubuntu-latest
-    needs: [test, build]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-
+    needs: test
+    
     steps:
-    - uses: actions/checkout@v4
+    - name: Checkout code
+      uses: actions/checkout@v4
       with:
-        fetch-depth: 0
-
+        fetch-depth: 0  # Needed for coverage reports
+    
     - name: Install Rust
-      uses: dtolnay/rust-toolchain@master
+      uses: dtolnay/rust-toolchain@stable
       with:
-        toolchain: stable
-
-    - name: Build release
-      run: cargo build --release --bin things-cli
-
-    - name: Create release
-      uses: softprops/action-gh-release@v1
+        components: llvm-tools-preview
+    
+    - name: Cache cargo registry
+      uses: actions/cache@v4
       with:
-        files: target/release/things-cli*
-        generate_release_notes: true
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git
+          target
+        key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+        restore-keys: |
+          ${{ runner.os }}-cargo-
+    
+    - name: Install cargo-llvm-cov
+      run: cargo install cargo-llvm-cov
+    
+    - name: Run coverage analysis
+      run: |
+        # Generate LCOV report
+        cargo llvm-cov --workspace --all-features --lcov --output-path lcov.info
+        
+        # Generate HTML report
+        cargo llvm-cov --workspace --all-features --html --output-dir target/llvm-cov/html
+        
+        # Generate JSON report
+        cargo llvm-cov --workspace --all-features --json --output-path coverage.json
+        
+        # Generate Cobertura report
+        cargo llvm-cov --workspace --all-features --cobertura --output-path cobertura.xml
+        
+        # Generate text report
+        cargo llvm-cov --workspace --all-features --text --output-path coverage.txt
+    
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v4
+      with:
+        file: lcov.info
+        flags: unittests
+        name: codecov-umbrella
+        fail_ci_if_error: false
+        verbose: true
+        token: ${{ secrets.CODECOV_TOKEN }}
+    
+    - name: Upload coverage artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: coverage-reports
+        path: |
+          lcov.info
+          coverage.json
+          cobertura.xml
+          coverage.txt
+          target/llvm-cov/html/
+        retention-days: 30
+    
+    - name: Comment PR with coverage
+      if: github.event_name == 'pull_request'
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const fs = require('fs');
+          
+          // Read coverage summary
+          let coverageSummary = '## 📊 Coverage Analysis\n\nCoverage analysis completed successfully.';
+          
+          if (fs.existsSync('coverage.txt')) {
+            const coverageText = fs.readFileSync('coverage.txt', 'utf8');
+            const lines = coverageText.split('\n');
+            const summaryLines = lines.filter(line => 
+              line.includes('TOTAL') || 
+              line.includes('Summary') ||
+              line.includes('Coverage') ||
+              line.includes('Lines:') ||
+              line.includes('Functions:') ||
+              line.includes('Regions:')
+            );
+            
+            if (summaryLines.length > 0) {
+              coverageSummary = '## 📊 Coverage Analysis\n\n```\n' + 
+                summaryLines.join('\n') + 
+                '\n```\n\n' +
+                '📁 [View detailed HTML report](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})';
+            }
+          }
+          
+          // Find existing coverage comment
+          const { data: comments } = await github.rest.issues.listComments({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            issue_number: context.issue.number,
+          });
+          
+          const botComment = comments.find(comment => 
+            comment.user.type === 'Bot' && 
+            comment.body.includes('Coverage Analysis')
+          );
+          
+          if (botComment) {
+            // Update existing comment
+            await github.rest.issues.updateComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              comment_id: botComment.id,
+              body: coverageSummary
+            });
+          } else {
+            // Create new comment
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: coverageSummary
+            });
+          }
+
+  # Build and package
+  build:
+    name: Build and Package
+    runs-on: ubuntu-latest
+    needs: [test, security]
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@stable
+    
+    - name: Cache cargo registry
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git
+          target
+        key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+        restore-keys: |
+          ${{ runner.os }}-cargo-
+    
+    - name: Build workspace
+      run: cargo build --workspace --all-features --release
+    
+    - name: Build CLI binary
+      run: cargo build --package things-cli --release
+    
+    - name: Upload build artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: build-artifacts
+        path: |
+          target/release/things-cli
+          target/release/libthings_core.*
+          target/release/libthings_common.*
+        retention-days: 7
+
+  # Summary
+  summary:
+    name: CI Summary
+    runs-on: ubuntu-latest
+    needs: [lint, test, security, coverage, build]
+    if: always()
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Download coverage artifacts
+      uses: actions/download-artifact@v4
+      with:
+        name: coverage-reports
+        path: coverage/
+    
+    - name: Display CI summary
+      run: |
+        echo "## 🚀 CI/CD Pipeline Summary"
+        echo
+        echo "### ✅ Completed Jobs:"
+        echo "- Lint and Format: ${{ needs.lint.result }}"
+        echo "- Test Suite: ${{ needs.test.result }}"
+        echo "- Security Audit: ${{ needs.security.result }}"
+        echo "- Code Coverage: ${{ needs.coverage.result }}"
+        echo "- Build and Package: ${{ needs.build.result }}"
+        echo
+        
+        if [ -f "coverage/coverage.txt" ]; then
+          echo "### 📊 Coverage Summary:"
+          cat coverage/coverage.txt
+          echo
+        fi
+        
+        echo "### 📁 Artifacts:"
+        echo "- Coverage Reports: Available in artifacts"
+        echo "- Build Artifacts: Available in artifacts"
+        echo "- HTML Coverage: Available in coverage artifacts"
