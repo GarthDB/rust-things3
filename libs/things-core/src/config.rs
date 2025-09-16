@@ -1,0 +1,184 @@
+//! Configuration management for Things 3 integration
+
+use crate::error::{Result, ThingsError};
+use std::path::{Path, PathBuf};
+
+/// Configuration for Things 3 database access
+#[derive(Debug, Clone)]
+pub struct ThingsConfig {
+    /// Path to the Things 3 database
+    pub database_path: PathBuf,
+    /// Whether to use the default database path if the specified path doesn't exist
+    pub fallback_to_default: bool,
+}
+
+impl ThingsConfig {
+    /// Create a new configuration with a custom database path
+    ///
+    /// # Arguments
+    /// * `database_path` - Path to the Things 3 database
+    /// * `fallback_to_default` - Whether to fall back to the default path if the specified path doesn't exist
+    #[must_use]
+    pub fn new<P: AsRef<Path>>(database_path: P, fallback_to_default: bool) -> Self {
+        Self {
+            database_path: database_path.as_ref().to_path_buf(),
+            fallback_to_default,
+        }
+    }
+
+    /// Create a configuration with the default database path
+    #[must_use]
+    pub fn with_default_path() -> Self {
+        Self {
+            database_path: Self::get_default_database_path(),
+            fallback_to_default: false,
+        }
+    }
+
+    /// Get the effective database path, falling back to default if needed
+    ///
+    /// # Errors
+    /// Returns `ThingsError::Message` if neither the specified path nor the default path exists
+    pub fn get_effective_database_path(&self) -> Result<PathBuf> {
+        // Check if the specified path exists
+        if self.database_path.exists() {
+            return Ok(self.database_path.clone());
+        }
+
+        // If fallback is enabled, try the default path
+        if self.fallback_to_default {
+            let default_path = Self::get_default_database_path();
+            if default_path.exists() {
+                return Ok(default_path);
+            }
+        }
+
+        Err(ThingsError::configuration(format!(
+            "Database not found at {} and fallback is {}",
+            self.database_path.display(),
+            if self.fallback_to_default {
+                "disabled"
+            } else {
+                "enabled but default path also not found"
+            }
+        )))
+    }
+
+    /// Get the default Things 3 database path
+    #[must_use]
+    pub fn get_default_database_path() -> PathBuf {
+        let home = std::env::var("HOME").unwrap_or_else(|_| "~".to_string());
+        PathBuf::from(format!(
+            "{home}/Library/Group Containers/JLMPQHK86H.com.culturedcode.ThingsMac/ThingsData-0Z0Z2/Things Database.thingsdatabase/main.sqlite"
+        ))
+    }
+
+    /// Create configuration from environment variables
+    ///
+    /// Reads `THINGS_DATABASE_PATH` and `THINGS_FALLBACK_TO_DEFAULT` environment variables
+    #[must_use]
+    pub fn from_env() -> Self {
+        let database_path = std::env::var("THINGS_DATABASE_PATH")
+            .map_or_else(|_| Self::get_default_database_path(), PathBuf::from);
+
+        let fallback_to_default = std::env::var("THINGS_FALLBACK_TO_DEFAULT")
+            .map(|v| v.to_lowercase() == "true" || v == "1")
+            .unwrap_or(true);
+
+        Self::new(database_path, fallback_to_default)
+    }
+
+    /// Create configuration for testing with a temporary database
+    ///
+    /// # Errors
+    /// Returns `ThingsError::Io` if the temporary file cannot be created
+    pub fn for_testing() -> Result<Self> {
+        use tempfile::NamedTempFile;
+        let temp_file = NamedTempFile::new()?;
+        let db_path = temp_file.path().to_path_buf();
+        Ok(Self::new(db_path, false))
+    }
+}
+
+impl Default for ThingsConfig {
+    fn default() -> Self {
+        Self::with_default_path()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::NamedTempFile;
+
+    #[test]
+    fn test_config_creation() {
+        let config = ThingsConfig::new("/path/to/db.sqlite", true);
+        assert_eq!(config.database_path, PathBuf::from("/path/to/db.sqlite"));
+        assert!(config.fallback_to_default);
+    }
+
+    #[test]
+    fn test_default_config() {
+        let config = ThingsConfig::default();
+        assert!(config
+            .database_path
+            .to_string_lossy()
+            .contains("Things Database.thingsdatabase"));
+        assert!(!config.fallback_to_default);
+    }
+
+    #[test]
+    fn test_config_from_env() {
+        std::env::set_var("THINGS_DATABASE_PATH", "/custom/path/db.sqlite");
+        std::env::set_var("THINGS_FALLBACK_TO_DEFAULT", "true");
+
+        let config = ThingsConfig::from_env();
+        assert_eq!(
+            config.database_path,
+            PathBuf::from("/custom/path/db.sqlite")
+        );
+        assert!(config.fallback_to_default);
+
+        // Clean up
+        std::env::remove_var("THINGS_DATABASE_PATH");
+        std::env::remove_var("THINGS_FALLBACK_TO_DEFAULT");
+    }
+
+    #[test]
+    fn test_effective_database_path() {
+        // Test with existing file
+        let temp_file = NamedTempFile::new().unwrap();
+        let db_path = temp_file.path();
+        let config = ThingsConfig::new(db_path, false);
+
+        let effective_path = config.get_effective_database_path().unwrap();
+        assert_eq!(effective_path, db_path);
+    }
+
+    #[test]
+    fn test_fallback_behavior() {
+        // Test fallback when it should succeed (default path exists)
+        let config = ThingsConfig::new("/nonexistent/path.sqlite", true);
+        let result = config.get_effective_database_path();
+
+        // If the default path exists, fallback should succeed
+        if ThingsConfig::get_default_database_path().exists() {
+            assert!(result.is_ok());
+            assert_eq!(result.unwrap(), ThingsConfig::get_default_database_path());
+        } else {
+            // If default path doesn't exist, should get an error
+            assert!(result.is_err());
+        }
+    }
+
+    #[test]
+    fn test_fallback_disabled() {
+        // Test when fallback is disabled - should always fail if path doesn't exist
+        let config = ThingsConfig::new("/nonexistent/path.sqlite", false);
+        let result = config.get_effective_database_path();
+
+        // Should always fail when fallback is disabled and path doesn't exist
+        assert!(result.is_err());
+    }
+}
