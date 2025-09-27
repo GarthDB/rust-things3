@@ -980,3 +980,129 @@ async fn test_empty_arguments() {
     assert!(!result.is_error);
     assert_eq!(result.content.len(), 1);
 }
+
+// ===== Resource Tests =====
+
+#[tokio::test]
+async fn test_list_resources() {
+    let server = create_test_mcp_server();
+
+    let result = server.list_resources().await.unwrap();
+
+    // Should have 4 resources
+    assert_eq!(result.resources.len(), 4);
+
+    // Check that all expected resources are present
+    let uris: Vec<&String> = result.resources.iter().map(|r| &r.uri).collect();
+    assert!(uris.contains(&&"things://inbox".to_string()));
+    assert!(uris.contains(&&"things://projects".to_string()));
+    assert!(uris.contains(&&"things://areas".to_string()));
+    assert!(uris.contains(&&"things://today".to_string()));
+
+    // Check resource properties
+    let inbox_resource = result
+        .resources
+        .iter()
+        .find(|r| r.uri == "things://inbox")
+        .unwrap();
+    assert_eq!(inbox_resource.name, "Inbox Tasks");
+    assert_eq!(
+        inbox_resource.mime_type,
+        Some("application/json".to_string())
+    );
+}
+
+#[tokio::test]
+async fn test_read_inbox_resource() {
+    let server = create_test_mcp_server();
+
+    let request = things3_cli::mcp::ReadResourceRequest {
+        uri: "things://inbox".to_string(),
+    };
+
+    let result = server.read_resource(request).await.unwrap();
+
+    assert_eq!(result.contents.len(), 1);
+    match &result.contents[0] {
+        Content::Text { text } => {
+            // Should be valid JSON
+            let parsed: serde_json::Value = serde_json::from_str(text).unwrap();
+            assert!(parsed.is_array());
+        }
+    }
+}
+
+#[tokio::test]
+async fn test_read_projects_resource() {
+    let server = create_test_mcp_server();
+
+    let request = things3_cli::mcp::ReadResourceRequest {
+        uri: "things://projects".to_string(),
+    };
+
+    let result = server.read_resource(request).await.unwrap();
+
+    assert_eq!(result.contents.len(), 1);
+    match &result.contents[0] {
+        Content::Text { text } => {
+            // Should be valid JSON
+            let parsed: serde_json::Value = serde_json::from_str(text).unwrap();
+            assert!(parsed.is_array());
+        }
+    }
+}
+
+#[tokio::test]
+async fn test_read_areas_resource() {
+    let server = create_test_mcp_server();
+
+    let request = things3_cli::mcp::ReadResourceRequest {
+        uri: "things://areas".to_string(),
+    };
+
+    let result = server.read_resource(request).await.unwrap();
+
+    assert_eq!(result.contents.len(), 1);
+    match &result.contents[0] {
+        Content::Text { text } => {
+            // Should be valid JSON
+            let parsed: serde_json::Value = serde_json::from_str(text).unwrap();
+            assert!(parsed.is_array());
+        }
+    }
+}
+
+#[tokio::test]
+async fn test_read_today_resource() {
+    let server = create_test_mcp_server();
+
+    let request = things3_cli::mcp::ReadResourceRequest {
+        uri: "things://today".to_string(),
+    };
+
+    let result = server.read_resource(request).await.unwrap();
+
+    assert_eq!(result.contents.len(), 1);
+    match &result.contents[0] {
+        Content::Text { text } => {
+            // Should be valid JSON
+            let parsed: serde_json::Value = serde_json::from_str(text).unwrap();
+            assert!(parsed.is_array());
+        }
+    }
+}
+
+#[tokio::test]
+async fn test_read_unknown_resource() {
+    let server = create_test_mcp_server();
+
+    let request = things3_cli::mcp::ReadResourceRequest {
+        uri: "things://unknown".to_string(),
+    };
+
+    let result = server.read_resource(request).await;
+
+    // Should return an error for unknown resource
+    assert!(result.is_err());
+    assert!(result.unwrap_err().to_string().contains("Unknown resource"));
+}

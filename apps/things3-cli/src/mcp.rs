@@ -37,6 +37,30 @@ pub struct ListToolsResult {
     pub tools: Vec<Tool>,
 }
 
+/// MCP Resource for data exposure
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Resource {
+    pub uri: String,
+    pub name: String,
+    pub description: String,
+    pub mime_type: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ListResourcesResult {
+    pub resources: Vec<Resource>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ReadResourceRequest {
+    pub uri: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ReadResourceResult {
+    pub contents: Vec<Content>,
+}
+
 /// MCP server for Things 3 integration
 pub struct ThingsMcpServer {
     #[allow(dead_code)]
@@ -78,6 +102,18 @@ impl ThingsMcpServer {
     /// Call a specific MCP tool
     pub async fn call_tool(&self, request: CallToolRequest) -> Result<CallToolResult> {
         self.handle_tool_call(request).await
+    }
+
+    /// List available MCP resources
+    pub async fn list_resources(&self) -> Result<ListResourcesResult> {
+        Ok(ListResourcesResult {
+            resources: self.get_available_resources().await?,
+        })
+    }
+
+    /// Read a specific MCP resource
+    pub async fn read_resource(&self, request: ReadResourceRequest) -> Result<ReadResourceResult> {
+        self.handle_resource_read(request).await
     }
 
     /// Get available MCP tools
@@ -737,6 +773,70 @@ impl ThingsMcpServer {
                 text: serde_json::to_string_pretty(&stats)?,
             }],
             is_error: false,
+        })
+    }
+
+    /// Get available MCP resources
+    async fn get_available_resources(&self) -> Result<Vec<Resource>> {
+        Ok(vec![
+            Resource {
+                uri: "things://inbox".to_string(),
+                name: "Inbox Tasks".to_string(),
+                description: "Current inbox tasks from Things 3".to_string(),
+                mime_type: Some("application/json".to_string()),
+            },
+            Resource {
+                uri: "things://projects".to_string(),
+                name: "All Projects".to_string(),
+                description: "All projects in Things 3".to_string(),
+                mime_type: Some("application/json".to_string()),
+            },
+            Resource {
+                uri: "things://areas".to_string(),
+                name: "All Areas".to_string(),
+                description: "All areas in Things 3".to_string(),
+                mime_type: Some("application/json".to_string()),
+            },
+            Resource {
+                uri: "things://today".to_string(),
+                name: "Today's Tasks".to_string(),
+                description: "Tasks scheduled for today".to_string(),
+                mime_type: Some("application/json".to_string()),
+            },
+        ])
+    }
+
+    /// Handle resource read request
+    async fn handle_resource_read(
+        &self,
+        request: ReadResourceRequest,
+    ) -> Result<ReadResourceResult> {
+        let uri = &request.uri;
+
+        let data = match uri.as_str() {
+            "things://inbox" => {
+                let tasks = self.db.get_inbox(None)?;
+                serde_json::to_string_pretty(&tasks)?
+            }
+            "things://projects" => {
+                let projects = self.db.get_projects(None)?;
+                serde_json::to_string_pretty(&projects)?
+            }
+            "things://areas" => {
+                let areas = self.db.get_areas()?;
+                serde_json::to_string_pretty(&areas)?
+            }
+            "things://today" => {
+                let tasks = self.db.get_today(None)?;
+                serde_json::to_string_pretty(&tasks)?
+            }
+            _ => {
+                return Err(anyhow::anyhow!("Unknown resource: {}", uri));
+            }
+        };
+
+        Ok(ReadResourceResult {
+            contents: vec![Content::Text { text: data }],
         })
     }
 }
