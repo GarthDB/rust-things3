@@ -791,19 +791,48 @@ mod tests {
         // Test the function
         let result = setup_git_hooks();
         if result.is_ok() {
-            // Test content verification paths
-            if let Ok(pre_commit_content) = std::fs::read_to_string(".git/hooks/pre-commit") {
-                // Check for key content in the pre-commit hook
-                assert!(pre_commit_content.contains("cargo fmt"));
-                assert!(pre_commit_content.contains("cargo clippy"));
-                assert!(pre_commit_content.contains("cargo test"));
+            // Test content verification paths - only if files exist
+            if std::path::Path::new(".git/hooks/pre-commit").exists() {
+                if let Ok(pre_commit_content) = std::fs::read_to_string(".git/hooks/pre-commit") {
+                    // Check for key content in the pre-commit hook
+                    assert!(
+                        pre_commit_content.contains("cargo fmt"),
+                        "Pre-commit hook missing cargo fmt"
+                    );
+                    assert!(
+                        pre_commit_content.contains("cargo clippy"),
+                        "Pre-commit hook missing cargo clippy"
+                    );
+                    assert!(
+                        pre_commit_content.contains("cargo test"),
+                        "Pre-commit hook missing cargo test"
+                    );
+                } else {
+                    println!("Warning: Could not read pre-commit hook content");
+                }
+            } else {
+                println!("Warning: Pre-commit hook file does not exist");
             }
 
-            if let Ok(pre_push_content) = std::fs::read_to_string(".git/hooks/pre-push") {
-                // Check for key content in the pre-push hook
-                assert!(pre_push_content.contains("cargo clippy"));
-                assert!(pre_push_content.contains("cargo test"));
+            if std::path::Path::new(".git/hooks/pre-push").exists() {
+                if let Ok(pre_push_content) = std::fs::read_to_string(".git/hooks/pre-push") {
+                    // Check for key content in the pre-push hook
+                    assert!(
+                        pre_push_content.contains("cargo clippy"),
+                        "Pre-push hook missing cargo clippy"
+                    );
+                    assert!(
+                        pre_push_content.contains("cargo test"),
+                        "Pre-push hook missing cargo test"
+                    );
+                } else {
+                    println!("Warning: Could not read pre-push hook content");
+                }
+            } else {
+                println!("Warning: Pre-push hook file does not exist");
             }
+        } else {
+            println!("Warning: setup_git_hooks failed: {:?}", result);
         }
 
         // Restore original directory - handle potential errors gracefully
