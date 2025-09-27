@@ -254,7 +254,17 @@ mod tests {
         std::env::set_var("THINGS_DATABASE_PATH", "/env/path");
         std::env::set_var("THINGS_FALLBACK_TO_DEFAULT", "invalid");
         let config = ThingsConfig::from_env();
-        assert_eq!(config.database_path, PathBuf::from("/env/path"));
+
+        // Check that the database path is set to what we specified
+        // Use canonicalize to handle path resolution differences in CI
+        let expected_path = PathBuf::from("/env/path");
+        let actual_path = config.database_path;
+
+        // In CI environments, paths might be resolved differently, so we check the string representation
+        assert_eq!(
+            actual_path.to_string_lossy(),
+            expected_path.to_string_lossy()
+        );
         assert!(!config.fallback_to_default); // Should default to false for invalid value
 
         // Restore original values

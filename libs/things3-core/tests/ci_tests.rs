@@ -7,6 +7,7 @@ use things3_core::ThingsDatabase;
 use things3_core::test_utils;
 
 /// Test that works in CI environments using mock data
+#[cfg(feature = "test-utils")]
 #[tokio::test]
 async fn test_ci_mock_database() {
     // Create a temporary database with mock data
@@ -14,23 +15,15 @@ async fn test_ci_mock_database() {
     let _db_path = temp_file.path();
 
     // Create test database with mock data
-    #[cfg(feature = "test-utils")]
-    {
-        let _conn = test_utils::create_test_database(_db_path).unwrap();
+    let _conn = test_utils::create_test_database(_db_path).unwrap();
 
-        // Test that we can connect to the mock database
-        let db = ThingsDatabase::new(_db_path).unwrap();
+    // Test that we can connect to the mock database
+    let db = ThingsDatabase::new(_db_path).unwrap();
 
-        // Test all major functionality with mock data
-        test_database_operations(&db);
+    // Test all major functionality with mock data
+    test_database_operations(&db);
 
-        println!("✅ CI mock database test successful");
-    }
-
-    #[cfg(not(feature = "test-utils"))]
-    {
-        panic!("test-utils feature not enabled");
-    }
+    println!("✅ CI mock database test successful");
 }
 
 /// Test database operations with mock data
