@@ -16,6 +16,11 @@ jobs:
     name: Code Coverage
     runs-on: ubuntu-latest
     
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: write
+    
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
@@ -157,22 +162,28 @@ jobs:
             comment.body.includes('Coverage Summary')
           );
           
-          if (botComment) {
-            // Update existing comment
-            await github.rest.issues.updateComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              comment_id: botComment.id,
-              body: coverageSummary
-            });
-          } else {
-            // Create new comment
-            await github.rest.issues.createComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: context.issue.number,
-              body: coverageSummary
-            });
+          try {
+            if (botComment) {
+              // Update existing comment
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: botComment.id,
+                body: coverageSummary
+              });
+            } else {
+              // Create new comment
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: coverageSummary
+              });
+            }
+            console.log('Coverage comment posted successfully');
+          } catch (error) {
+            console.log('Failed to post coverage comment (this is not critical):', error.message);
+            console.log('Coverage analysis completed successfully');
           }
 
   coverage-summary:
