@@ -133,6 +133,10 @@ mod tests {
 
     #[test]
     fn test_config_from_env() {
+        // Save original values
+        let original_db_path = std::env::var("THINGS_DATABASE_PATH").ok();
+        let original_fallback = std::env::var("THINGS_FALLBACK_TO_DEFAULT").ok();
+
         std::env::set_var("THINGS_DATABASE_PATH", "/custom/path/db.sqlite");
         std::env::set_var("THINGS_FALLBACK_TO_DEFAULT", "true");
 
@@ -143,9 +147,17 @@ mod tests {
         );
         assert!(config.fallback_to_default);
 
-        // Clean up
-        std::env::remove_var("THINGS_DATABASE_PATH");
-        std::env::remove_var("THINGS_FALLBACK_TO_DEFAULT");
+        // Restore original values
+        if let Some(path) = original_db_path {
+            std::env::set_var("THINGS_DATABASE_PATH", path);
+        } else {
+            std::env::remove_var("THINGS_DATABASE_PATH");
+        }
+        if let Some(fallback) = original_fallback {
+            std::env::set_var("THINGS_FALLBACK_TO_DEFAULT", fallback);
+        } else {
+            std::env::remove_var("THINGS_FALLBACK_TO_DEFAULT");
+        }
     }
 
     #[test]
