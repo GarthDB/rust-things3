@@ -3,9 +3,11 @@ use std::path::Path;
 use tempfile::{tempdir, NamedTempFile};
 use things3_core::{
     models::{TaskStatus, TaskType},
-    test_utils::create_test_database,
     ThingsConfig, ThingsDatabase,
 };
+
+#[cfg(feature = "test-utils")]
+use things3_core::test_utils::create_test_database;
 
 #[test]
 fn test_database_new() {
@@ -22,6 +24,7 @@ fn test_database_with_config() {
     let db_path = temp_dir.path().join("test.db");
 
     let config = ThingsConfig::new(&db_path, false);
+    #[cfg(feature = "test-utils")]
     create_test_database(&db_path).unwrap();
     let _db = ThingsDatabase::with_config(&config).unwrap();
     assert!(db_path.exists());
@@ -64,6 +67,7 @@ fn test_get_inbox() {
     let db_path = temp_dir.path().join("test.db");
 
     // Create test database with mock data
+    #[cfg(feature = "test-utils")]
     create_test_database(&db_path).unwrap();
 
     let db = ThingsDatabase::new(&db_path).unwrap();
@@ -84,6 +88,7 @@ fn test_get_today() {
     let temp_dir = tempdir().unwrap();
     let db_path = temp_dir.path().join("test.db");
 
+    #[cfg(feature = "test-utils")]
     create_test_database(&db_path).unwrap();
 
     let db = ThingsDatabase::new(&db_path).unwrap();
@@ -98,6 +103,7 @@ fn test_get_projects() {
     let temp_dir = tempdir().unwrap();
     let db_path = temp_dir.path().join("test.db");
 
+    #[cfg(feature = "test-utils")]
     create_test_database(&db_path).unwrap();
 
     let db = ThingsDatabase::new(&db_path).unwrap();
@@ -117,6 +123,7 @@ fn test_get_areas() {
     let temp_dir = tempdir().unwrap();
     let db_path = temp_dir.path().join("test.db");
 
+    #[cfg(feature = "test-utils")]
     create_test_database(&db_path).unwrap();
 
     let db = ThingsDatabase::new(&db_path).unwrap();
@@ -135,6 +142,7 @@ fn test_search_tasks() {
     let temp_dir = tempdir().unwrap();
     let db_path = temp_dir.path().join("test.db");
 
+    #[cfg(feature = "test-utils")]
     create_test_database(&db_path).unwrap();
 
     let db = ThingsDatabase::new(&db_path).unwrap();
@@ -153,6 +161,7 @@ fn test_search_tasks_empty_query() {
     let temp_dir = tempdir().unwrap();
     let db_path = temp_dir.path().join("test.db");
 
+    #[cfg(feature = "test-utils")]
     create_test_database(&db_path).unwrap();
 
     let db = ThingsDatabase::new(&db_path).unwrap();
@@ -167,6 +176,7 @@ fn test_search_tasks_no_results() {
     let temp_dir = tempdir().unwrap();
     let db_path = temp_dir.path().join("test.db");
 
+    #[cfg(feature = "test-utils")]
     create_test_database(&db_path).unwrap();
 
     let db = ThingsDatabase::new(&db_path).unwrap();
@@ -190,6 +200,7 @@ fn test_database_connection_persistence() {
     let db_path = temp_dir.path().join("test.db");
 
     // Create database with mock data
+    #[cfg(feature = "test-utils")]
     create_test_database(&db_path).unwrap();
     let db1 = ThingsDatabase::new(&db_path).unwrap();
     assert!(db_path.exists());
@@ -209,6 +220,7 @@ fn test_database_with_mock_data_consistency() {
     let temp_dir = tempdir().unwrap();
     let db_path = temp_dir.path().join("test.db");
 
+    #[cfg(feature = "test-utils")]
     create_test_database(&db_path).unwrap();
 
     let db = ThingsDatabase::new(&db_path).unwrap();
@@ -230,15 +242,19 @@ fn test_database_with_mock_data_consistency() {
     assert_eq!(all_tasks.len(), 7); // 5 regular tasks + 2 projects
 
     // Verify task-area relationships (projects have areas)
-    let tasks_with_areas: Vec<_> = all_tasks.iter().filter(|t| t.area_uuid.is_some()).collect();
-    assert_eq!(tasks_with_areas.len(), 2); // 2 projects have areas
+    assert_eq!(
+        all_tasks.iter().filter(|t| t.area_uuid.is_some()).count(),
+        2
+    ); // 2 projects have areas
 
     // Verify that projects are included in search results
-    let project_tasks: Vec<_> = all_tasks
-        .iter()
-        .filter(|t| t.task_type == TaskType::Project)
-        .collect();
-    assert_eq!(project_tasks.len(), 2); // 2 projects
+    assert_eq!(
+        all_tasks
+            .iter()
+            .filter(|t| t.task_type == TaskType::Project)
+            .count(),
+        2
+    ); // 2 projects
 }
 
 #[test]
@@ -246,6 +262,7 @@ fn test_database_query_consistency() {
     let temp_dir = tempdir().unwrap();
     let db_path = temp_dir.path().join("test.db");
 
+    #[cfg(feature = "test-utils")]
     create_test_database(&db_path).unwrap();
 
     let db = ThingsDatabase::new(&db_path).unwrap();
@@ -273,6 +290,7 @@ fn test_database_date_filtering() {
     let temp_dir = tempdir().unwrap();
     let db_path = temp_dir.path().join("test.db");
 
+    #[cfg(feature = "test-utils")]
     create_test_database(&db_path).unwrap();
 
     let db = ThingsDatabase::new(&db_path).unwrap();
@@ -294,6 +312,7 @@ fn test_database_error_recovery() {
     let db_path = temp_dir.path().join("test.db");
 
     // Create a valid database first
+    #[cfg(feature = "test-utils")]
     create_test_database(&db_path).unwrap();
     let db = ThingsDatabase::new(&db_path).unwrap();
 
@@ -311,6 +330,7 @@ fn test_database_concurrent_access() {
     let temp_dir = tempdir().unwrap();
     let db_path = temp_dir.path().join("test.db");
 
+    #[cfg(feature = "test-utils")]
     create_test_database(&db_path).unwrap();
 
     // Create multiple database connections
@@ -334,6 +354,7 @@ fn test_database_concurrent_access() {
 fn test_database_helper_functions_indirectly() {
     let temp_file = NamedTempFile::new().unwrap();
     let db_path = temp_file.path();
+    #[cfg(feature = "test-utils")]
     let _db = create_test_database(db_path).unwrap();
     let db = ThingsDatabase::new(db_path).unwrap();
 
@@ -405,21 +426,15 @@ fn test_database_error_handling_comprehensive() {
 
     let result = ThingsDatabase::new(db_path);
     // The database might still open successfully even with invalid content
-    // Let's just verify it doesn't panic
-    match result {
-        Ok(_) => {
-            // If it opens successfully, that's also a valid test case
-        }
-        Err(_) => {
-            // If it fails, that's also expected
-        }
-    }
+    // or it might fail - both are valid test cases
+    let _ = result;
 }
 
 #[test]
 fn test_database_edge_cases() {
     let temp_file = NamedTempFile::new().unwrap();
     let db_path = temp_file.path();
+    #[cfg(feature = "test-utils")]
     let _db = create_test_database(db_path).unwrap();
     let db = ThingsDatabase::new(db_path).unwrap();
 
@@ -453,7 +468,7 @@ fn test_database_with_malformed_data() {
     // Create database with malformed data
     let conn = rusqlite::Connection::open(db_path).unwrap();
     conn.execute_batch(
-        r#"
+        r"
         CREATE TABLE TMTask (
             uuid TEXT PRIMARY KEY,
             title TEXT,
@@ -472,7 +487,7 @@ fn test_database_with_malformed_data() {
         -- Insert malformed data
         INSERT INTO TMTask (uuid, title, type, status, notes, startDate, deadline, creationDate, userModificationDate, project, area, heading)
         VALUES ('invalid-uuid', 'Test Task', 999, 999, 'Notes', 999999, 999999, 999999.0, 999999.0, 'invalid-uuid', 'invalid-uuid', 'invalid-uuid');
-        "#
+        "
     ).unwrap();
 
     let db = ThingsDatabase::new(db_path).unwrap();
@@ -487,6 +502,7 @@ fn test_database_with_malformed_data() {
 fn test_database_performance_with_large_limits() {
     let temp_file = NamedTempFile::new().unwrap();
     let db_path = temp_file.path();
+    #[cfg(feature = "test-utils")]
     let _db = create_test_database(db_path).unwrap();
     let db = ThingsDatabase::new(db_path).unwrap();
 

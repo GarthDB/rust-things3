@@ -47,7 +47,7 @@ tasks:
     deps:
     - lint
   build:
-    command: cargo build --bin things-cli
+    command: cargo build --bin things3
     inputs:
     - src/**/*.rs
     - src/**/*.md
@@ -57,13 +57,12 @@ tasks:
     - README.md
     deps:
     - test
-    outputs:
-    - target/**/*
+    outputs: []
     options:
       cache: true
       runDepsInParallel: true
   doc:
-    command: cargo doc --bin things-cli
+    command: cargo doc --bin things3
     inputs:
     - src/**/*.rs
     - src/**/*.md

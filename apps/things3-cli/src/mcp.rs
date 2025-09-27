@@ -3,9 +3,11 @@
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::sync::Arc;
 use things3_core::{
     BackupManager, DataExporter, PerformanceMonitor, ThingsCache, ThingsConfig, ThingsDatabase,
 };
+use tokio::sync::Mutex;
 
 /// Simplified MCP types for our implementation
 #[derive(Debug, Serialize, Deserialize)]
@@ -64,15 +66,15 @@ pub struct ReadResourceResult {
 /// MCP server for Things 3 integration
 pub struct ThingsMcpServer {
     #[allow(dead_code)]
-    db: ThingsDatabase,
+    db: Arc<Mutex<ThingsDatabase>>,
     #[allow(dead_code)]
-    cache: ThingsCache,
+    cache: Arc<Mutex<ThingsCache>>,
     #[allow(dead_code)]
-    performance_monitor: PerformanceMonitor,
+    performance_monitor: Arc<Mutex<PerformanceMonitor>>,
     #[allow(dead_code)]
     exporter: DataExporter,
     #[allow(dead_code)]
-    backup_manager: BackupManager,
+    backup_manager: Arc<Mutex<BackupManager>>,
 }
 
 #[allow(dead_code)]
@@ -84,41 +86,63 @@ impl ThingsMcpServer {
         let backup_manager = BackupManager::new(config);
 
         Self {
-            db,
-            cache,
-            performance_monitor,
+            db: Arc::new(Mutex::new(db)),
+            cache: Arc::new(Mutex::new(cache)),
+            performance_monitor: Arc::new(Mutex::new(performance_monitor)),
             exporter,
-            backup_manager,
+            backup_manager: Arc::new(Mutex::new(backup_manager)),
         }
     }
 
     /// List available MCP tools
-    pub async fn list_tools(&self) -> Result<ListToolsResult> {
+    ///
+    /// # Errors
+    /// Returns an error if tool generation fails
+    pub fn list_tools(&self) -> Result<ListToolsResult> {
         Ok(ListToolsResult {
-            tools: self.get_available_tools().await?,
+            tools: Self::get_available_tools(),
         })
     }
 
     /// Call a specific MCP tool
+    ///
+    /// # Errors
+    /// Returns an error if tool execution fails or tool is not found
     pub async fn call_tool(&self, request: CallToolRequest) -> Result<CallToolResult> {
         self.handle_tool_call(request).await
     }
 
     /// List available MCP resources
-    pub async fn list_resources(&self) -> Result<ListResourcesResult> {
+    ///
+    /// # Errors
+    /// Returns an error if resource generation fails
+    pub fn list_resources(&self) -> Result<ListResourcesResult> {
         Ok(ListResourcesResult {
-            resources: self.get_available_resources().await?,
+            resources: Self::get_available_resources(),
         })
     }
 
     /// Read a specific MCP resource
+    ///
+    /// # Errors
+    /// Returns an error if resource reading fails or resource is not found
     pub async fn read_resource(&self, request: ReadResourceRequest) -> Result<ReadResourceResult> {
         self.handle_resource_read(request).await
     }
 
     /// Get available MCP tools
-    async fn get_available_tools(&self) -> Result<Vec<Tool>> {
-        Ok(vec![
+    fn get_available_tools() -> Vec<Tool> {
+        let mut tools = Vec::new();
+        tools.extend(Self::get_data_retrieval_tools());
+        tools.extend(Self::get_task_management_tools());
+        tools.extend(Self::get_analytics_tools());
+        tools.extend(Self::get_backup_tools());
+        tools.extend(Self::get_system_tools());
+        tools
+    }
+
+    fn get_data_retrieval_tools() -> Vec<Tool> {
+        vec![
             Tool {
                 name: "get_inbox".to_string(),
                 description: "Get tasks from the inbox".to_string(),
@@ -185,6 +209,28 @@ impl ThingsMcpServer {
                 }),
             },
             Tool {
+                name: "get_recent_tasks".to_string(),
+                description: "Get recently created or modified tasks".to_string(),
+                input_schema: serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "limit": {
+                            "type": "integer",
+                            "description": "Maximum number of tasks to return"
+                        },
+                        "hours": {
+                            "type": "integer",
+                            "description": "Number of hours to look back"
+                        }
+                    }
+                }),
+            },
+        ]
+    }
+
+    fn get_task_management_tools() -> Vec<Tool> {
+        vec![
+            Tool {
                 name: "create_task".to_string(),
                 description: "Create a new task".to_string(),
                 input_schema: serde_json::json!({
@@ -238,6 +284,35 @@ impl ThingsMcpServer {
                 }),
             },
             Tool {
+                name: "bulk_create_tasks".to_string(),
+                description: "Create multiple tasks at once".to_string(),
+                input_schema: serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "tasks": {
+                            "type": "array",
+                            "description": "Array of task objects to create",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "title": {"type": "string"},
+                                    "notes": {"type": "string"},
+                                    "project_uuid": {"type": "string"},
+                                    "area_uuid": {"type": "string"}
+                                },
+                                "required": ["title"]
+                            }
+                        }
+                    },
+                    "required": ["tasks"]
+                }),
+            },
+        ]
+    }
+
+    fn get_analytics_tools() -> Vec<Tool> {
+        vec![
+            Tool {
                 name: "get_productivity_metrics".to_string(),
                 description: "Get productivity metrics and statistics".to_string(),
                 input_schema: serde_json::json!({
@@ -270,47 +345,11 @@ impl ThingsMcpServer {
                     "required": ["format", "data_type"]
                 }),
             },
-            Tool {
-                name: "bulk_create_tasks".to_string(),
-                description: "Create multiple tasks at once".to_string(),
-                input_schema: serde_json::json!({
-                    "type": "object",
-                    "properties": {
-                        "tasks": {
-                            "type": "array",
-                            "description": "Array of task objects to create",
-                            "items": {
-                                "type": "object",
-                                "properties": {
-                                    "title": {"type": "string"},
-                                    "notes": {"type": "string"},
-                                    "project_uuid": {"type": "string"},
-                                    "area_uuid": {"type": "string"}
-                                },
-                                "required": ["title"]
-                            }
-                        }
-                    },
-                    "required": ["tasks"]
-                }),
-            },
-            Tool {
-                name: "get_recent_tasks".to_string(),
-                description: "Get recently created or modified tasks".to_string(),
-                input_schema: serde_json::json!({
-                    "type": "object",
-                    "properties": {
-                        "limit": {
-                            "type": "integer",
-                            "description": "Maximum number of tasks to return"
-                        },
-                        "hours": {
-                            "type": "integer",
-                            "description": "Number of hours to look back"
-                        }
-                    }
-                }),
-            },
+        ]
+    }
+
+    fn get_backup_tools() -> Vec<Tool> {
+        vec![
             Tool {
                 name: "backup_database".to_string(),
                 description: "Create a backup of the Things 3 database".to_string(),
@@ -357,6 +396,11 @@ impl ThingsMcpServer {
                     "required": ["backup_dir"]
                 }),
             },
+        ]
+    }
+
+    fn get_system_tools() -> Vec<Tool> {
+        vec![
             Tool {
                 name: "get_performance_stats".to_string(),
                 description: "Get performance statistics and metrics".to_string(),
@@ -381,7 +425,7 @@ impl ThingsMcpServer {
                     "properties": {}
                 }),
             },
-        ])
+        ]
     }
 
     /// Handle tool call
@@ -395,11 +439,11 @@ impl ThingsMcpServer {
             "get_projects" => self.handle_get_projects(arguments).await,
             "get_areas" => self.handle_get_areas(arguments).await,
             "search_tasks" => self.handle_search_tasks(arguments).await,
-            "create_task" => self.handle_create_task(arguments).await,
-            "update_task" => self.handle_update_task(arguments).await,
+            "create_task" => Self::handle_create_task(&arguments),
+            "update_task" => Self::handle_update_task(&arguments),
             "get_productivity_metrics" => self.handle_get_productivity_metrics(arguments).await,
             "export_data" => self.handle_export_data(arguments).await,
-            "bulk_create_tasks" => self.handle_bulk_create_tasks(arguments).await,
+            "bulk_create_tasks" => Self::handle_bulk_create_tasks(&arguments),
             "get_recent_tasks" => self.handle_get_recent_tasks(arguments).await,
             "backup_database" => self.handle_backup_database(arguments).await,
             "restore_database" => self.handle_restore_database(arguments).await,
@@ -410,7 +454,7 @@ impl ThingsMcpServer {
             _ => {
                 return Ok(CallToolResult {
                     content: vec![Content::Text {
-                        text: format!("Unknown tool: {}", tool_name),
+                        text: format!("Unknown tool: {tool_name}"),
                     }],
                     is_error: true,
                 });
@@ -421,7 +465,7 @@ impl ThingsMcpServer {
             Ok(call_result) => Ok(call_result),
             Err(e) => Ok(CallToolResult {
                 content: vec![Content::Text {
-                    text: format!("Error: {}", e),
+                    text: format!("Error: {e}"),
                 }],
                 is_error: true,
             }),
@@ -431,9 +475,9 @@ impl ThingsMcpServer {
     async fn handle_get_inbox(&self, args: Value) -> Result<CallToolResult> {
         let limit = args
             .get("limit")
-            .and_then(|v| v.as_u64())
-            .map(|v| v as usize);
-        let tasks = self.db.get_inbox(limit)?;
+            .and_then(serde_json::Value::as_u64)
+            .map(|v| usize::try_from(v).unwrap_or(usize::MAX));
+        let tasks = self.db.lock().await.get_inbox(limit)?;
         let json = serde_json::to_string_pretty(&tasks)?;
         Ok(CallToolResult {
             content: vec![Content::Text { text: json }],
@@ -444,9 +488,9 @@ impl ThingsMcpServer {
     async fn handle_get_today(&self, args: Value) -> Result<CallToolResult> {
         let limit = args
             .get("limit")
-            .and_then(|v| v.as_u64())
-            .map(|v| v as usize);
-        let tasks = self.db.get_today(limit)?;
+            .and_then(serde_json::Value::as_u64)
+            .map(|v| usize::try_from(v).unwrap_or(usize::MAX));
+        let tasks = self.db.lock().await.get_today(limit)?;
         let json = serde_json::to_string_pretty(&tasks)?;
         Ok(CallToolResult {
             content: vec![Content::Text { text: json }],
@@ -459,7 +503,7 @@ impl ThingsMcpServer {
             .get("area_uuid")
             .and_then(|v| v.as_str())
             .and_then(|s| uuid::Uuid::parse_str(s).ok());
-        let projects = self.db.get_projects(area_uuid)?;
+        let projects = self.db.lock().await.get_projects(area_uuid)?;
         let json = serde_json::to_string_pretty(&projects)?;
         Ok(CallToolResult {
             content: vec![Content::Text { text: json }],
@@ -468,7 +512,7 @@ impl ThingsMcpServer {
     }
 
     async fn handle_get_areas(&self, _args: Value) -> Result<CallToolResult> {
-        let areas = self.db.get_areas()?;
+        let areas = self.db.lock().await.get_areas()?;
         let json = serde_json::to_string_pretty(&areas)?;
         Ok(CallToolResult {
             content: vec![Content::Text { text: json }],
@@ -483,9 +527,9 @@ impl ThingsMcpServer {
             .ok_or_else(|| anyhow::anyhow!("Missing required parameter: query"))?;
         let limit = args
             .get("limit")
-            .and_then(|v| v.as_u64())
-            .map(|v| v as usize);
-        let tasks = self.db.search_tasks(query, limit)?;
+            .and_then(serde_json::Value::as_u64)
+            .map(|v| usize::try_from(v).unwrap_or(usize::MAX));
+        let tasks = self.db.lock().await.search_tasks(query, limit)?;
         let json = serde_json::to_string_pretty(&tasks)?;
         Ok(CallToolResult {
             content: vec![Content::Text { text: json }],
@@ -493,7 +537,7 @@ impl ThingsMcpServer {
         })
     }
 
-    async fn handle_create_task(&self, args: Value) -> Result<CallToolResult> {
+    fn handle_create_task(args: &Value) -> Result<CallToolResult> {
         // Note: This is a placeholder - actual task creation would need to be implemented
         // in the things-core library
         let title = args
@@ -515,7 +559,7 @@ impl ThingsMcpServer {
         })
     }
 
-    async fn handle_update_task(&self, args: Value) -> Result<CallToolResult> {
+    fn handle_update_task(args: &Value) -> Result<CallToolResult> {
         // Note: This is a placeholder - actual task updating would need to be implemented
         // in the things-core library
         let uuid = args
@@ -538,13 +582,20 @@ impl ThingsMcpServer {
     }
 
     async fn handle_get_productivity_metrics(&self, args: Value) -> Result<CallToolResult> {
-        let days = args.get("days").and_then(|v| v.as_u64()).unwrap_or(7) as usize;
+        let days = usize::try_from(
+            args.get("days")
+                .and_then(serde_json::Value::as_u64)
+                .unwrap_or(7),
+        )
+        .unwrap_or(7);
 
         // Get various metrics
-        let inbox_tasks = self.db.get_inbox(None)?;
-        let today_tasks = self.db.get_today(None)?;
-        let projects = self.db.get_projects(None)?;
-        let areas = self.db.get_areas()?;
+        let db = self.db.lock().await;
+        let inbox_tasks = db.get_inbox(None)?;
+        let today_tasks = db.get_today(None)?;
+        let projects = db.get_projects(None)?;
+        let areas = db.get_areas()?;
+        drop(db);
 
         let metrics = serde_json::json!({
             "period_days": days,
@@ -575,28 +626,30 @@ impl ThingsMcpServer {
             .and_then(|v| v.as_str())
             .ok_or_else(|| anyhow::anyhow!("Missing required parameter: data_type"))?;
 
+        let db = self.db.lock().await;
         let export_data = match data_type {
             "tasks" => {
-                let inbox = self.db.get_inbox(None)?;
-                let today = self.db.get_today(None)?;
+                let inbox = db.get_inbox(None)?;
+                let today = db.get_today(None)?;
                 serde_json::json!({
                     "inbox": inbox,
                     "today": today
                 })
             }
             "projects" => {
-                let projects = self.db.get_projects(None)?;
+                let projects = db.get_projects(None)?;
                 serde_json::json!({ "projects": projects })
             }
             "areas" => {
-                let areas = self.db.get_areas()?;
+                let areas = db.get_areas()?;
                 serde_json::json!({ "areas": areas })
             }
             "all" => {
-                let inbox = self.db.get_inbox(None)?;
-                let today = self.db.get_today(None)?;
-                let projects = self.db.get_projects(None)?;
-                let areas = self.db.get_areas()?;
+                let inbox = db.get_inbox(None)?;
+                let today = db.get_today(None)?;
+                let projects = db.get_projects(None)?;
+                let areas = db.get_areas()?;
+                drop(db);
                 serde_json::json!({
                     "inbox": inbox,
                     "today": today,
@@ -604,7 +657,7 @@ impl ThingsMcpServer {
                     "areas": areas
                 })
             }
-            _ => return Err(anyhow::anyhow!("Invalid data_type: {}", data_type)),
+            _ => return Err(anyhow::anyhow!("Invalid data_type: {data_type}")),
         };
 
         let result = match format {
@@ -620,7 +673,7 @@ impl ThingsMcpServer {
         })
     }
 
-    async fn handle_bulk_create_tasks(&self, args: Value) -> Result<CallToolResult> {
+    fn handle_bulk_create_tasks(args: &Value) -> Result<CallToolResult> {
         let tasks = args
             .get("tasks")
             .and_then(|v| v.as_array())
@@ -643,13 +696,18 @@ impl ThingsMcpServer {
     async fn handle_get_recent_tasks(&self, args: Value) -> Result<CallToolResult> {
         let limit = args
             .get("limit")
-            .and_then(|v| v.as_u64())
-            .map(|v| v as usize);
-        let hours = args.get("hours").and_then(|v| v.as_u64()).unwrap_or(24) as i64;
+            .and_then(serde_json::Value::as_u64)
+            .map(|v| usize::try_from(v).unwrap_or(usize::MAX));
+        let hours = i64::try_from(
+            args.get("hours")
+                .and_then(serde_json::Value::as_u64)
+                .unwrap_or(24),
+        )
+        .unwrap_or(24);
 
         // For now, return inbox tasks as a proxy for recent tasks
         // In a real implementation, this would query by creation/modification date
-        let tasks = self.db.get_inbox(limit)?;
+        let tasks = self.db.lock().await.get_inbox(limit)?;
 
         let response = serde_json::json!({
             "message": "Recent tasks (using inbox as proxy)",
@@ -675,6 +733,8 @@ impl ThingsMcpServer {
         let backup_path = std::path::Path::new(backup_dir);
         let metadata = self
             .backup_manager
+            .lock()
+            .await
             .create_backup(backup_path, description)
             .await?;
 
@@ -700,7 +760,11 @@ impl ThingsMcpServer {
             .ok_or_else(|| anyhow::anyhow!("Missing required parameter: backup_path"))?;
 
         let backup_file = std::path::Path::new(backup_path);
-        self.backup_manager.restore_backup(backup_file).await?;
+        self.backup_manager
+            .lock()
+            .await
+            .restore_backup(backup_file)
+            .await?;
 
         let response = serde_json::json!({
             "message": "Database restored successfully",
@@ -722,7 +786,7 @@ impl ThingsMcpServer {
             .ok_or_else(|| anyhow::anyhow!("Missing required parameter: backup_dir"))?;
 
         let backup_path = std::path::Path::new(backup_dir);
-        let backups = self.backup_manager.list_backups(backup_path)?;
+        let backups = self.backup_manager.lock().await.list_backups(backup_path)?;
 
         let response = serde_json::json!({
             "backups": backups,
@@ -738,8 +802,10 @@ impl ThingsMcpServer {
     }
 
     async fn handle_get_performance_stats(&self, _args: Value) -> Result<CallToolResult> {
-        let stats = self.performance_monitor.get_all_stats();
-        let summary = self.performance_monitor.get_summary();
+        let monitor = self.performance_monitor.lock().await;
+        let stats = monitor.get_all_stats();
+        let summary = monitor.get_summary();
+        drop(monitor);
 
         let response = serde_json::json!({
             "summary": summary,
@@ -755,7 +821,7 @@ impl ThingsMcpServer {
     }
 
     async fn handle_get_system_metrics(&self, _args: Value) -> Result<CallToolResult> {
-        let metrics = self.performance_monitor.get_system_metrics()?;
+        let metrics = self.performance_monitor.lock().await.get_system_metrics()?;
 
         Ok(CallToolResult {
             content: vec![Content::Text {
@@ -766,7 +832,7 @@ impl ThingsMcpServer {
     }
 
     async fn handle_get_cache_stats(&self, _args: Value) -> Result<CallToolResult> {
-        let stats = self.cache.get_stats();
+        let stats = self.cache.lock().await.get_stats();
 
         Ok(CallToolResult {
             content: vec![Content::Text {
@@ -777,8 +843,8 @@ impl ThingsMcpServer {
     }
 
     /// Get available MCP resources
-    async fn get_available_resources(&self) -> Result<Vec<Resource>> {
-        Ok(vec![
+    fn get_available_resources() -> Vec<Resource> {
+        vec![
             Resource {
                 uri: "things://inbox".to_string(),
                 name: "Inbox Tasks".to_string(),
@@ -803,7 +869,7 @@ impl ThingsMcpServer {
                 description: "Tasks scheduled for today".to_string(),
                 mime_type: Some("application/json".to_string()),
             },
-        ])
+        ]
     }
 
     /// Handle resource read request
@@ -813,25 +879,27 @@ impl ThingsMcpServer {
     ) -> Result<ReadResourceResult> {
         let uri = &request.uri;
 
+        let db = self.db.lock().await;
         let data = match uri.as_str() {
             "things://inbox" => {
-                let tasks = self.db.get_inbox(None)?;
+                let tasks = db.get_inbox(None)?;
                 serde_json::to_string_pretty(&tasks)?
             }
             "things://projects" => {
-                let projects = self.db.get_projects(None)?;
+                let projects = db.get_projects(None)?;
                 serde_json::to_string_pretty(&projects)?
             }
             "things://areas" => {
-                let areas = self.db.get_areas()?;
+                let areas = db.get_areas()?;
                 serde_json::to_string_pretty(&areas)?
             }
             "things://today" => {
-                let tasks = self.db.get_today(None)?;
+                let tasks = db.get_today(None)?;
+                drop(db);
                 serde_json::to_string_pretty(&tasks)?
             }
             _ => {
-                return Err(anyhow::anyhow!("Unknown resource: {}", uri));
+                return Err(anyhow::anyhow!("Unknown resource: {uri}"));
             }
         };
 

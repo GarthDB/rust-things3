@@ -1,78 +1,76 @@
 //! CI-friendly tests that use mock data when Things 3 is not available
 
 use tempfile::NamedTempFile;
-use things3_core::{Result, ThingsDatabase};
+use things3_core::ThingsDatabase;
 
 #[cfg(feature = "test-utils")]
 use things3_core::test_utils;
 
 /// Test that works in CI environments using mock data
 #[tokio::test]
-async fn test_ci_mock_database() -> Result<()> {
+async fn test_ci_mock_database() {
     // Create a temporary database with mock data
-    let temp_file = NamedTempFile::new()?;
-    let db_path = temp_file.path();
+    let temp_file = NamedTempFile::new().unwrap();
+    let _db_path = temp_file.path();
 
     // Create test database with mock data
     #[cfg(feature = "test-utils")]
-    let _conn = test_utils::create_test_database(db_path)?;
+    {
+        let _conn = test_utils::create_test_database(_db_path).unwrap();
+
+        // Test that we can connect to the mock database
+        let db = ThingsDatabase::new(_db_path).unwrap();
+
+        // Test all major functionality with mock data
+        test_database_operations(&db);
+
+        println!("✅ CI mock database test successful");
+    }
 
     #[cfg(not(feature = "test-utils"))]
-    return Err(things_core::ThingsError::configuration(
-        "test-utils feature not enabled",
-    ));
-
-    // Test that we can connect to the mock database
-    let db = ThingsDatabase::new(db_path)?;
-
-    // Test all major functionality with mock data
-    test_database_operations(&db)?;
-
-    println!("✅ CI mock database test successful");
-    Ok(())
+    {
+        panic!("test-utils feature not enabled");
+    }
 }
 
 /// Test database operations with mock data
-fn test_database_operations(_db: &ThingsDatabase) -> Result<()> {
+fn test_database_operations(_db: &ThingsDatabase) {
     // Test basic database connection
     println!("✅ Database connection successful");
 
     // Note: Complex database operations are disabled due to schema mismatch
     // TODO: Fix database schema alignment between test_utils and actual queries
     println!("⚠️  Complex database operations skipped due to schema mismatch");
-
-    Ok(())
 }
 
 /// Test that falls back to mock data when real database is not available
 #[tokio::test]
-async fn test_fallback_to_mock_data() -> Result<()> {
+async fn test_fallback_to_mock_data() {
     // Try to connect to real database first
     let real_db_path = ThingsDatabase::default_path();
 
     if let Ok(db) = ThingsDatabase::new(&real_db_path) {
         // Real database available, test with it
         println!("Using real Things 3 database for testing");
-        test_database_operations(&db)?;
+        test_database_operations(&db);
     } else {
         // Real database not available, use mock data
         println!("Real database not available, using mock data for testing");
-        let temp_file = NamedTempFile::new()?;
-        let db_path = temp_file.path();
+        let temp_file = NamedTempFile::new().unwrap();
+        let _db_path = temp_file.path();
 
         #[cfg(feature = "test-utils")]
-        let _conn = test_utils::create_test_database(db_path)?;
+        {
+            let _conn = test_utils::create_test_database(_db_path).unwrap();
+            let db = ThingsDatabase::new(_db_path).unwrap();
+            test_database_operations(&db);
+        }
 
         #[cfg(not(feature = "test-utils"))]
-        return Err(things_core::ThingsError::configuration(
-            "test-utils feature not enabled",
-        ));
-        let db = ThingsDatabase::new(db_path)?;
-
-        test_database_operations(&db)?;
+        {
+            panic!("test-utils feature not enabled");
+        }
     }
-
-    Ok(())
 }
 
 /// Test mock data creation and validation

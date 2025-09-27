@@ -14,7 +14,7 @@ tasks:
   # Health check for entire development environment
   health:
     command: 'cargo'
-    args: ['run', '--bin', 'things-cli', '--', 'health']
+    args: ['run', '--bin', 'things3', '--', 'health']
     inputs: []
     options:
       cache: false

@@ -66,7 +66,10 @@ impl CacheStats {
     pub fn calculate_hit_rate(&mut self) {
         let total = self.hits + self.misses;
         self.hit_rate = if total > 0 {
-            self.hits as f64 / total as f64
+            #[allow(clippy::cast_precision_loss)]
+            {
+                self.hits as f64 / total as f64
+            }
         } else {
             0.0
         };
@@ -91,6 +94,7 @@ pub struct ThingsCache {
 
 impl ThingsCache {
     /// Create a new cache with the given configuration
+    #[must_use]
     pub fn new(config: CacheConfig) -> Self {
         let tasks = Cache::builder()
             .max_capacity(config.max_capacity)
@@ -127,11 +131,17 @@ impl ThingsCache {
     }
 
     /// Create a new cache with default configuration
+    #[must_use]
     pub fn new_default() -> Self {
         Self::new(CacheConfig::default())
     }
 
     /// Get tasks from cache or execute the provided function
+    /// Get tasks from cache or fetch if not cached
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the fetcher function fails.
     pub async fn get_tasks<F, Fut>(&self, key: &str, fetcher: F) -> Result<Vec<Task>>
     where
         F: FnOnce() -> Fut,
@@ -152,6 +162,11 @@ impl ThingsCache {
     }
 
     /// Get projects from cache or execute the provided function
+    /// Get projects from cache or fetch if not cached
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the fetcher function fails.
     pub async fn get_projects<F, Fut>(&self, key: &str, fetcher: F) -> Result<Vec<Project>>
     where
         F: FnOnce() -> Fut,
@@ -172,6 +187,11 @@ impl ThingsCache {
     }
 
     /// Get areas from cache or execute the provided function
+    /// Get areas from cache or fetch if not cached
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the fetcher function fails.
     pub async fn get_areas<F, Fut>(&self, key: &str, fetcher: F) -> Result<Vec<Area>>
     where
         F: FnOnce() -> Fut,
@@ -192,6 +212,11 @@ impl ThingsCache {
     }
 
     /// Get search results from cache or execute the provided function
+    /// Get search results from cache or fetch if not cached
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the fetcher function fails.
     pub async fn get_search_results<F, Fut>(&self, key: &str, fetcher: F) -> Result<Vec<Task>>
     where
         F: FnOnce() -> Fut,
@@ -214,7 +239,7 @@ impl ThingsCache {
     }
 
     /// Invalidate all caches
-    pub async fn invalidate_all(&self) {
+    pub fn invalidate_all(&self) {
         self.tasks.invalidate_all();
         self.projects.invalidate_all();
         self.areas.invalidate_all();
@@ -230,6 +255,7 @@ impl ThingsCache {
     }
 
     /// Get cache statistics
+    #[must_use]
     pub fn get_stats(&self) -> CacheStats {
         let mut stats = self.stats.read().clone();
         stats.entries = self.tasks.entry_count()
@@ -262,6 +288,7 @@ impl ThingsCache {
 /// Cache key generators
 pub mod keys {
     /// Generate cache key for inbox tasks
+    #[must_use]
     pub fn inbox(limit: Option<usize>) -> String {
         format!(
             "inbox:{}",
@@ -270,6 +297,7 @@ pub mod keys {
     }
 
     /// Generate cache key for today's tasks
+    #[must_use]
     pub fn today(limit: Option<usize>) -> String {
         format!(
             "today:{}",
@@ -278,16 +306,19 @@ pub mod keys {
     }
 
     /// Generate cache key for projects
+    #[must_use]
     pub fn projects(area_uuid: Option<&str>) -> String {
         format!("projects:{}", area_uuid.unwrap_or("all"))
     }
 
     /// Generate cache key for areas
+    #[must_use]
     pub fn areas() -> String {
         "areas:all".to_string()
     }
 
     /// Generate cache key for search results
+    #[must_use]
     pub fn search(query: &str, limit: Option<usize>) -> String {
         format!(
             "search:{}:{}",
@@ -375,7 +406,7 @@ mod tests {
         assert_eq!(stats.hits, 0);
         assert_eq!(stats.misses, 0);
         assert_eq!(stats.entries, 0);
-        assert_eq!(stats.hit_rate, 0.0);
+        assert!((stats.hit_rate - 0.0).abs() < f64::EPSILON);
     }
 
     #[test]
@@ -388,7 +419,7 @@ mod tests {
         };
 
         stats.calculate_hit_rate();
-        assert_eq!(stats.hit_rate, 0.8);
+        assert!((stats.hit_rate - 0.8).abs() < f64::EPSILON);
     }
 
     #[test]
@@ -401,7 +432,7 @@ mod tests {
         };
 
         stats.calculate_hit_rate();
-        assert_eq!(stats.hit_rate, 0.0);
+        assert!((stats.hit_rate - 0.0).abs() < f64::EPSILON);
     }
 
     #[test]
@@ -425,7 +456,7 @@ mod tests {
         assert_eq!(deserialized.hits, stats.hits);
         assert_eq!(deserialized.misses, stats.misses);
         assert_eq!(deserialized.entries, stats.entries);
-        assert_eq!(deserialized.hit_rate, stats.hit_rate);
+        assert!((deserialized.hit_rate - stats.hit_rate).abs() < f64::EPSILON);
     }
 
     #[test]
@@ -441,7 +472,7 @@ mod tests {
         assert_eq!(cloned.hits, stats.hits);
         assert_eq!(cloned.misses, stats.misses);
         assert_eq!(cloned.entries, stats.entries);
-        assert_eq!(cloned.hit_rate, stats.hit_rate);
+        assert!((cloned.hit_rate - stats.hit_rate).abs() < f64::EPSILON);
     }
 
     #[test]
@@ -453,7 +484,7 @@ mod tests {
             hit_rate: 0.5,
         };
 
-        let debug_str = format!("{:?}", stats);
+        let debug_str = format!("{stats:?}");
         assert!(debug_str.contains("CacheStats"));
         assert!(debug_str.contains("hits"));
         assert!(debug_str.contains("misses"));
@@ -633,7 +664,7 @@ mod tests {
             .await;
 
         // Invalidate all
-        cache.invalidate_all().await;
+        cache.invalidate_all();
 
         // All should be misses now
         let _ = cache.get_tasks("tasks", || async { Ok(vec![]) }).await;
@@ -686,7 +717,7 @@ mod tests {
         let stats_after = cache.get_stats();
         assert_eq!(stats_after.hits, 0);
         assert_eq!(stats_after.misses, 0);
-        assert_eq!(stats_after.hit_rate, 0.0);
+        assert!((stats_after.hit_rate - 0.0).abs() < f64::EPSILON);
     }
 
     #[test]

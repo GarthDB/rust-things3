@@ -5,6 +5,7 @@ use anyhow::Result;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::fmt::Write;
 
 /// Export format enumeration
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -20,10 +21,10 @@ impl std::str::FromStr for ExportFormat {
 
     fn from_str(s: &str) -> Result<Self> {
         match s.to_lowercase().as_str() {
-            "json" => Ok(ExportFormat::Json),
-            "csv" => Ok(ExportFormat::Csv),
-            "opml" => Ok(ExportFormat::Opml),
-            "markdown" | "md" => Ok(ExportFormat::Markdown),
+            "json" => Ok(Self::Json),
+            "csv" => Ok(Self::Csv),
+            "opml" => Ok(Self::Opml),
+            "markdown" | "md" => Ok(Self::Markdown),
             _ => Err(anyhow::anyhow!("Unsupported export format: {}", s)),
         }
     }
@@ -40,6 +41,7 @@ pub struct ExportData {
 }
 
 impl ExportData {
+    #[must_use]
     pub fn new(tasks: Vec<Task>, projects: Vec<Project>, areas: Vec<Area>) -> Self {
         let total_items = tasks.len() + projects.len() + areas.len();
         Self {
@@ -81,42 +83,49 @@ pub struct DataExporter {
 }
 
 impl DataExporter {
-    pub fn new(config: ExportConfig) -> Self {
+    #[must_use]
+    pub const fn new(config: ExportConfig) -> Self {
         Self { config }
     }
 
+    #[must_use]
     pub fn new_default() -> Self {
         Self::new(ExportConfig::default())
     }
 
     /// Export data in the specified format
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the export format is not supported or if serialization fails.
     pub fn export(&self, data: &ExportData, format: ExportFormat) -> Result<String> {
         match format {
-            ExportFormat::Json => self.export_json(data),
-            ExportFormat::Csv => self.export_csv(data),
-            ExportFormat::Opml => self.export_opml(data),
-            ExportFormat::Markdown => self.export_markdown(data),
+            ExportFormat::Json => Self::export_json(data),
+            ExportFormat::Csv => Ok(Self::export_csv(data)),
+            ExportFormat::Opml => Ok(Self::export_opml(data)),
+            ExportFormat::Markdown => Ok(Self::export_markdown(data)),
         }
     }
 
     /// Export as JSON
-    fn export_json(&self, data: &ExportData) -> Result<String> {
+    fn export_json(data: &ExportData) -> Result<String> {
         Ok(serde_json::to_string_pretty(data)?)
     }
 
     /// Export as CSV
-    fn export_csv(&self, data: &ExportData) -> Result<String> {
+    fn export_csv(data: &ExportData) -> String {
         let mut csv = String::new();
 
         // Export tasks
         if !data.tasks.is_empty() {
             csv.push_str("Type,Title,Status,Notes,Start Date,Deadline,Created,Modified,Project,Area,Parent\n");
             for task in &data.tasks {
-                csv.push_str(&format!(
-                    "{},{},{},{},{},{},{},{},{},{},{}\n",
-                    format_task_type_csv(&task.task_type),
+                writeln!(
+                    csv,
+                    "{},{},{},{},{},{},{},{},{},{},{}",
+                    format_task_type_csv(task.task_type),
                     escape_csv(&task.title),
-                    format_task_status_csv(&task.status),
+                    format_task_status_csv(task.status),
                     escape_csv(task.notes.as_deref().unwrap_or("")),
                     format_date_csv(task.start_date),
                     format_date_csv(task.deadline),
@@ -125,7 +134,8 @@ impl DataExporter {
                     task.project_uuid.map(|u| u.to_string()).unwrap_or_default(),
                     task.area_uuid.map(|u| u.to_string()).unwrap_or_default(),
                     task.parent_uuid.map(|u| u.to_string()).unwrap_or_default(),
-                ));
+                )
+                .unwrap();
             }
         }
 
@@ -134,17 +144,19 @@ impl DataExporter {
             csv.push_str("\n\nProjects\n");
             csv.push_str("Title,Status,Notes,Start Date,Deadline,Created,Modified,Area\n");
             for project in &data.projects {
-                csv.push_str(&format!(
-                    "{},{},{},{},{},{},{},{}\n",
+                writeln!(
+                    csv,
+                    "{},{},{},{},{},{},{},{}",
                     escape_csv(&project.title),
-                    format_task_status_csv(&project.status),
+                    format_task_status_csv(project.status),
                     escape_csv(project.notes.as_deref().unwrap_or("")),
                     format_date_csv(project.start_date),
                     format_date_csv(project.deadline),
                     format_datetime_csv(project.created),
                     format_datetime_csv(project.modified),
                     project.area_uuid.map(|u| u.to_string()).unwrap_or_default(),
-                ));
+                )
+                .unwrap();
             }
         }
 
@@ -153,29 +165,33 @@ impl DataExporter {
             csv.push_str("\n\nAreas\n");
             csv.push_str("Title,Notes,Created,Modified\n");
             for area in &data.areas {
-                csv.push_str(&format!(
-                    "{},{},{},{}\n",
+                writeln!(
+                    csv,
+                    "{},{},{},{}",
                     escape_csv(&area.title),
                     escape_csv(area.notes.as_deref().unwrap_or("")),
                     format_datetime_csv(area.created),
                     format_datetime_csv(area.modified),
-                ));
+                )
+                .unwrap();
             }
         }
 
-        Ok(csv)
+        csv
     }
 
     /// Export as OPML
-    fn export_opml(&self, data: &ExportData) -> Result<String> {
+    fn export_opml(data: &ExportData) -> String {
         let mut opml = String::new();
         opml.push_str("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n");
         opml.push_str("<opml version=\"2.0\">\n");
         opml.push_str("  <head>\n");
-        opml.push_str(&format!(
-            "    <title>Things 3 Export - {}</title>\n",
+        writeln!(
+            opml,
+            "    <title>Things 3 Export - {}</title>",
             data.exported_at.format("%Y-%m-%d %H:%M:%S")
-        ));
+        )
+        .unwrap();
         opml.push_str("  </head>\n");
         opml.push_str("  <body>\n");
 
@@ -186,25 +202,26 @@ impl DataExporter {
         }
 
         for area in &data.areas {
-            opml.push_str(&format!(
-                "    <outline text=\"{}\">\n",
-                escape_xml(&area.title)
-            ));
+            writeln!(opml, "    <outline text=\"{}\">", escape_xml(&area.title)).unwrap();
 
             if let Some(projects) = area_map.get(&Some(area.uuid)) {
                 for project in projects {
-                    opml.push_str(&format!(
-                        "      <outline text=\"{}\" type=\"project\">\n",
+                    writeln!(
+                        opml,
+                        "      <outline text=\"{}\" type=\"project\">",
                         escape_xml(&project.title)
-                    ));
+                    )
+                    .unwrap();
 
                     // Add tasks for this project
                     for task in &data.tasks {
                         if task.project_uuid == Some(project.uuid) {
-                            opml.push_str(&format!(
-                                "        <outline text=\"{}\" type=\"task\"/>\n",
+                            writeln!(
+                                opml,
+                                "        <outline text=\"{}\" type=\"task\"/>",
                                 escape_xml(&task.title)
-                            ));
+                            )
+                            .unwrap();
                         }
                     }
 
@@ -217,27 +234,29 @@ impl DataExporter {
 
         opml.push_str("  </body>\n");
         opml.push_str("</opml>\n");
-        Ok(opml)
+        opml
     }
 
     /// Export as Markdown
-    fn export_markdown(&self, data: &ExportData) -> Result<String> {
+    fn export_markdown(data: &ExportData) -> String {
         let mut md = String::new();
 
         md.push_str("# Things 3 Export\n\n");
-        md.push_str(&format!(
-            "**Exported:** {}\n",
+        writeln!(
+            md,
+            "**Exported:** {}",
             data.exported_at.format("%Y-%m-%d %H:%M:%S UTC")
-        ));
-        md.push_str(&format!("**Total Items:** {}\n\n", data.total_items));
+        )
+        .unwrap();
+        writeln!(md, "**Total Items:** {}\n", data.total_items).unwrap();
 
         // Export areas
         if !data.areas.is_empty() {
             md.push_str("## Areas\n\n");
             for area in &data.areas {
-                md.push_str(&format!("### {}\n", area.title));
+                writeln!(md, "### {}", area.title).unwrap();
                 if let Some(notes) = &area.notes {
-                    md.push_str(&format!("{}\n\n", notes));
+                    writeln!(md, "{notes}\n").unwrap();
                 }
             }
         }
@@ -246,13 +265,13 @@ impl DataExporter {
         if !data.projects.is_empty() {
             md.push_str("## Projects\n\n");
             for project in &data.projects {
-                md.push_str(&format!("### {}\n", project.title));
-                md.push_str(&format!("**Status:** {:?}\n", project.status));
+                writeln!(md, "### {}", project.title).unwrap();
+                writeln!(md, "**Status:** {:?}", project.status).unwrap();
                 if let Some(notes) = &project.notes {
-                    md.push_str(&format!("**Notes:** {}\n", notes));
+                    writeln!(md, "**Notes:** {notes}").unwrap();
                 }
                 if let Some(deadline) = &project.deadline {
-                    md.push_str(&format!("**Deadline:** {}\n", deadline));
+                    writeln!(md, "**Deadline:** {deadline}").unwrap();
                 }
                 md.push('\n');
             }
@@ -262,30 +281,32 @@ impl DataExporter {
         if !data.tasks.is_empty() {
             md.push_str("## Tasks\n\n");
             for task in &data.tasks {
-                md.push_str(&format!(
-                    "- [{}] {}\n",
+                writeln!(
+                    md,
+                    "- [{}] {}",
                     if task.status == TaskStatus::Completed {
                         "x"
                     } else {
                         " "
                     },
                     task.title
-                ));
+                )
+                .unwrap();
                 if let Some(notes) = &task.notes {
-                    md.push_str(&format!("  - {}\n", notes));
+                    writeln!(md, "  - {notes}").unwrap();
                 }
                 if let Some(deadline) = &task.deadline {
-                    md.push_str(&format!("  - **Deadline:** {}\n", deadline));
+                    writeln!(md, "  - **Deadline:** {deadline}").unwrap();
                 }
             }
         }
 
-        Ok(md)
+        md
     }
 }
 
 /// Helper functions for CSV export
-fn format_task_type_csv(task_type: &TaskType) -> &'static str {
+const fn format_task_type_csv(task_type: TaskType) -> &'static str {
     match task_type {
         TaskType::Todo => "Todo",
         TaskType::Project => "Project",
@@ -294,7 +315,7 @@ fn format_task_type_csv(task_type: &TaskType) -> &'static str {
     }
 }
 
-fn format_task_status_csv(status: &TaskStatus) -> &'static str {
+const fn format_task_status_csv(status: TaskStatus) -> &'static str {
     match status {
         TaskStatus::Incomplete => "Incomplete",
         TaskStatus::Completed => "Completed",
@@ -536,21 +557,18 @@ mod tests {
 
     #[test]
     fn test_format_task_type_csv() {
-        assert_eq!(format_task_type_csv(&TaskType::Todo), "Todo");
-        assert_eq!(format_task_type_csv(&TaskType::Project), "Project");
-        assert_eq!(format_task_type_csv(&TaskType::Heading), "Heading");
-        assert_eq!(format_task_type_csv(&TaskType::Area), "Area");
+        assert_eq!(format_task_type_csv(TaskType::Todo), "Todo");
+        assert_eq!(format_task_type_csv(TaskType::Project), "Project");
+        assert_eq!(format_task_type_csv(TaskType::Heading), "Heading");
+        assert_eq!(format_task_type_csv(TaskType::Area), "Area");
     }
 
     #[test]
     fn test_format_task_status_csv() {
-        assert_eq!(
-            format_task_status_csv(&TaskStatus::Incomplete),
-            "Incomplete"
-        );
-        assert_eq!(format_task_status_csv(&TaskStatus::Completed), "Completed");
-        assert_eq!(format_task_status_csv(&TaskStatus::Canceled), "Canceled");
-        assert_eq!(format_task_status_csv(&TaskStatus::Trashed), "Trashed");
+        assert_eq!(format_task_status_csv(TaskStatus::Incomplete), "Incomplete");
+        assert_eq!(format_task_status_csv(TaskStatus::Completed), "Completed");
+        assert_eq!(format_task_status_csv(TaskStatus::Canceled), "Canceled");
+        assert_eq!(format_task_status_csv(TaskStatus::Trashed), "Trashed");
     }
 
     #[test]
@@ -569,9 +587,9 @@ mod tests {
         assert!(
             formatted.contains("2023") || formatted.contains("2024") || formatted.contains("2025")
         );
-        assert!(formatted.contains("-"));
-        assert!(formatted.contains(" "));
-        assert!(formatted.contains(":"));
+        assert!(formatted.contains('-'));
+        assert!(formatted.contains(' '));
+        assert!(formatted.contains(':'));
     }
 
     #[test]
@@ -653,7 +671,7 @@ mod tests {
         ];
 
         for format in formats {
-            let debug_str = format!("{:?}", format);
+            let debug_str = format!("{format:?}");
             assert!(!debug_str.is_empty());
         }
     }
@@ -674,7 +692,7 @@ mod tests {
     #[test]
     fn test_export_data_debug() {
         let data = ExportData::new(vec![], vec![], vec![]);
-        let debug_str = format!("{:?}", data);
+        let debug_str = format!("{data:?}");
         assert!(!debug_str.is_empty());
         assert!(debug_str.contains("ExportData"));
     }

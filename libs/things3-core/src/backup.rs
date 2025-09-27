@@ -25,12 +25,17 @@ pub struct BackupManager {
 
 impl BackupManager {
     /// Create a new backup manager
-    pub fn new(config: ThingsConfig) -> Self {
+    #[must_use]
+    pub const fn new(config: ThingsConfig) -> Self {
         Self { config }
     }
 
     /// Create a backup of the Things 3 database
-    pub async fn create_backup(
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the backup directory cannot be created or if the database file cannot be copied.
+    pub fn create_backup(
         &self,
         backup_dir: &Path,
         description: Option<&str>,
@@ -49,7 +54,7 @@ impl BackupManager {
 
         // Generate backup filename with timestamp
         let timestamp = Utc::now().format("%Y%m%d_%H%M%S");
-        let backup_filename = format!("things_backup_{}.sqlite", timestamp);
+        let backup_filename = format!("things_backup_{timestamp}.sqlite");
         let backup_path = backup_dir.join(backup_filename);
 
         // Copy the database file
@@ -61,11 +66,11 @@ impl BackupManager {
         // Create metadata
         let metadata = BackupMetadata {
             created_at: Utc::now(),
-            source_path: source_path.clone(),
+            source_path,
             backup_path: backup_path.clone(),
             file_size,
             version: env!("CARGO_PKG_VERSION").to_string(),
-            description: description.map(|s| s.to_string()),
+            description: description.map(std::string::ToString::to_string),
         };
 
         // Save metadata alongside backup
@@ -77,7 +82,11 @@ impl BackupManager {
     }
 
     /// Restore from a backup
-    pub async fn restore_backup(&self, backup_path: &Path) -> Result<()> {
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the backup file doesn't exist or if copying fails.
+    pub fn restore_backup(&self, backup_path: &Path) -> Result<()> {
         if !backup_path.exists() {
             return Err(anyhow::anyhow!(
                 "Backup file does not exist: {:?}",
@@ -99,6 +108,10 @@ impl BackupManager {
     }
 
     /// List available backups in a directory
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the directory cannot be read or if metadata files are corrupted.
     pub fn list_backups(&self, backup_dir: &Path) -> Result<Vec<BackupMetadata>> {
         if !backup_dir.exists() {
             return Ok(vec![]);
@@ -128,6 +141,10 @@ impl BackupManager {
     }
 
     /// Get backup metadata from a backup file
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the metadata file cannot be read or parsed.
     pub fn get_backup_metadata(&self, backup_path: &Path) -> Result<BackupMetadata> {
         let metadata_path = backup_path.with_extension("json");
         if !metadata_path.exists() {
@@ -143,6 +160,10 @@ impl BackupManager {
     }
 
     /// Delete a backup and its metadata
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the files cannot be deleted.
     pub fn delete_backup(&self, backup_path: &Path) -> Result<()> {
         if backup_path.exists() {
             fs::remove_file(backup_path)?;
@@ -157,6 +178,10 @@ impl BackupManager {
     }
 
     /// Clean up old backups, keeping only the specified number
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the directory cannot be read or if files cannot be deleted.
     pub fn cleanup_old_backups(&self, backup_dir: &Path, keep_count: usize) -> Result<usize> {
         let mut backups = self.list_backups(backup_dir)?;
 
@@ -169,7 +194,11 @@ impl BackupManager {
 
         for backup in to_delete {
             if let Err(e) = self.delete_backup(&backup.backup_path) {
-                eprintln!("Failed to delete backup {:?}: {}", backup.backup_path, e);
+                eprintln!(
+                    "Failed to delete backup {}: {}",
+                    backup.backup_path.display(),
+                    e
+                );
             } else {
                 deleted_count += 1;
             }
@@ -179,6 +208,10 @@ impl BackupManager {
     }
 
     /// Verify a backup by checking if it can be opened
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the file cannot be accessed or opened.
     pub fn verify_backup(&self, backup_path: &Path) -> Result<bool> {
         if !backup_path.exists() {
             return Ok(false);
@@ -192,6 +225,10 @@ impl BackupManager {
     }
 
     /// Get backup statistics
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the directory cannot be read or if metadata files are corrupted.
     pub fn get_backup_stats(&self, backup_dir: &Path) -> Result<BackupStats> {
         let backups = self.list_backups(backup_dir)?;
 
@@ -348,7 +385,7 @@ mod tests {
             description: Some("Debug test".to_string()),
         };
 
-        let debug_str = format!("{:?}", metadata);
+        let debug_str = format!("{metadata:?}");
         assert!(debug_str.contains("BackupMetadata"));
         assert!(debug_str.contains("source_path"));
         assert!(debug_str.contains("backup_path"));
@@ -363,7 +400,7 @@ mod tests {
             newest_backup: Some(Utc::now()),
         };
 
-        let debug_str = format!("{:?}", stats);
+        let debug_str = format!("{stats:?}");
         assert!(debug_str.contains("BackupStats"));
         assert!(debug_str.contains("total_backups"));
         assert!(debug_str.contains("total_size"));
@@ -411,9 +448,7 @@ mod tests {
         let backup_manager = BackupManager::new(config);
 
         // Test backup creation with non-existent database
-        let result = backup_manager
-            .create_backup(temp_dir.path(), Some("test backup"))
-            .await;
+        let result = backup_manager.create_backup(temp_dir.path(), Some("test backup"));
 
         // Should fail because database doesn't exist
         match result {
@@ -437,9 +472,7 @@ mod tests {
         let backup_manager = BackupManager::new(config);
 
         // Test backup creation with non-existent backup directory
-        let result = backup_manager
-            .create_backup(temp_dir.path(), Some("test backup"))
-            .await;
+        let result = backup_manager.create_backup(temp_dir.path(), Some("test backup"));
 
         // Should either succeed or fail gracefully
         match result {
@@ -563,9 +596,7 @@ mod tests {
         let config = ThingsConfig::from_env();
         let backup_manager = BackupManager::new(config);
 
-        let result = backup_manager
-            .restore_backup(Path::new("/nonexistent/backup.db"))
-            .await;
+        let result = backup_manager.restore_backup(Path::new("/nonexistent/backup.db"));
         assert!(result.is_err());
         let error_msg = result.unwrap_err().to_string();
         assert!(error_msg.contains("does not exist"));
@@ -601,8 +632,8 @@ mod tests {
 
         let metadata = BackupMetadata {
             created_at: Utc::now(),
-            source_path: source_path.clone(),
-            backup_path: backup_path.clone(),
+            source_path,
+            backup_path,
             file_size: 1024,
             version: "1.0.0".to_string(),
             description: Some("Path test".to_string()),

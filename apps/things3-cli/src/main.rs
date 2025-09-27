@@ -40,7 +40,7 @@ async fn main() -> Result<()> {
             let area_uuid = area.and_then(|a| uuid::Uuid::parse_str(&a).ok());
             let projects = db.get_projects(area_uuid)?;
             let projects = if let Some(limit) = limit {
-                projects.into_iter().take(limit).collect()
+                projects.into_iter().take(limit).collect::<Vec<_>>()
             } else {
                 projects
             };
@@ -49,7 +49,7 @@ async fn main() -> Result<()> {
         Commands::Areas { limit } => {
             let areas = db.get_areas()?;
             let areas = if let Some(limit) = limit {
-                areas.into_iter().take(limit).collect()
+                areas.into_iter().take(limit).collect::<Vec<_>>()
             } else {
                 areas
             };
@@ -140,7 +140,7 @@ mod tests {
                 let area_uuid = area.and_then(|a| uuid::Uuid::parse_str(&a).ok());
                 let projects = db.get_projects(area_uuid).unwrap();
                 let projects = if let Some(limit) = limit {
-                    projects.into_iter().take(limit).collect()
+                    projects.into_iter().take(limit).collect::<Vec<_>>()
                 } else {
                     projects
                 };
@@ -168,7 +168,7 @@ mod tests {
             Commands::Areas { limit } => {
                 let areas = db.get_areas().unwrap();
                 let areas = if let Some(limit) = limit {
-                    areas.into_iter().take(limit).collect()
+                    areas.into_iter().take(limit).collect::<Vec<_>>()
                 } else {
                     areas
                 };
@@ -220,7 +220,7 @@ mod tests {
                 health_check(&db).unwrap();
             }
             _ => panic!("Expected health command"),
-        };
+        }
     }
 
     #[tokio::test]
@@ -239,7 +239,7 @@ mod tests {
                 start_mcp_server(db, config).unwrap();
             }
             _ => panic!("Expected MCP command"),
-        };
+        }
     }
 
     #[tokio::test]
@@ -264,7 +264,7 @@ mod tests {
                 assert!(!result.is_empty());
             }
             _ => panic!("Expected inbox command"),
-        };
+        }
     }
 
     #[tokio::test]
@@ -295,7 +295,7 @@ mod tests {
                 assert!(!result.is_empty());
             }
             _ => panic!("Expected inbox command"),
-        };
+        }
     }
 
     #[tokio::test]
@@ -320,7 +320,7 @@ mod tests {
                 assert!(!result.is_empty());
             }
             _ => panic!("Expected inbox command"),
-        };
+        }
     }
 
     #[tokio::test]
@@ -344,7 +344,7 @@ mod tests {
                 assert!(!result.is_empty());
             }
             _ => panic!("Expected inbox command"),
-        };
+        }
     }
 
     #[tokio::test]

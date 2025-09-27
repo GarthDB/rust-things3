@@ -69,8 +69,7 @@ tasks:
     - TUTORIAL.md
     deps:
     - test
-    outputs:
-    - target/**/*
+    outputs: []
     options:
       cache: true
       runDepsInParallel: true

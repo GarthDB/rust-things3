@@ -6,7 +6,7 @@ use things3_core::{
     config::ThingsConfig, database::ThingsDatabase, test_utils::create_test_database,
 };
 
-/// Test the print_tasks function with various inputs
+/// Test the `print_tasks` function with various inputs
 #[test]
 fn test_print_tasks_integration() {
     // Create a test database
@@ -31,7 +31,7 @@ fn test_print_tasks_integration() {
     assert!(!result.is_empty());
 }
 
-/// Test the print_projects function with various inputs
+/// Test the `print_projects` function with various inputs
 #[test]
 fn test_print_projects_integration() {
     // Create a test database
@@ -56,7 +56,7 @@ fn test_print_projects_integration() {
     assert!(!result.is_empty());
 }
 
-/// Test the print_areas function with various inputs
+/// Test the `print_areas` function with various inputs
 #[test]
 fn test_print_areas_integration() {
     // Create a test database
@@ -81,7 +81,7 @@ fn test_print_areas_integration() {
     assert!(!result.is_empty());
 }
 
-/// Test the health_check function
+/// Test the `health_check` function
 #[test]
 fn test_health_check_integration() {
     // Create a test database
@@ -121,7 +121,7 @@ async fn test_mcp_server_integration() {
     let server = things3_cli::mcp::ThingsMcpServer::new(db, config);
 
     // Test tool listing
-    let tools = server.list_tools().await.unwrap();
+    let tools = server.list_tools().unwrap();
     assert!(!tools.tools.is_empty());
     assert!(tools.tools.iter().any(|tool| tool.name == "get_inbox"));
     assert!(tools.tools.iter().any(|tool| tool.name == "get_today"));

@@ -319,7 +319,7 @@ mod tests {
             message: "test message".to_string(),
         };
 
-        let debug_string = format!("{:?}", error);
+        let debug_string = format!("{error:?}");
         assert!(debug_string.contains("Validation"));
         assert!(debug_string.contains("test message"));
     }
@@ -327,15 +327,15 @@ mod tests {
     #[test]
     fn test_result_type_alias() {
         // Test that the Result type alias works correctly
-        fn returns_result() -> Result<String> {
-            Ok("success".to_string())
+        fn returns_result() -> String {
+            "success".to_string()
         }
 
         fn returns_error() -> Result<String> {
             Err(ThingsError::validation("test error"))
         }
 
-        assert!(returns_result().is_ok());
+        assert_eq!(returns_result(), "success");
         assert!(returns_error().is_err());
 
         match returns_error() {

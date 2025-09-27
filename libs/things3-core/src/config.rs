@@ -273,7 +273,7 @@ mod tests {
     #[test]
     fn test_config_debug_formatting() {
         let config = ThingsConfig::new("/test/path", true);
-        let debug_str = format!("{:?}", config);
+        let debug_str = format!("{config:?}");
         assert!(debug_str.contains("/test/path"));
         assert!(debug_str.contains("true"));
     }
