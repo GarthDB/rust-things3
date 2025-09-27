@@ -210,13 +210,13 @@ mod tests {
         let original_db_path = std::env::var("THINGS_DATABASE_PATH").ok();
         let original_fallback = std::env::var("THINGS_FALLBACK_TO_DEFAULT").ok();
 
-        std::env::set_var("THINGS_DATABASE_PATH", "/env/custom/path");
+        std::env::set_var("THINGS_DATABASE_PATH", "/test/env/custom/path");
         std::env::set_var("THINGS_FALLBACK_TO_DEFAULT", "false");
         let config = ThingsConfig::from_env();
 
         // Check that the database path is set to what we specified
         // In CI environments, paths might be resolved differently, so we check the string representation
-        let expected_path = PathBuf::from("/env/custom/path");
+        let expected_path = PathBuf::from("/test/env/custom/path");
         let actual_path = config.database_path;
         assert_eq!(
             actual_path.to_string_lossy(),
@@ -243,15 +243,16 @@ mod tests {
         let original_db_path = std::env::var("THINGS_DATABASE_PATH").ok();
         let original_fallback = std::env::var("THINGS_FALLBACK_TO_DEFAULT").ok();
 
-        // Set test values
-        std::env::set_var("THINGS_DATABASE_PATH", "/env/path");
+        // Set test values with a unique path to avoid conflicts
+        let test_path = "/test/env/path/fallback";
+        std::env::set_var("THINGS_DATABASE_PATH", test_path);
         std::env::set_var("THINGS_FALLBACK_TO_DEFAULT", "true");
 
         let config = ThingsConfig::from_env();
 
         // Check that the database path is set to what we specified
         // In CI environments, paths might be resolved differently, so we check the string representation
-        let expected_path = PathBuf::from("/env/path");
+        let expected_path = PathBuf::from(test_path);
         let actual_path = config.database_path;
         assert_eq!(
             actual_path.to_string_lossy(),
@@ -279,13 +280,13 @@ mod tests {
         let original_db_path = std::env::var("THINGS_DATABASE_PATH").ok();
         let original_fallback = std::env::var("THINGS_FALLBACK_TO_DEFAULT").ok();
 
-        std::env::set_var("THINGS_DATABASE_PATH", "/env/path");
+        std::env::set_var("THINGS_DATABASE_PATH", "/test/env/path/invalid");
         std::env::set_var("THINGS_FALLBACK_TO_DEFAULT", "invalid");
         let config = ThingsConfig::from_env();
 
         // Check that the database path is set to what we specified
         // Use canonicalize to handle path resolution differences in CI
-        let expected_path = PathBuf::from("/env/path");
+        let expected_path = PathBuf::from("/test/env/path/invalid");
         let actual_path = config.database_path;
 
         // In CI environments, paths might be resolved differently, so we check the string representation
