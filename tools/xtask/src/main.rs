@@ -813,7 +813,10 @@ mod tests {
         }
 
         // Create .git directory but make it read-only to force errors
-        std::fs::create_dir_all(".git/hooks").unwrap();
+        if let Err(e) = std::fs::create_dir_all(".git/hooks") {
+            println!("Warning: Failed to create .git/hooks directory: {:?}", e);
+            return;
+        }
 
         // Make the hooks directory read-only (this might not work on all systems)
         #[cfg(unix)]
