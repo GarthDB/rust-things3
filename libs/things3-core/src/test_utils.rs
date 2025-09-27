@@ -475,32 +475,32 @@ mod tests {
         let tasks = create_mock_tasks();
 
         // Test first task
-        let task1 = &tasks[0];
-        assert_eq!(task1.title, "Review quarterly reports");
-        assert_eq!(task1.status, TaskStatus::Incomplete);
-        assert_eq!(task1.task_type, TaskType::Todo);
-        assert!(task1.notes.is_some());
-        assert!(task1.deadline.is_some());
-        assert!(task1.start_date.is_none());
-        assert!(task1.project_uuid.is_none());
-        assert!(task1.area_uuid.is_none());
-        assert!(task1.parent_uuid.is_none());
-        assert!(task1.tags.is_empty());
-        assert!(task1.children.is_empty());
+        let first_task = &tasks[0];
+        assert_eq!(first_task.title, "Review quarterly reports");
+        assert_eq!(first_task.status, TaskStatus::Incomplete);
+        assert_eq!(first_task.task_type, TaskType::Todo);
+        assert!(first_task.notes.is_some());
+        assert!(first_task.deadline.is_some());
+        assert!(first_task.start_date.is_none());
+        assert!(first_task.project_uuid.is_none());
+        assert!(first_task.area_uuid.is_none());
+        assert!(first_task.parent_uuid.is_none());
+        assert!(first_task.tags.is_empty());
+        assert!(first_task.children.is_empty());
 
         // Test second task
-        let task2 = &tasks[1];
-        assert_eq!(task2.title, "Call dentist");
-        assert_eq!(task2.status, TaskStatus::Incomplete);
-        assert_eq!(task2.task_type, TaskType::Todo);
-        assert!(task2.notes.is_some());
-        assert!(task2.deadline.is_none());
-        assert!(task2.start_date.is_none());
-        assert!(task2.project_uuid.is_none());
-        assert!(task2.area_uuid.is_none());
-        assert!(task2.parent_uuid.is_none());
-        assert!(task2.tags.is_empty());
-        assert!(task2.children.is_empty());
+        let second_task = &tasks[1];
+        assert_eq!(second_task.title, "Call dentist");
+        assert_eq!(second_task.status, TaskStatus::Incomplete);
+        assert_eq!(second_task.task_type, TaskType::Todo);
+        assert!(second_task.notes.is_some());
+        assert!(second_task.deadline.is_none());
+        assert!(second_task.start_date.is_none());
+        assert!(second_task.project_uuid.is_none());
+        assert!(second_task.area_uuid.is_none());
+        assert!(second_task.parent_uuid.is_none());
+        assert!(second_task.tags.is_empty());
+        assert!(second_task.children.is_empty());
     }
 
     #[test]
@@ -523,18 +523,18 @@ mod tests {
         let areas = create_mock_areas();
 
         // Test first area
-        let area1 = &areas[0];
-        assert_eq!(area1.title, "Work");
-        assert!(area1.notes.is_some());
-        assert!(area1.tags.is_empty());
-        assert!(area1.projects.is_empty());
+        let first_area = &areas[0];
+        assert_eq!(first_area.title, "Work");
+        assert!(first_area.notes.is_some());
+        assert!(first_area.tags.is_empty());
+        assert!(first_area.projects.is_empty());
 
         // Test second area
-        let area2 = &areas[1];
-        assert_eq!(area2.title, "Personal");
-        assert!(area2.notes.is_some());
-        assert!(area2.tags.is_empty());
-        assert!(area2.projects.is_empty());
+        let second_area = &areas[1];
+        assert_eq!(second_area.title, "Personal");
+        assert!(second_area.notes.is_some());
+        assert!(second_area.tags.is_empty());
+        assert!(second_area.projects.is_empty());
     }
 
     #[test]

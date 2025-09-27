@@ -21,28 +21,28 @@ impl TaskQueryBuilder {
 
     /// Filter by status
     #[must_use]
-    pub fn status(mut self, status: TaskStatus) -> Self {
+    pub const fn status(mut self, status: TaskStatus) -> Self {
         self.filters.status = Some(status);
         self
     }
 
     /// Filter by task type
     #[must_use]
-    pub fn task_type(mut self, task_type: TaskType) -> Self {
+    pub const fn task_type(mut self, task_type: TaskType) -> Self {
         self.filters.task_type = Some(task_type);
         self
     }
 
     /// Filter by project UUID
     #[must_use]
-    pub fn project_uuid(mut self, project_uuid: Uuid) -> Self {
+    pub const fn project_uuid(mut self, project_uuid: Uuid) -> Self {
         self.filters.project_uuid = Some(project_uuid);
         self
     }
 
     /// Filter by area UUID
     #[must_use]
-    pub fn area_uuid(mut self, area_uuid: Uuid) -> Self {
+    pub const fn area_uuid(mut self, area_uuid: Uuid) -> Self {
         self.filters.area_uuid = Some(area_uuid);
         self
     }
@@ -56,7 +56,11 @@ impl TaskQueryBuilder {
 
     /// Filter by start date range
     #[must_use]
-    pub fn start_date_range(mut self, from: Option<NaiveDate>, to: Option<NaiveDate>) -> Self {
+    pub const fn start_date_range(
+        mut self,
+        from: Option<NaiveDate>,
+        to: Option<NaiveDate>,
+    ) -> Self {
         self.filters.start_date_from = from;
         self.filters.start_date_to = to;
         self
@@ -64,7 +68,7 @@ impl TaskQueryBuilder {
 
     /// Filter by deadline range
     #[must_use]
-    pub fn deadline_range(mut self, from: Option<NaiveDate>, to: Option<NaiveDate>) -> Self {
+    pub const fn deadline_range(mut self, from: Option<NaiveDate>, to: Option<NaiveDate>) -> Self {
         self.filters.deadline_from = from;
         self.filters.deadline_to = to;
         self
@@ -79,14 +83,14 @@ impl TaskQueryBuilder {
 
     /// Set limit
     #[must_use]
-    pub fn limit(mut self, limit: usize) -> Self {
+    pub const fn limit(mut self, limit: usize) -> Self {
         self.filters.limit = Some(limit);
         self
     }
 
     /// Set offset for pagination
     #[must_use]
-    pub fn offset(mut self, offset: usize) -> Self {
+    pub const fn offset(mut self, offset: usize) -> Self {
         self.filters.offset = Some(offset);
         self
     }

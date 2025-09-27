@@ -133,6 +133,10 @@ mod tests {
 
     #[test]
     fn test_config_from_env() {
+        // Save original values
+        let original_db_path = std::env::var("THINGS_DATABASE_PATH").ok();
+        let original_fallback = std::env::var("THINGS_FALLBACK_TO_DEFAULT").ok();
+
         std::env::set_var("THINGS_DATABASE_PATH", "/custom/path/db.sqlite");
         std::env::set_var("THINGS_FALLBACK_TO_DEFAULT", "true");
 
@@ -143,9 +147,17 @@ mod tests {
         );
         assert!(config.fallback_to_default);
 
-        // Clean up
-        std::env::remove_var("THINGS_DATABASE_PATH");
-        std::env::remove_var("THINGS_FALLBACK_TO_DEFAULT");
+        // Restore original values
+        if let Some(path) = original_db_path {
+            std::env::set_var("THINGS_DATABASE_PATH", path);
+        } else {
+            std::env::remove_var("THINGS_DATABASE_PATH");
+        }
+        if let Some(fallback) = original_fallback {
+            std::env::set_var("THINGS_FALLBACK_TO_DEFAULT", fallback);
+        } else {
+            std::env::remove_var("THINGS_FALLBACK_TO_DEFAULT");
+        }
     }
 
     #[test]
@@ -198,10 +210,18 @@ mod tests {
         let original_db_path = std::env::var("THINGS_DATABASE_PATH").ok();
         let original_fallback = std::env::var("THINGS_FALLBACK_TO_DEFAULT").ok();
 
-        std::env::set_var("THINGS_DATABASE_PATH", "/env/custom/path");
+        std::env::set_var("THINGS_DATABASE_PATH", "/test/env/custom/path");
         std::env::set_var("THINGS_FALLBACK_TO_DEFAULT", "false");
         let config = ThingsConfig::from_env();
-        assert_eq!(config.database_path, PathBuf::from("/env/custom/path"));
+
+        // Check that the database path is set to what we specified
+        // In CI environments, paths might be resolved differently, so we check the string representation
+        let expected_path = PathBuf::from("/test/env/custom/path");
+        let actual_path = config.database_path;
+        assert_eq!(
+            actual_path.to_string_lossy(),
+            expected_path.to_string_lossy()
+        );
         assert!(!config.fallback_to_default);
 
         // Restore original values
@@ -223,12 +243,21 @@ mod tests {
         let original_db_path = std::env::var("THINGS_DATABASE_PATH").ok();
         let original_fallback = std::env::var("THINGS_FALLBACK_TO_DEFAULT").ok();
 
-        // Set test values
-        std::env::set_var("THINGS_DATABASE_PATH", "/env/path");
+        // Set test values with a unique path to avoid conflicts
+        let test_path = "/test/env/path/fallback";
+        std::env::set_var("THINGS_DATABASE_PATH", test_path);
         std::env::set_var("THINGS_FALLBACK_TO_DEFAULT", "true");
 
         let config = ThingsConfig::from_env();
-        assert_eq!(config.database_path, PathBuf::from("/env/path"));
+
+        // Check that the database path is set to what we specified
+        // In CI environments, paths might be resolved differently, so we check the string representation
+        let expected_path = PathBuf::from(test_path);
+        let actual_path = config.database_path;
+        assert_eq!(
+            actual_path.to_string_lossy(),
+            expected_path.to_string_lossy()
+        );
         assert!(config.fallback_to_default);
 
         // Restore original values
@@ -251,10 +280,20 @@ mod tests {
         let original_db_path = std::env::var("THINGS_DATABASE_PATH").ok();
         let original_fallback = std::env::var("THINGS_FALLBACK_TO_DEFAULT").ok();
 
-        std::env::set_var("THINGS_DATABASE_PATH", "/env/path");
+        std::env::set_var("THINGS_DATABASE_PATH", "/test/env/path/invalid");
         std::env::set_var("THINGS_FALLBACK_TO_DEFAULT", "invalid");
         let config = ThingsConfig::from_env();
-        assert_eq!(config.database_path, PathBuf::from("/env/path"));
+
+        // Check that the database path is set to what we specified
+        // Use canonicalize to handle path resolution differences in CI
+        let expected_path = PathBuf::from("/test/env/path/invalid");
+        let actual_path = config.database_path;
+
+        // In CI environments, paths might be resolved differently, so we check the string representation
+        assert_eq!(
+            actual_path.to_string_lossy(),
+            expected_path.to_string_lossy()
+        );
         assert!(!config.fallback_to_default); // Should default to false for invalid value
 
         // Restore original values
@@ -273,7 +312,7 @@ mod tests {
     #[test]
     fn test_config_debug_formatting() {
         let config = ThingsConfig::new("/test/path", true);
-        let debug_str = format!("{:?}", config);
+        let debug_str = format!("{config:?}");
         assert!(debug_str.contains("/test/path"));
         assert!(debug_str.contains("true"));
     }

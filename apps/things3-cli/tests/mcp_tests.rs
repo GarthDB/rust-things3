@@ -19,6 +19,7 @@ fn create_test_mcp_server() -> ThingsMcpServer {
 }
 
 /// Create a comprehensive test database with mock data
+#[allow(clippy::too_many_lines)]
 fn create_comprehensive_test_database<P: AsRef<Path>>(db_path: P) -> rusqlite::Connection {
     let conn = rusqlite::Connection::open(db_path).unwrap();
 
@@ -139,27 +140,36 @@ fn create_comprehensive_test_database<P: AsRef<Path>>(db_path: P) -> rusqlite::C
     {
         let start_date = start_days.map(|d: i64| {
             let base_date = chrono::NaiveDate::from_ymd_opt(2001, 1, 1).unwrap();
-            base_date
-                .checked_add_days(chrono::Days::new(d as u64))
-                .map(|d| {
-                    d.signed_duration_since(chrono::NaiveDate::from_ymd_opt(2001, 1, 1).unwrap())
-                        .num_days()
-                })
+            #[allow(clippy::cast_sign_loss)]
+            { base_date.checked_add_days(chrono::Days::new(d as u64)) }.map(|d| {
+                d.signed_duration_since(chrono::NaiveDate::from_ymd_opt(2001, 1, 1).unwrap())
+                    .num_days()
+            })
         });
 
         let deadline = deadline_days.map(|d: i64| {
             let base_date = chrono::NaiveDate::from_ymd_opt(2001, 1, 1).unwrap();
-            base_date
-                .checked_add_days(chrono::Days::new(d as u64))
-                .map(|d| {
-                    d.signed_duration_since(chrono::NaiveDate::from_ymd_opt(2001, 1, 1).unwrap())
-                        .num_days()
-                })
+            #[allow(clippy::cast_sign_loss)]
+            { base_date.checked_add_days(chrono::Days::new(d as u64)) }.map(|d| {
+                d.signed_duration_since(chrono::NaiveDate::from_ymd_opt(2001, 1, 1).unwrap())
+                    .num_days()
+            })
         });
 
         conn.execute(
             "INSERT INTO TMTask (uuid, title, type, status, notes, startDate, deadline, creationDate, userModificationDate, project, area, heading) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            (uuid, title, task_type, status, notes, start_date, deadline, now.timestamp() as f64, now.timestamp() as f64, project.map(|s| s.to_string()), area.map(|s| s.to_string()), heading),
+            (uuid, title, task_type, status, notes, start_date, deadline,
+                #[allow(clippy::cast_precision_loss)]
+                {
+                    now.timestamp() as f64
+                },
+                #[allow(clippy::cast_precision_loss)]
+                {
+                    now.timestamp() as f64
+                },
+                project.map(std::string::ToString::to_string),
+                area.map(std::string::ToString::to_string),
+                heading),
         ).unwrap();
     }
 
@@ -175,7 +185,7 @@ async fn test_mcp_server_creation() {
 #[tokio::test]
 async fn test_list_tools() {
     let server = create_test_mcp_server();
-    let result = server.list_tools().await.unwrap();
+    let result = server.list_tools().unwrap();
 
     assert!(result.tools.len() > 10); // Should have many tools
 
@@ -196,7 +206,7 @@ async fn test_list_tools() {
 #[tokio::test]
 async fn test_tool_schemas() {
     let server = create_test_mcp_server();
-    let result = server.list_tools().await.unwrap();
+    let result = server.list_tools().unwrap();
 
     // Check that each tool has proper schema
     for tool in &result.tools {
@@ -891,7 +901,7 @@ async fn test_restore_database_tool_missing_backup_path() {
 #[tokio::test]
 async fn test_tool_schemas_validation() {
     let server = create_test_mcp_server();
-    let result = server.list_tools().await.unwrap();
+    let result = server.list_tools().unwrap();
 
     // Check that required tools have proper schemas
     for tool in &result.tools {
@@ -923,7 +933,7 @@ async fn test_tool_schemas_validation() {
                 assert!(required.contains(&json!("format")));
                 assert!(required.contains(&json!("data_type")));
             }
-            "backup_database" => {
+            "backup_database" | "list_backups" => {
                 let schema = &tool.input_schema;
                 assert!(schema["required"]
                     .as_array()
@@ -936,13 +946,6 @@ async fn test_tool_schemas_validation() {
                     .as_array()
                     .unwrap()
                     .contains(&json!("backup_path")));
-            }
-            "list_backups" => {
-                let schema = &tool.input_schema;
-                assert!(schema["required"]
-                    .as_array()
-                    .unwrap()
-                    .contains(&json!("backup_dir")));
             }
             _ => {
                 // Other tools may not have required fields
@@ -979,4 +982,130 @@ async fn test_empty_arguments() {
     let result = server.call_tool(request).await.unwrap();
     assert!(!result.is_error);
     assert_eq!(result.content.len(), 1);
+}
+
+// ===== Resource Tests =====
+
+#[tokio::test]
+async fn test_list_resources() {
+    let server = create_test_mcp_server();
+
+    let result = server.list_resources().unwrap();
+
+    // Should have 4 resources
+    assert_eq!(result.resources.len(), 4);
+
+    // Check that all expected resources are present
+    let uris: Vec<&String> = result.resources.iter().map(|r| &r.uri).collect();
+    assert!(uris.contains(&&"things://inbox".to_string()));
+    assert!(uris.contains(&&"things://projects".to_string()));
+    assert!(uris.contains(&&"things://areas".to_string()));
+    assert!(uris.contains(&&"things://today".to_string()));
+
+    // Check resource properties
+    let inbox_resource = result
+        .resources
+        .iter()
+        .find(|r| r.uri == "things://inbox")
+        .unwrap();
+    assert_eq!(inbox_resource.name, "Inbox Tasks");
+    assert_eq!(
+        inbox_resource.mime_type,
+        Some("application/json".to_string())
+    );
+}
+
+#[tokio::test]
+async fn test_read_inbox_resource() {
+    let server = create_test_mcp_server();
+
+    let request = things3_cli::mcp::ReadResourceRequest {
+        uri: "things://inbox".to_string(),
+    };
+
+    let result = server.read_resource(request).await.unwrap();
+
+    assert_eq!(result.contents.len(), 1);
+    match &result.contents[0] {
+        Content::Text { text } => {
+            // Should be valid JSON
+            let parsed: serde_json::Value = serde_json::from_str(text).unwrap();
+            assert!(parsed.is_array());
+        }
+    }
+}
+
+#[tokio::test]
+async fn test_read_projects_resource() {
+    let server = create_test_mcp_server();
+
+    let request = things3_cli::mcp::ReadResourceRequest {
+        uri: "things://projects".to_string(),
+    };
+
+    let result = server.read_resource(request).await.unwrap();
+
+    assert_eq!(result.contents.len(), 1);
+    match &result.contents[0] {
+        Content::Text { text } => {
+            // Should be valid JSON
+            let parsed: serde_json::Value = serde_json::from_str(text).unwrap();
+            assert!(parsed.is_array());
+        }
+    }
+}
+
+#[tokio::test]
+async fn test_read_areas_resource() {
+    let server = create_test_mcp_server();
+
+    let request = things3_cli::mcp::ReadResourceRequest {
+        uri: "things://areas".to_string(),
+    };
+
+    let result = server.read_resource(request).await.unwrap();
+
+    assert_eq!(result.contents.len(), 1);
+    match &result.contents[0] {
+        Content::Text { text } => {
+            // Should be valid JSON
+            let parsed: serde_json::Value = serde_json::from_str(text).unwrap();
+            assert!(parsed.is_array());
+        }
+    }
+}
+
+#[tokio::test]
+async fn test_read_today_resource() {
+    let server = create_test_mcp_server();
+
+    let request = things3_cli::mcp::ReadResourceRequest {
+        uri: "things://today".to_string(),
+    };
+
+    let result = server.read_resource(request).await.unwrap();
+
+    assert_eq!(result.contents.len(), 1);
+    match &result.contents[0] {
+        Content::Text { text } => {
+            // Should be valid JSON
+            let parsed: serde_json::Value = serde_json::from_str(text).unwrap();
+            assert!(parsed.is_array());
+        }
+    }
+}
+
+#[tokio::test]
+async fn test_read_unknown_resource() {
+    let server = create_test_mcp_server();
+
+    let request = things3_cli::mcp::ReadResourceRequest {
+        uri: "things://unknown".to_string(),
+    };
+
+    let result = server.read_resource(request).await;
+
+    // Should return an error for unknown resource
+    assert!(result.is_err());
+    assert!(result.unwrap_err().to_string().contains("Unknown resource"));
 }

@@ -17,7 +17,7 @@ pub struct ThingsDatabase {
 
 impl ThingsDatabase {
     /// Convert Things 3 type integer to `TaskType`
-    fn convert_task_type(type_value: i32) -> TaskType {
+    const fn convert_task_type(type_value: i32) -> TaskType {
         match type_value {
             1 => TaskType::Project,
             2 => TaskType::Heading,
@@ -27,7 +27,7 @@ impl ThingsDatabase {
     }
 
     /// Convert Things 3 status integer to `TaskStatus`
-    fn convert_task_status(status_value: i32) -> TaskStatus {
+    const fn convert_task_status(status_value: i32) -> TaskStatus {
         match status_value {
             1 => TaskStatus::Completed,
             2 => TaskStatus::Canceled,
@@ -61,20 +61,21 @@ impl ThingsDatabase {
     /// Convert Things 3 UUID string to Uuid, handling None case
     /// Things 3 uses a custom base64-like format, so we'll generate a UUID from the string
     fn convert_uuid(uuid_str: Option<String>) -> Option<Uuid> {
-        uuid_str.map(|s| {
+        uuid_str.and_then(|s| {
             // Try to parse as standard UUID first
-            if let Ok(uuid) = Uuid::parse_str(&s) {
-                uuid
-            } else {
-                // For Things 3 format, generate a deterministic UUID from the string
-                use std::collections::hash_map::DefaultHasher;
-                use std::hash::{Hash, Hasher};
-                let mut hasher = DefaultHasher::new();
-                s.hash(&mut hasher);
-                let hash = hasher.finish();
-                // Create a UUID from the hash
-                Uuid::from_u128(u128::from(hash))
-            }
+            Uuid::parse_str(&s).map_or_else(
+                |_| {
+                    // For Things 3 format, generate a deterministic UUID from the string
+                    use std::collections::hash_map::DefaultHasher;
+                    use std::hash::{Hash, Hasher};
+                    let mut hasher = DefaultHasher::new();
+                    s.hash(&mut hasher);
+                    let hash = hasher.finish();
+                    // Create a UUID from the hash
+                    Some(Uuid::from_u128(u128::from(hash)))
+                },
+                Some,
+            )
         })
     }
     /// Create a new database connection
@@ -197,12 +198,18 @@ impl ThingsDatabase {
                 start_date: row.get::<_, Option<i32>>("startDate")?.and_then(|days| {
                     // Convert from days since 2001-01-01 to NaiveDate
                     let base_date = chrono::NaiveDate::from_ymd_opt(2001, 1, 1).unwrap();
-                    base_date.checked_add_days(chrono::Days::new(days as u64))
+                    #[allow(clippy::cast_sign_loss)]
+                    {
+                        base_date.checked_add_days(chrono::Days::new(days as u64))
+                    }
                 }),
                 deadline: row.get::<_, Option<i32>>("deadline")?.and_then(|days| {
                     // Convert from days since 2001-01-01 to NaiveDate
                     let base_date = chrono::NaiveDate::from_ymd_opt(2001, 1, 1).unwrap();
-                    base_date.checked_add_days(chrono::Days::new(days as u64))
+                    #[allow(clippy::cast_sign_loss)]
+                    {
+                        base_date.checked_add_days(chrono::Days::new(days as u64))
+                    }
                 }),
                 created: {
                     let timestamp = row.get::<_, f64>("creationDate")?;
@@ -210,7 +217,10 @@ impl ThingsDatabase {
                     let base_date = chrono::DateTime::parse_from_rfc3339("2001-01-01T00:00:00Z")
                         .unwrap()
                         .with_timezone(&chrono::Utc);
-                    base_date + chrono::Duration::seconds(timestamp as i64)
+                    #[allow(clippy::cast_possible_truncation)]
+                    {
+                        base_date + chrono::Duration::seconds(timestamp as i64)
+                    }
                 },
                 modified: {
                     let timestamp = row.get::<_, f64>("userModificationDate")?;
@@ -218,7 +228,10 @@ impl ThingsDatabase {
                     let base_date = chrono::DateTime::parse_from_rfc3339("2001-01-01T00:00:00Z")
                         .unwrap()
                         .with_timezone(&chrono::Utc);
-                    base_date + chrono::Duration::seconds(timestamp as i64)
+                    #[allow(clippy::cast_possible_truncation)]
+                    {
+                        base_date + chrono::Duration::seconds(timestamp as i64)
+                    }
                 },
                 project_uuid: row
                     .get::<_, Option<String>>("project")?
@@ -344,12 +357,18 @@ impl ThingsDatabase {
                 start_date: row.get::<_, Option<i32>>("startDate")?.and_then(|days| {
                     // Convert from days since 2001-01-01 to NaiveDate
                     let base_date = chrono::NaiveDate::from_ymd_opt(2001, 1, 1).unwrap();
-                    base_date.checked_add_days(chrono::Days::new(days as u64))
+                    #[allow(clippy::cast_sign_loss)]
+                    {
+                        base_date.checked_add_days(chrono::Days::new(days as u64))
+                    }
                 }),
                 deadline: row.get::<_, Option<i32>>("deadline")?.and_then(|days| {
                     // Convert from days since 2001-01-01 to NaiveDate
                     let base_date = chrono::NaiveDate::from_ymd_opt(2001, 1, 1).unwrap();
-                    base_date.checked_add_days(chrono::Days::new(days as u64))
+                    #[allow(clippy::cast_sign_loss)]
+                    {
+                        base_date.checked_add_days(chrono::Days::new(days as u64))
+                    }
                 }),
                 created: {
                     let timestamp = row.get::<_, f64>("creationDate")?;
@@ -357,7 +376,10 @@ impl ThingsDatabase {
                     let base_date = chrono::DateTime::parse_from_rfc3339("2001-01-01T00:00:00Z")
                         .unwrap()
                         .with_timezone(&chrono::Utc);
-                    base_date + chrono::Duration::seconds(timestamp as i64)
+                    #[allow(clippy::cast_possible_truncation)]
+                    {
+                        base_date + chrono::Duration::seconds(timestamp as i64)
+                    }
                 },
                 modified: {
                     let timestamp = row.get::<_, f64>("userModificationDate")?;
@@ -365,7 +387,10 @@ impl ThingsDatabase {
                     let base_date = chrono::DateTime::parse_from_rfc3339("2001-01-01T00:00:00Z")
                         .unwrap()
                         .with_timezone(&chrono::Utc);
-                    base_date + chrono::Duration::seconds(timestamp as i64)
+                    #[allow(clippy::cast_possible_truncation)]
+                    {
+                        base_date + chrono::Duration::seconds(timestamp as i64)
+                    }
                 },
                 project_uuid: row
                     .get::<_, Option<String>>("project")?
@@ -400,11 +425,13 @@ impl ThingsDatabase {
             start_date: row.get::<_, Option<i32>>("startDate")?.and_then(|days| {
                 // Convert from days since 2001-01-01 to NaiveDate
                 let base_date = chrono::NaiveDate::from_ymd_opt(2001, 1, 1).unwrap();
+                #[allow(clippy::cast_sign_loss)]
                 base_date.checked_add_days(chrono::Days::new(days as u64))
             }),
             deadline: row.get::<_, Option<i32>>("deadline")?.and_then(|days| {
                 // Convert from days since 2001-01-01 to NaiveDate
                 let base_date = chrono::NaiveDate::from_ymd_opt(2001, 1, 1).unwrap();
+                #[allow(clippy::cast_sign_loss)]
                 base_date.checked_add_days(chrono::Days::new(days as u64))
             }),
             created: {
@@ -413,7 +440,10 @@ impl ThingsDatabase {
                 let base_date = chrono::DateTime::parse_from_rfc3339("2001-01-01T00:00:00Z")
                     .unwrap()
                     .with_timezone(&chrono::Utc);
-                base_date + chrono::Duration::seconds(timestamp as i64)
+                #[allow(clippy::cast_possible_truncation)]
+                {
+                    base_date + chrono::Duration::seconds(timestamp as i64)
+                }
             },
             modified: {
                 let timestamp = row.get::<_, f64>("userModificationDate")?;
@@ -421,7 +451,10 @@ impl ThingsDatabase {
                 let base_date = chrono::DateTime::parse_from_rfc3339("2001-01-01T00:00:00Z")
                     .unwrap()
                     .with_timezone(&chrono::Utc);
-                base_date + chrono::Duration::seconds(timestamp as i64)
+                #[allow(clippy::cast_possible_truncation)]
+                {
+                    base_date + chrono::Duration::seconds(timestamp as i64)
+                }
             },
             area_uuid: row
                 .get::<_, Option<String>>("area")?
@@ -444,7 +477,7 @@ mod tests {
     use crate::test_utils::create_test_database;
     use tempfile::NamedTempFile;
 
-    /// Test convert_task_type with all possible values
+    /// Test `convert_task_type` with all possible values
     #[test]
     fn test_convert_task_type() {
         assert_eq!(ThingsDatabase::convert_task_type(1), TaskType::Project);
@@ -455,7 +488,7 @@ mod tests {
         assert_eq!(ThingsDatabase::convert_task_type(-1), TaskType::Todo);
     }
 
-    /// Test convert_task_status with all possible values
+    /// Test `convert_task_status` with all possible values
     #[test]
     fn test_convert_task_status() {
         assert_eq!(
@@ -478,7 +511,7 @@ mod tests {
         );
     }
 
-    /// Test convert_timestamp with various inputs
+    /// Test `convert_timestamp` with various inputs
     #[test]
     fn test_convert_timestamp() {
         // Test with None - should return current time
@@ -486,22 +519,22 @@ mod tests {
         let _ = result; // Just verify it doesn't panic
 
         // Test with valid timestamp - just check it returns a valid DateTime
-        let timestamp = 1234567890.0;
+        let timestamp = 1_234_567_890.0;
         let result = ThingsDatabase::convert_timestamp(Some(timestamp));
         let _ = result; // Just verify it doesn't panic
 
         // Test with negative timestamp (should fallback to now)
-        let timestamp = -1234567890.0;
+        let timestamp = -1_234_567_890.0;
         let result = ThingsDatabase::convert_timestamp(Some(timestamp));
         let _ = result; // Just verify it doesn't panic
 
         // Test with very large timestamp (should fallback to now)
-        let timestamp = 999999999999.0;
+        let timestamp = 999_999_999_999.0;
         let result = ThingsDatabase::convert_timestamp(Some(timestamp));
         let _ = result; // Just verify it doesn't panic
     }
 
-    /// Test convert_date with various inputs
+    /// Test `convert_date` with various inputs
     #[test]
     fn test_convert_date() {
         // Test with None
@@ -534,7 +567,7 @@ mod tests {
         assert!(result.is_some());
     }
 
-    /// Test convert_uuid with various inputs
+    /// Test `convert_uuid` with various inputs
     #[test]
     fn test_convert_uuid() {
         // Test with None
@@ -554,7 +587,7 @@ mod tests {
         assert_eq!(result, result2);
 
         // Test with empty string
-        let result = ThingsDatabase::convert_uuid(Some("".to_string()));
+        let result = ThingsDatabase::convert_uuid(Some(String::new()));
         assert!(result.is_some());
 
         // Test with special characters
@@ -563,7 +596,7 @@ mod tests {
         assert!(result.is_some());
     }
 
-    /// Test map_project_row with various inputs
+    /// Test `map_project_row` with various inputs
     #[test]
     fn test_map_project_row() {
         let temp_file = NamedTempFile::new().unwrap();
@@ -573,12 +606,9 @@ mod tests {
         let db = ThingsDatabase::new(db_path).unwrap();
 
         // Test with a real project row (if TMProject table exists)
-        let mut stmt = match db.conn.prepare("SELECT uuid, title, notes, startDate, deadline, creationDate, userModificationDate, area, status FROM TMProject LIMIT 1") {
-            Ok(stmt) => stmt,
-            Err(_) => {
-                // TMProject table doesn't exist, skip this test
-                return;
-            }
+        let Ok(mut stmt) = db.conn.prepare("SELECT uuid, title, notes, startDate, deadline, creationDate, userModificationDate, area, status FROM TMProject LIMIT 1") else {
+            // TMProject table doesn't exist, skip this test
+            return;
         };
 
         let mut rows = stmt.query([]).unwrap();
@@ -608,19 +638,16 @@ mod tests {
 
         let result = ThingsDatabase::new(db_path);
         // SQLite might still open the file, so we test that it fails on query
-        match result {
-            Ok(db) => {
-                // If it opens, it should fail on query
-                let tasks = db.get_inbox(Some(1));
-                assert!(tasks.is_err());
-            }
-            Err(_) => {
-                // Expected error
-            }
+        if let Ok(db) = result {
+            // If it opens, it should fail on query
+            let tasks = db.get_inbox(Some(1));
+            assert!(tasks.is_err());
+        } else {
+            // Expected error
         }
     }
 
-    /// Test get_inbox with malformed data
+    /// Test `get_inbox` with malformed data
     #[test]
     fn test_get_inbox_malformed_data() {
         let temp_file = NamedTempFile::new().unwrap();
@@ -640,7 +667,7 @@ mod tests {
         assert!(!tasks.is_empty());
     }
 
-    /// Test get_today with edge case dates
+    /// Test `get_today` with edge case dates
     #[test]
     fn test_get_today_edge_cases() {
         let temp_file = NamedTempFile::new().unwrap();
@@ -666,7 +693,7 @@ mod tests {
         let _ = tasks.len();
     }
 
-    /// Test search_tasks with edge cases
+    /// Test `search_tasks` with edge cases
     #[test]
     fn test_search_tasks_edge_cases() {
         let temp_file = NamedTempFile::new().unwrap();
@@ -695,7 +722,7 @@ mod tests {
         let _ = tasks.len();
     }
 
-    /// Test get_projects with edge cases
+    /// Test `get_projects` with edge cases
     #[test]
     fn test_get_projects_edge_cases() {
         let temp_file = NamedTempFile::new().unwrap();
@@ -714,7 +741,7 @@ mod tests {
         let _ = projects.len();
     }
 
-    /// Test get_areas with edge cases
+    /// Test `get_areas` with edge cases
     #[test]
     fn test_get_areas_edge_cases() {
         let temp_file = NamedTempFile::new().unwrap();
@@ -800,7 +827,7 @@ mod tests {
         let areas = db.get_areas().unwrap();
 
         // Should have some data
-        assert!(tasks.len() > 0 || projects.len() > 0 || areas.len() > 0);
+        assert!(!tasks.is_empty() || !projects.is_empty() || !areas.is_empty());
 
         // Test that tasks with area relationships work
         let tasks_with_areas = tasks.iter().filter(|t| t.area_uuid.is_some()).count();

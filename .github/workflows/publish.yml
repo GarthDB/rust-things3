@@ -48,17 +48,17 @@ jobs:
     - name: Run tests
       run: cargo test --features test-utils
 
-    - name: Publish things-common
-      run: cargo publish --package things-common
+    - name: Publish things3-common
+      run: cargo publish --package things3-common
       env:
         CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
 
-    - name: Publish things-core
-      run: cargo publish --package things-core
+    - name: Publish things3-core
+      run: cargo publish --package things3-core
       env:
         CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
 
-    - name: Publish things-cli
-      run: cargo publish --package things-cli
+    - name: Publish things3-cli
+      run: cargo publish --package things3-cli
       env:
         CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}

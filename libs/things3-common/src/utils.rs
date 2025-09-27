@@ -106,9 +106,9 @@ mod tests {
 
         // Should contain the expected format components
         assert!(formatted.contains("UTC"));
-        assert!(formatted.contains("-"));
-        assert!(formatted.contains(" "));
-        assert!(formatted.contains(":"));
+        assert!(formatted.contains('-'));
+        assert!(formatted.contains(' '));
+        assert!(formatted.contains(':'));
 
         // Should be in the expected format
         assert!(formatted.len() >= 20); // At least "YYYY-MM-DD HH:MM:SS UTC"

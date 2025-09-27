@@ -35,7 +35,8 @@ pub struct PerformanceStats {
 }
 
 impl PerformanceStats {
-    pub fn new(operation_name: String) -> Self {
+    #[must_use]
+    pub const fn new(operation_name: String) -> Self {
         Self {
             operation_name,
             total_calls: 0,
@@ -68,11 +69,15 @@ impl PerformanceStats {
             self.max_duration = metric.duration;
         }
 
-        self.average_duration =
-            Duration::from_nanos(self.total_duration.as_nanos() as u64 / self.total_calls);
+        self.average_duration = Duration::from_nanos(
+            u64::try_from(self.total_duration.as_nanos()).unwrap_or(u64::MAX) / self.total_calls,
+        );
 
         self.success_rate = if self.total_calls > 0 {
-            self.successful_calls as f64 / self.total_calls as f64
+            #[allow(clippy::cast_precision_loss)]
+            {
+                self.successful_calls as f64 / self.total_calls as f64
+            }
         } else {
             0.0
         };
@@ -103,6 +108,7 @@ pub struct PerformanceMonitor {
 
 impl PerformanceMonitor {
     /// Create a new performance monitor
+    #[must_use]
     pub fn new(max_metrics: usize) -> Self {
         Self {
             metrics: Arc::new(RwLock::new(Vec::new())),
@@ -113,11 +119,13 @@ impl PerformanceMonitor {
     }
 
     /// Create a new performance monitor with default settings
+    #[must_use]
     pub fn new_default() -> Self {
         Self::new(10000) // Keep last 10,000 metrics
     }
 
     /// Start timing an operation
+    #[must_use]
     pub fn start_operation(&self, operation_name: &str) -> OperationTimer {
         OperationTimer {
             monitor: self.clone(),
@@ -127,7 +135,7 @@ impl PerformanceMonitor {
     }
 
     /// Record a completed operation
-    pub fn record_operation(&self, metric: OperationMetrics) {
+    pub fn record_operation(&self, metric: &OperationMetrics) {
         // Add to metrics list
         {
             let mut metrics = self.metrics.write();
@@ -141,45 +149,61 @@ impl PerformanceMonitor {
         }
 
         // Update aggregated stats
-        {
-            let mut stats = self.stats.write();
-            let operation_stats = stats
-                .entry(metric.operation_name.clone())
-                .or_insert_with(|| PerformanceStats::new(metric.operation_name.clone()));
-            operation_stats.add_metric(&metric);
-        }
+        let operation_name = metric.operation_name.clone();
+        let mut stats = self.stats.write();
+        let operation_stats = stats
+            .entry(operation_name)
+            .or_insert_with(|| PerformanceStats::new(metric.operation_name.clone()));
+        operation_stats.add_metric(metric);
+        drop(stats);
     }
 
     /// Get all operation metrics
+    #[must_use]
     pub fn get_metrics(&self) -> Vec<OperationMetrics> {
         self.metrics.read().clone()
     }
 
     /// Get aggregated statistics for all operations
+    #[must_use]
     pub fn get_all_stats(&self) -> HashMap<String, PerformanceStats> {
         self.stats.read().clone()
     }
 
     /// Get statistics for a specific operation
+    #[must_use]
     pub fn get_operation_stats(&self, operation_name: &str) -> Option<PerformanceStats> {
         self.stats.read().get(operation_name).cloned()
     }
 
     /// Get current system metrics
+    /// Get system metrics
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if system information cannot be retrieved.
     pub fn get_system_metrics(&self) -> Result<SystemMetrics> {
         let mut system = self.system.write();
         system.refresh_all();
 
         Ok(SystemMetrics {
             timestamp: Utc::now(),
+            #[allow(clippy::cast_precision_loss)]
             memory_usage_mb: system.used_memory() as f64 / 1024.0 / 1024.0,
-            cpu_usage_percent: system
-                .cpus()
-                .iter()
-                .map(|cpu| cpu.cpu_usage() as f64)
-                .sum::<f64>()
-                / system.cpus().len() as f64,
+            cpu_usage_percent: {
+                let cpu_count = system.cpus().len();
+                #[allow(clippy::cast_precision_loss)]
+                let cpu_usage: f64 = system
+                    .cpus()
+                    .iter()
+                    .map(|cpu| f64::from(cpu.cpu_usage()))
+                    .sum::<f64>()
+                    / cpu_count as f64;
+                cpu_usage
+            },
+            #[allow(clippy::cast_precision_loss)]
             available_memory_mb: system.available_memory() as f64 / 1024.0 / 1024.0,
+            #[allow(clippy::cast_precision_loss)]
             total_memory_mb: system.total_memory() as f64 / 1024.0 / 1024.0,
         })
     }
@@ -191,6 +215,7 @@ impl PerformanceMonitor {
     }
 
     /// Get performance summary
+    #[must_use]
     pub fn get_summary(&self) -> PerformanceSummary {
         let stats = self.get_all_stats();
         let total_operations: u64 = stats.values().map(|s| s.total_calls).sum();
@@ -202,13 +227,18 @@ impl PerformanceMonitor {
             total_successful,
             total_failed: total_operations - total_successful,
             overall_success_rate: if total_operations > 0 {
-                total_successful as f64 / total_operations as f64
+                #[allow(clippy::cast_precision_loss)]
+                {
+                    total_successful as f64 / total_operations as f64
+                }
             } else {
                 0.0
             },
             total_duration,
             average_operation_duration: if total_operations > 0 {
-                Duration::from_nanos(total_duration.as_nanos() as u64 / total_operations)
+                Duration::from_nanos(
+                    u64::try_from(total_duration.as_nanos()).unwrap_or(0) / total_operations,
+                )
             } else {
                 Duration::ZERO
             },
@@ -246,7 +276,7 @@ impl OperationTimer {
             success: true,
             error_message: None,
         };
-        self.monitor.record_operation(metric);
+        self.monitor.record_operation(&metric);
     }
 
     /// Complete the operation with an error
@@ -259,7 +289,7 @@ impl OperationTimer {
             success: false,
             error_message: Some(error_message),
         };
-        self.monitor.record_operation(metric);
+        self.monitor.record_operation(&metric);
     }
 }
 
@@ -293,7 +323,7 @@ mod tests {
             error_message: None,
         };
 
-        monitor.record_operation(metric1);
+        monitor.record_operation(&metric1);
 
         let stats = monitor.get_operation_stats("test_op");
         assert!(stats.is_some());
@@ -332,7 +362,7 @@ mod tests {
             error_message: Some("Test error".to_string()),
         };
 
-        monitor.record_operation(metric);
+        monitor.record_operation(&metric);
 
         let stats = monitor.get_operation_stats("failed_op");
         assert!(stats.is_some());
@@ -359,7 +389,7 @@ mod tests {
                     Some("Error".to_string())
                 },
             };
-            monitor.record_operation(metric);
+            monitor.record_operation(&metric);
         }
 
         let stats = monitor.get_operation_stats("multi_op");
@@ -389,7 +419,7 @@ mod tests {
                     Some("Error".to_string())
                 },
             };
-            monitor.record_operation(metric);
+            monitor.record_operation(&metric);
         }
 
         let all_stats = monitor.get_all_stats();
@@ -427,7 +457,7 @@ mod tests {
                     Some("Error".to_string())
                 },
             };
-            monitor.record_operation(metric);
+            monitor.record_operation(&metric);
         }
 
         let summary = monitor.get_summary();
@@ -446,7 +476,7 @@ mod tests {
         assert_eq!(summary.total_operations, 0);
         assert_eq!(summary.total_successful, 0);
         assert_eq!(summary.total_failed, 0);
-        assert_eq!(summary.overall_success_rate, 0.0);
+        assert!((summary.overall_success_rate - 0.0).abs() < f64::EPSILON);
         assert_eq!(summary.operation_count, 0);
     }
 
@@ -462,7 +492,7 @@ mod tests {
             success: false,
             error_message: Some("Test failure".to_string()),
         };
-        monitor.record_operation(metric);
+        monitor.record_operation(&metric);
 
         let stats = monitor.get_operation_stats("test_failure");
         assert!(stats.is_some());
@@ -504,7 +534,7 @@ mod tests {
             success: true,
             error_message: None,
         };
-        monitor1.record_operation(metric);
+        monitor1.record_operation(&metric);
 
         // Clone the monitor
         let monitor2 = monitor1.clone();

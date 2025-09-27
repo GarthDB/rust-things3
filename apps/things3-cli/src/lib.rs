@@ -28,7 +28,7 @@ pub struct Cli {
     pub command: Commands,
 }
 
-#[derive(Subcommand, Debug, PartialEq)]
+#[derive(Subcommand, Debug, PartialEq, Eq)]
 pub enum Commands {
     /// Get inbox tasks
     Inbox {
@@ -71,6 +71,10 @@ pub enum Commands {
     Health,
 }
 
+/// Print tasks to the given writer
+///
+/// # Errors
+/// Returns an error if writing fails
 pub fn print_tasks<W: Write>(
     _db: &ThingsDatabase,
     tasks: &[things3_core::Task],
@@ -98,6 +102,10 @@ pub fn print_tasks<W: Write>(
     Ok(())
 }
 
+/// Print projects to the given writer
+///
+/// # Errors
+/// Returns an error if writing fails
 pub fn print_projects<W: Write>(
     _db: &ThingsDatabase,
     projects: &[things3_core::Project],
@@ -125,6 +133,10 @@ pub fn print_projects<W: Write>(
     Ok(())
 }
 
+/// Print areas to the given writer
+///
+/// # Errors
+/// Returns an error if writing fails
 pub fn print_areas<W: Write>(
     _db: &ThingsDatabase,
     areas: &[things3_core::Area],
@@ -149,6 +161,10 @@ pub fn print_areas<W: Write>(
     Ok(())
 }
 
+/// Perform a health check on the database
+///
+/// # Errors
+/// Returns an error if the database is not accessible
 pub fn health_check(db: &ThingsDatabase) -> Result<()> {
     println!("🔍 Checking Things 3 database connection...");
 
@@ -169,6 +185,10 @@ pub fn health_check(db: &ThingsDatabase) -> Result<()> {
     Ok(())
 }
 
+/// Start the MCP server
+///
+/// # Errors
+/// Returns an error if the server fails to start
 pub fn start_mcp_server(db: ThingsDatabase, config: ThingsConfig) -> Result<()> {
     println!("🚀 Starting MCP server...");
 
