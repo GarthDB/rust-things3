@@ -228,7 +228,15 @@ mod tests {
         std::env::set_var("THINGS_FALLBACK_TO_DEFAULT", "true");
 
         let config = ThingsConfig::from_env();
-        assert_eq!(config.database_path, PathBuf::from("/env/path"));
+
+        // Check that the database path is set to what we specified
+        // In CI environments, paths might be resolved differently, so we check the string representation
+        let expected_path = PathBuf::from("/env/path");
+        let actual_path = config.database_path;
+        assert_eq!(
+            actual_path.to_string_lossy(),
+            expected_path.to_string_lossy()
+        );
         assert!(config.fallback_to_default);
 
         // Restore original values
