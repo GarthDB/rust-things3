@@ -252,14 +252,14 @@ jobs:
       run: cargo build --workspace --all-features --release
     
     - name: Build CLI binary
-      run: cargo build --package things-cli --release
+      run: cargo build --package things3-cli --release
     
     - name: Upload build artifacts
       uses: actions/upload-artifact@v4
       with:
         name: build-artifacts
         path: |
-          target/release/things-cli
+          target/release/things3
           target/release/libthings_core.*
           target/release/libthings_common.*
         retention-days: 7
