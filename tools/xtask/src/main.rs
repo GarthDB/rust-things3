@@ -488,8 +488,12 @@ mod tests {
                 result
             );
         } else {
-            // Verify hooks directory was created
-            assert!(std::path::Path::new(".git/hooks").exists());
+            // Verify hooks directory was created (if we're in a git repository)
+            if std::path::Path::new(".git").exists() {
+                assert!(std::path::Path::new(".git/hooks").exists());
+            } else {
+                println!("Warning: Not in a git repository, skipping hooks directory check");
+            }
         }
 
         // Restore original directory - handle potential errors gracefully
