@@ -807,6 +807,14 @@ mod tests {
                 .unwrap_or_else(|_| "NOT_SET".to_string());
             println!("Environment variable set to: '{}'", env_value);
 
+            // Double-check the environment variable is still set right before calling from_env
+            let env_value_check = std::env::var("THINGS_FALLBACK_TO_DEFAULT")
+                .unwrap_or_else(|_| "NOT_SET".to_string());
+            println!(
+                "Environment variable check before from_env: '{}'",
+                env_value_check
+            );
+
             let config = ThingsConfig::from_env();
 
             // Debug: print what we're testing

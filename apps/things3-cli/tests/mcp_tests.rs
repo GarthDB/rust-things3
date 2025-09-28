@@ -2703,3 +2703,93 @@ async fn test_all_error_variants_to_resource_result() {
         }
     }
 }
+
+#[tokio::test]
+async fn test_mcp_server_with_custom_middleware() {
+    use things3_cli::mcp::middleware::MiddlewareConfig;
+
+    let temp_file = NamedTempFile::new().unwrap();
+    let db_path = temp_file.path();
+    create_comprehensive_test_database(db_path);
+
+    let db = ThingsDatabase::new(db_path).unwrap();
+    let config = ThingsConfig::new(db_path, false);
+    let middleware_config = MiddlewareConfig::default();
+
+    let server = ThingsMcpServer::with_middleware_config(db, config, middleware_config);
+    assert!(!server.middleware_chain().is_empty());
+}
+
+#[tokio::test]
+async fn test_call_tool_with_fallback() {
+    let server = create_test_mcp_server();
+
+    // Test with a valid tool
+    let request = CallToolRequest {
+        name: "get_inbox".to_string(),
+        arguments: Some(json!({"limit": 5})),
+    };
+
+    let result = server.call_tool_with_fallback(request).await;
+    assert!(!result.is_error);
+    assert!(!result.content.is_empty());
+
+    // Test with an invalid tool
+    let request = CallToolRequest {
+        name: "nonexistent_tool".to_string(),
+        arguments: None,
+    };
+
+    let result = server.call_tool_with_fallback(request).await;
+    assert!(result.is_error);
+}
+
+#[tokio::test]
+async fn test_read_resource_with_fallback() {
+    let server = create_test_mcp_server();
+
+    // Test with a valid resource
+    let request = things3_cli::mcp::ReadResourceRequest {
+        uri: "things://inbox".to_string(),
+    };
+
+    let result = server.read_resource_with_fallback(request).await;
+    assert!(!result.contents.is_empty());
+
+    // Test with an invalid resource
+    let request = things3_cli::mcp::ReadResourceRequest {
+        uri: "things://nonexistent".to_string(),
+    };
+
+    let result = server.read_resource_with_fallback(request).await;
+    // The fallback should return an error message, not empty contents
+    assert!(!result.contents.is_empty());
+    let Content::Text { text } = &result.contents[0];
+    assert!(text.contains("not found"));
+}
+
+#[tokio::test]
+async fn test_get_prompt_with_fallback() {
+    let server = create_test_mcp_server();
+
+    // Test with a valid prompt
+    let request = things3_cli::mcp::GetPromptRequest {
+        name: "task_review".to_string(),
+        arguments: Some(json!({"task_title": "Test Task", "task_notes": "Test notes"})),
+    };
+
+    let result = server.get_prompt_with_fallback(request).await;
+    assert!(!result.is_error);
+    assert!(!result.content.is_empty());
+
+    // Test with an invalid prompt
+    let request = things3_cli::mcp::GetPromptRequest {
+        name: "nonexistent_prompt".to_string(),
+        arguments: None,
+    };
+
+    let result = server.get_prompt_with_fallback(request).await;
+    assert!(result.is_error);
+    let Content::Text { text } = &result.content[0];
+    assert!(text.contains("not found"));
+}
