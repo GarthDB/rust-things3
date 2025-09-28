@@ -1,13 +1,420 @@
 //! MCP (Model Context Protocol) server implementation for Things 3 integration
 
-use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::sync::Arc;
 use things3_core::{
     BackupManager, DataExporter, PerformanceMonitor, ThingsCache, ThingsConfig, ThingsDatabase,
+    ThingsError,
 };
+use thiserror::Error;
 use tokio::sync::Mutex;
+
+/// MCP-specific error types for better error handling and user experience
+#[derive(Error, Debug)]
+pub enum McpError {
+    #[error("Tool not found: {tool_name}")]
+    ToolNotFound { tool_name: String },
+
+    #[error("Resource not found: {uri}")]
+    ResourceNotFound { uri: String },
+
+    #[error("Prompt not found: {prompt_name}")]
+    PromptNotFound { prompt_name: String },
+
+    #[error("Invalid parameter: {parameter_name} - {message}")]
+    InvalidParameter {
+        parameter_name: String,
+        message: String,
+    },
+
+    #[error("Missing required parameter: {parameter_name}")]
+    MissingParameter { parameter_name: String },
+
+    #[error("Invalid format: {format} - supported formats: {supported}")]
+    InvalidFormat { format: String, supported: String },
+
+    #[error("Invalid data type: {data_type} - supported types: {supported}")]
+    InvalidDataType {
+        data_type: String,
+        supported: String,
+    },
+
+    #[error("Database operation failed: {operation}")]
+    DatabaseOperationFailed {
+        operation: String,
+        source: ThingsError,
+    },
+
+    #[error("Backup operation failed: {operation}")]
+    BackupOperationFailed {
+        operation: String,
+        source: ThingsError,
+    },
+
+    #[error("Export operation failed: {operation}")]
+    ExportOperationFailed {
+        operation: String,
+        source: ThingsError,
+    },
+
+    #[error("Performance monitoring failed: {operation}")]
+    PerformanceMonitoringFailed {
+        operation: String,
+        source: ThingsError,
+    },
+
+    #[error("Cache operation failed: {operation}")]
+    CacheOperationFailed {
+        operation: String,
+        source: ThingsError,
+    },
+
+    #[error("Serialization failed: {operation}")]
+    SerializationFailed {
+        operation: String,
+        source: serde_json::Error,
+    },
+
+    #[error("IO operation failed: {operation}")]
+    IoOperationFailed {
+        operation: String,
+        source: std::io::Error,
+    },
+
+    #[error("Configuration error: {message}")]
+    ConfigurationError { message: String },
+
+    #[error("Validation error: {message}")]
+    ValidationError { message: String },
+
+    #[error("Internal error: {message}")]
+    InternalError { message: String },
+}
+
+impl McpError {
+    /// Create a tool not found error
+    pub fn tool_not_found(tool_name: impl Into<String>) -> Self {
+        Self::ToolNotFound {
+            tool_name: tool_name.into(),
+        }
+    }
+
+    /// Create a resource not found error
+    pub fn resource_not_found(uri: impl Into<String>) -> Self {
+        Self::ResourceNotFound { uri: uri.into() }
+    }
+
+    /// Create a prompt not found error
+    pub fn prompt_not_found(prompt_name: impl Into<String>) -> Self {
+        Self::PromptNotFound {
+            prompt_name: prompt_name.into(),
+        }
+    }
+
+    /// Create an invalid parameter error
+    pub fn invalid_parameter(
+        parameter_name: impl Into<String>,
+        message: impl Into<String>,
+    ) -> Self {
+        Self::InvalidParameter {
+            parameter_name: parameter_name.into(),
+            message: message.into(),
+        }
+    }
+
+    /// Create a missing parameter error
+    pub fn missing_parameter(parameter_name: impl Into<String>) -> Self {
+        Self::MissingParameter {
+            parameter_name: parameter_name.into(),
+        }
+    }
+
+    /// Create an invalid format error
+    pub fn invalid_format(format: impl Into<String>, supported: impl Into<String>) -> Self {
+        Self::InvalidFormat {
+            format: format.into(),
+            supported: supported.into(),
+        }
+    }
+
+    /// Create an invalid data type error
+    pub fn invalid_data_type(data_type: impl Into<String>, supported: impl Into<String>) -> Self {
+        Self::InvalidDataType {
+            data_type: data_type.into(),
+            supported: supported.into(),
+        }
+    }
+
+    /// Create a database operation failed error
+    pub fn database_operation_failed(operation: impl Into<String>, source: ThingsError) -> Self {
+        Self::DatabaseOperationFailed {
+            operation: operation.into(),
+            source,
+        }
+    }
+
+    /// Create a backup operation failed error
+    pub fn backup_operation_failed(operation: impl Into<String>, source: ThingsError) -> Self {
+        Self::BackupOperationFailed {
+            operation: operation.into(),
+            source,
+        }
+    }
+
+    /// Create an export operation failed error
+    pub fn export_operation_failed(operation: impl Into<String>, source: ThingsError) -> Self {
+        Self::ExportOperationFailed {
+            operation: operation.into(),
+            source,
+        }
+    }
+
+    /// Create a performance monitoring failed error
+    pub fn performance_monitoring_failed(
+        operation: impl Into<String>,
+        source: ThingsError,
+    ) -> Self {
+        Self::PerformanceMonitoringFailed {
+            operation: operation.into(),
+            source,
+        }
+    }
+
+    /// Create a cache operation failed error
+    pub fn cache_operation_failed(operation: impl Into<String>, source: ThingsError) -> Self {
+        Self::CacheOperationFailed {
+            operation: operation.into(),
+            source,
+        }
+    }
+
+    /// Create a serialization failed error
+    pub fn serialization_failed(operation: impl Into<String>, source: serde_json::Error) -> Self {
+        Self::SerializationFailed {
+            operation: operation.into(),
+            source,
+        }
+    }
+
+    /// Create an IO operation failed error
+    pub fn io_operation_failed(operation: impl Into<String>, source: std::io::Error) -> Self {
+        Self::IoOperationFailed {
+            operation: operation.into(),
+            source,
+        }
+    }
+
+    /// Create a configuration error
+    pub fn configuration_error(message: impl Into<String>) -> Self {
+        Self::ConfigurationError {
+            message: message.into(),
+        }
+    }
+
+    /// Create a validation error
+    pub fn validation_error(message: impl Into<String>) -> Self {
+        Self::ValidationError {
+            message: message.into(),
+        }
+    }
+
+    /// Create an internal error
+    pub fn internal_error(message: impl Into<String>) -> Self {
+        Self::InternalError {
+            message: message.into(),
+        }
+    }
+
+    /// Convert error to MCP call result
+    #[must_use]
+    pub fn to_call_result(self) -> CallToolResult {
+        let error_message = match &self {
+            McpError::ToolNotFound { tool_name } => {
+                format!("Tool '{tool_name}' not found. Available tools can be listed using the list_tools method.")
+            }
+            McpError::ResourceNotFound { uri } => {
+                format!("Resource '{uri}' not found. Available resources can be listed using the list_resources method.")
+            }
+            McpError::PromptNotFound { prompt_name } => {
+                format!("Prompt '{prompt_name}' not found. Available prompts can be listed using the list_prompts method.")
+            }
+            McpError::InvalidParameter {
+                parameter_name,
+                message,
+            } => {
+                format!("Invalid parameter '{parameter_name}': {message}. Please check the parameter format and try again.")
+            }
+            McpError::MissingParameter { parameter_name } => {
+                format!("Missing required parameter '{parameter_name}'. Please provide this parameter and try again.")
+            }
+            McpError::InvalidFormat { format, supported } => {
+                format!("Invalid format '{format}'. Supported formats: {supported}. Please use one of the supported formats.")
+            }
+            McpError::InvalidDataType {
+                data_type,
+                supported,
+            } => {
+                format!("Invalid data type '{data_type}'. Supported types: {supported}. Please use one of the supported types.")
+            }
+            McpError::DatabaseOperationFailed { operation, source } => {
+                format!("Database operation '{operation}' failed: {source}. Please check your database connection and try again.")
+            }
+            McpError::BackupOperationFailed { operation, source } => {
+                format!("Backup operation '{operation}' failed: {source}. Please check backup permissions and try again.")
+            }
+            McpError::ExportOperationFailed { operation, source } => {
+                format!("Export operation '{operation}' failed: {source}. Please check export parameters and try again.")
+            }
+            McpError::PerformanceMonitoringFailed { operation, source } => {
+                format!("Performance monitoring '{operation}' failed: {source}. Please try again later.")
+            }
+            McpError::CacheOperationFailed { operation, source } => {
+                format!("Cache operation '{operation}' failed: {source}. Please try again later.")
+            }
+            McpError::SerializationFailed { operation, source } => {
+                format!("Serialization '{operation}' failed: {source}. Please check data format and try again.")
+            }
+            McpError::IoOperationFailed { operation, source } => {
+                format!("IO operation '{operation}' failed: {source}. Please check file permissions and try again.")
+            }
+            McpError::ConfigurationError { message } => {
+                format!("Configuration error: {message}. Please check your configuration and try again.")
+            }
+            McpError::ValidationError { message } => {
+                format!("Validation error: {message}. Please check your input and try again.")
+            }
+            McpError::InternalError { message } => {
+                format!("Internal error: {message}. Please try again later or contact support if the issue persists.")
+            }
+        };
+
+        CallToolResult {
+            content: vec![Content::Text {
+                text: error_message,
+            }],
+            is_error: true,
+        }
+    }
+
+    /// Convert error to MCP prompt result
+    #[must_use]
+    pub fn to_prompt_result(self) -> GetPromptResult {
+        let error_message = match &self {
+            McpError::PromptNotFound { prompt_name } => {
+                format!("Prompt '{prompt_name}' not found. Available prompts can be listed using the list_prompts method.")
+            }
+            McpError::InvalidParameter {
+                parameter_name,
+                message,
+            } => {
+                format!("Invalid parameter '{parameter_name}': {message}. Please check the parameter format and try again.")
+            }
+            McpError::MissingParameter { parameter_name } => {
+                format!("Missing required parameter '{parameter_name}'. Please provide this parameter and try again.")
+            }
+            McpError::DatabaseOperationFailed { operation, source } => {
+                format!("Database operation '{operation}' failed: {source}. Please check your database connection and try again.")
+            }
+            McpError::SerializationFailed { operation, source } => {
+                format!("Serialization '{operation}' failed: {source}. Please check data format and try again.")
+            }
+            McpError::ValidationError { message } => {
+                format!("Validation error: {message}. Please check your input and try again.")
+            }
+            McpError::InternalError { message } => {
+                format!("Internal error: {message}. Please try again later or contact support if the issue persists.")
+            }
+            _ => {
+                format!("Error: {self}. Please try again later.")
+            }
+        };
+
+        GetPromptResult {
+            content: vec![Content::Text {
+                text: error_message,
+            }],
+            is_error: true,
+        }
+    }
+
+    /// Convert error to MCP resource result
+    #[must_use]
+    pub fn to_resource_result(self) -> ReadResourceResult {
+        let error_message = match &self {
+            McpError::ResourceNotFound { uri } => {
+                format!("Resource '{uri}' not found. Available resources can be listed using the list_resources method.")
+            }
+            McpError::DatabaseOperationFailed { operation, source } => {
+                format!("Database operation '{operation}' failed: {source}. Please check your database connection and try again.")
+            }
+            McpError::SerializationFailed { operation, source } => {
+                format!("Serialization '{operation}' failed: {source}. Please check data format and try again.")
+            }
+            McpError::InternalError { message } => {
+                format!("Internal error: {message}. Please try again later or contact support if the issue persists.")
+            }
+            _ => {
+                format!("Error: {self}. Please try again later.")
+            }
+        };
+
+        ReadResourceResult {
+            contents: vec![Content::Text {
+                text: error_message,
+            }],
+        }
+    }
+}
+
+/// Result type alias for MCP operations
+pub type McpResult<T> = std::result::Result<T, McpError>;
+
+/// From trait implementations for common error types
+impl From<ThingsError> for McpError {
+    fn from(error: ThingsError) -> Self {
+        match error {
+            ThingsError::Database(e) => {
+                McpError::database_operation_failed("database operation", ThingsError::Database(e))
+            }
+            ThingsError::Serialization(e) => McpError::serialization_failed("serialization", e),
+            ThingsError::Io(e) => McpError::io_operation_failed("io operation", e),
+            ThingsError::DatabaseNotFound { path } => {
+                McpError::configuration_error(format!("Database not found at: {path}"))
+            }
+            ThingsError::InvalidUuid { uuid } => {
+                McpError::validation_error(format!("Invalid UUID format: {uuid}"))
+            }
+            ThingsError::InvalidDate { date } => {
+                McpError::validation_error(format!("Invalid date format: {date}"))
+            }
+            ThingsError::TaskNotFound { uuid } => {
+                McpError::validation_error(format!("Task not found: {uuid}"))
+            }
+            ThingsError::ProjectNotFound { uuid } => {
+                McpError::validation_error(format!("Project not found: {uuid}"))
+            }
+            ThingsError::AreaNotFound { uuid } => {
+                McpError::validation_error(format!("Area not found: {uuid}"))
+            }
+            ThingsError::Validation { message } => McpError::validation_error(message),
+            ThingsError::Configuration { message } => McpError::configuration_error(message),
+            ThingsError::Unknown { message } => McpError::internal_error(message),
+        }
+    }
+}
+
+impl From<serde_json::Error> for McpError {
+    fn from(error: serde_json::Error) -> Self {
+        McpError::serialization_failed("json serialization", error)
+    }
+}
+
+impl From<std::io::Error> for McpError {
+    fn from(error: std::io::Error) -> Self {
+        McpError::io_operation_failed("file operation", error)
+    }
+}
 
 /// Simplified MCP types for our implementation
 #[derive(Debug, Serialize, Deserialize)]
@@ -123,7 +530,7 @@ impl ThingsMcpServer {
     ///
     /// # Errors
     /// Returns an error if tool generation fails
-    pub fn list_tools(&self) -> Result<ListToolsResult> {
+    pub fn list_tools(&self) -> McpResult<ListToolsResult> {
         Ok(ListToolsResult {
             tools: Self::get_available_tools(),
         })
@@ -133,15 +540,26 @@ impl ThingsMcpServer {
     ///
     /// # Errors
     /// Returns an error if tool execution fails or tool is not found
-    pub async fn call_tool(&self, request: CallToolRequest) -> Result<CallToolResult> {
+    pub async fn call_tool(&self, request: CallToolRequest) -> McpResult<CallToolResult> {
         self.handle_tool_call(request).await
+    }
+
+    /// Call a specific MCP tool with fallback error handling
+    ///
+    /// This method provides backward compatibility by converting `McpError` to `CallToolResult`
+    /// for cases where the caller expects a `CallToolResult` even on error
+    pub async fn call_tool_with_fallback(&self, request: CallToolRequest) -> CallToolResult {
+        match self.handle_tool_call(request).await {
+            Ok(result) => result,
+            Err(error) => error.to_call_result(),
+        }
     }
 
     /// List available MCP resources
     ///
     /// # Errors
     /// Returns an error if resource generation fails
-    pub fn list_resources(&self) -> Result<ListResourcesResult> {
+    pub fn list_resources(&self) -> McpResult<ListResourcesResult> {
         Ok(ListResourcesResult {
             resources: Self::get_available_resources(),
         })
@@ -151,15 +569,32 @@ impl ThingsMcpServer {
     ///
     /// # Errors
     /// Returns an error if resource reading fails or resource is not found
-    pub async fn read_resource(&self, request: ReadResourceRequest) -> Result<ReadResourceResult> {
+    pub async fn read_resource(
+        &self,
+        request: ReadResourceRequest,
+    ) -> McpResult<ReadResourceResult> {
         self.handle_resource_read(request).await
+    }
+
+    /// Read a specific MCP resource with fallback error handling
+    ///
+    /// This method provides backward compatibility by converting `McpError` to `ReadResourceResult`
+    /// for cases where the caller expects a `ReadResourceResult` even on error
+    pub async fn read_resource_with_fallback(
+        &self,
+        request: ReadResourceRequest,
+    ) -> ReadResourceResult {
+        match self.handle_resource_read(request).await {
+            Ok(result) => result,
+            Err(error) => error.to_resource_result(),
+        }
     }
 
     /// List available MCP prompts
     ///
     /// # Errors
     /// Returns an error if prompt generation fails
-    pub fn list_prompts(&self) -> Result<ListPromptsResult> {
+    pub fn list_prompts(&self) -> McpResult<ListPromptsResult> {
         Ok(ListPromptsResult {
             prompts: Self::get_available_prompts(),
         })
@@ -169,8 +604,19 @@ impl ThingsMcpServer {
     ///
     /// # Errors
     /// Returns an error if prompt retrieval fails or prompt is not found
-    pub async fn get_prompt(&self, request: GetPromptRequest) -> Result<GetPromptResult> {
+    pub async fn get_prompt(&self, request: GetPromptRequest) -> McpResult<GetPromptResult> {
         self.handle_prompt_request(request).await
+    }
+
+    /// Get a specific MCP prompt with fallback error handling
+    ///
+    /// This method provides backward compatibility by converting `McpError` to `GetPromptResult`
+    /// for cases where the caller expects a `GetPromptResult` even on error
+    pub async fn get_prompt_with_fallback(&self, request: GetPromptRequest) -> GetPromptResult {
+        match self.handle_prompt_request(request).await {
+            Ok(result) => result,
+            Err(error) => error.to_prompt_result(),
+        }
     }
 
     /// Get available MCP tools
@@ -472,7 +918,7 @@ impl ThingsMcpServer {
     }
 
     /// Handle tool call
-    async fn handle_tool_call(&self, request: CallToolRequest) -> Result<CallToolResult> {
+    async fn handle_tool_call(&self, request: CallToolRequest) -> McpResult<CallToolResult> {
         let tool_name = &request.name;
         let arguments = request.arguments.unwrap_or_default();
 
@@ -495,98 +941,130 @@ impl ThingsMcpServer {
             "get_system_metrics" => self.handle_get_system_metrics(arguments).await,
             "get_cache_stats" => self.handle_get_cache_stats(arguments).await,
             _ => {
-                return Ok(CallToolResult {
-                    content: vec![Content::Text {
-                        text: format!("Unknown tool: {tool_name}"),
-                    }],
-                    is_error: true,
-                });
+                return Err(McpError::tool_not_found(tool_name));
             }
         };
 
-        match result {
-            Ok(call_result) => Ok(call_result),
-            Err(e) => Ok(CallToolResult {
-                content: vec![Content::Text {
-                    text: format!("Error: {e}"),
-                }],
-                is_error: true,
-            }),
-        }
+        result
     }
 
-    async fn handle_get_inbox(&self, args: Value) -> Result<CallToolResult> {
+    async fn handle_get_inbox(&self, args: Value) -> McpResult<CallToolResult> {
         let limit = args
             .get("limit")
             .and_then(serde_json::Value::as_u64)
             .map(|v| usize::try_from(v).unwrap_or(usize::MAX));
-        let tasks = self.db.lock().await.get_inbox(limit)?;
-        let json = serde_json::to_string_pretty(&tasks)?;
+
+        let tasks = self
+            .db
+            .lock()
+            .await
+            .get_inbox(limit)
+            .map_err(|e| McpError::database_operation_failed("get_inbox", e))?;
+
+        let json = serde_json::to_string_pretty(&tasks)
+            .map_err(|e| McpError::serialization_failed("get_inbox serialization", e))?;
+
         Ok(CallToolResult {
             content: vec![Content::Text { text: json }],
             is_error: false,
         })
     }
 
-    async fn handle_get_today(&self, args: Value) -> Result<CallToolResult> {
+    async fn handle_get_today(&self, args: Value) -> McpResult<CallToolResult> {
         let limit = args
             .get("limit")
             .and_then(serde_json::Value::as_u64)
             .map(|v| usize::try_from(v).unwrap_or(usize::MAX));
-        let tasks = self.db.lock().await.get_today(limit)?;
-        let json = serde_json::to_string_pretty(&tasks)?;
+
+        let tasks = self
+            .db
+            .lock()
+            .await
+            .get_today(limit)
+            .map_err(|e| McpError::database_operation_failed("get_today", e))?;
+
+        let json = serde_json::to_string_pretty(&tasks)
+            .map_err(|e| McpError::serialization_failed("get_today serialization", e))?;
+
         Ok(CallToolResult {
             content: vec![Content::Text { text: json }],
             is_error: false,
         })
     }
 
-    async fn handle_get_projects(&self, args: Value) -> Result<CallToolResult> {
+    async fn handle_get_projects(&self, args: Value) -> McpResult<CallToolResult> {
         let area_uuid = args
             .get("area_uuid")
             .and_then(|v| v.as_str())
             .and_then(|s| uuid::Uuid::parse_str(s).ok());
-        let projects = self.db.lock().await.get_projects(area_uuid)?;
-        let json = serde_json::to_string_pretty(&projects)?;
+
+        let projects = self
+            .db
+            .lock()
+            .await
+            .get_projects(area_uuid)
+            .map_err(|e| McpError::database_operation_failed("get_projects", e))?;
+
+        let json = serde_json::to_string_pretty(&projects)
+            .map_err(|e| McpError::serialization_failed("get_projects serialization", e))?;
+
         Ok(CallToolResult {
             content: vec![Content::Text { text: json }],
             is_error: false,
         })
     }
 
-    async fn handle_get_areas(&self, _args: Value) -> Result<CallToolResult> {
-        let areas = self.db.lock().await.get_areas()?;
-        let json = serde_json::to_string_pretty(&areas)?;
+    async fn handle_get_areas(&self, _args: Value) -> McpResult<CallToolResult> {
+        let areas = self
+            .db
+            .lock()
+            .await
+            .get_areas()
+            .map_err(|e| McpError::database_operation_failed("get_areas", e))?;
+
+        let json = serde_json::to_string_pretty(&areas)
+            .map_err(|e| McpError::serialization_failed("get_areas serialization", e))?;
+
         Ok(CallToolResult {
             content: vec![Content::Text { text: json }],
             is_error: false,
         })
     }
 
-    async fn handle_search_tasks(&self, args: Value) -> Result<CallToolResult> {
+    async fn handle_search_tasks(&self, args: Value) -> McpResult<CallToolResult> {
         let query = args
             .get("query")
             .and_then(|v| v.as_str())
-            .ok_or_else(|| anyhow::anyhow!("Missing required parameter: query"))?;
+            .ok_or_else(|| McpError::missing_parameter("query"))?;
+
         let limit = args
             .get("limit")
             .and_then(serde_json::Value::as_u64)
             .map(|v| usize::try_from(v).unwrap_or(usize::MAX));
-        let tasks = self.db.lock().await.search_tasks(query, limit)?;
-        let json = serde_json::to_string_pretty(&tasks)?;
+
+        let tasks = self
+            .db
+            .lock()
+            .await
+            .search_tasks(query, limit)
+            .map_err(|e| McpError::database_operation_failed("search_tasks", e))?;
+
+        let json = serde_json::to_string_pretty(&tasks)
+            .map_err(|e| McpError::serialization_failed("search_tasks serialization", e))?;
+
         Ok(CallToolResult {
             content: vec![Content::Text { text: json }],
             is_error: false,
         })
     }
 
-    fn handle_create_task(args: &Value) -> Result<CallToolResult> {
+    fn handle_create_task(args: &Value) -> McpResult<CallToolResult> {
         // Note: This is a placeholder - actual task creation would need to be implemented
         // in the things-core library
         let title = args
             .get("title")
             .and_then(|v| v.as_str())
-            .ok_or_else(|| anyhow::anyhow!("Missing required parameter: title"))?;
+            .ok_or_else(|| McpError::missing_parameter("title"))?;
 
         let response = serde_json::json!({
             "message": "Task creation not yet implemented",
@@ -596,19 +1074,20 @@ impl ThingsMcpServer {
 
         Ok(CallToolResult {
             content: vec![Content::Text {
-                text: serde_json::to_string_pretty(&response)?,
+                text: serde_json::to_string_pretty(&response)
+                    .map_err(|e| McpError::serialization_failed("create_task response", e))?,
             }],
             is_error: false,
         })
     }
 
-    fn handle_update_task(args: &Value) -> Result<CallToolResult> {
+    fn handle_update_task(args: &Value) -> McpResult<CallToolResult> {
         // Note: This is a placeholder - actual task updating would need to be implemented
         // in the things-core library
         let uuid = args
             .get("uuid")
             .and_then(|v| v.as_str())
-            .ok_or_else(|| anyhow::anyhow!("Missing required parameter: uuid"))?;
+            .ok_or_else(|| McpError::missing_parameter("uuid"))?;
 
         let response = serde_json::json!({
             "message": "Task updating not yet implemented",
@@ -618,13 +1097,14 @@ impl ThingsMcpServer {
 
         Ok(CallToolResult {
             content: vec![Content::Text {
-                text: serde_json::to_string_pretty(&response)?,
+                text: serde_json::to_string_pretty(&response)
+                    .map_err(|e| McpError::serialization_failed("update_task response", e))?,
             }],
             is_error: false,
         })
     }
 
-    async fn handle_get_productivity_metrics(&self, args: Value) -> Result<CallToolResult> {
+    async fn handle_get_productivity_metrics(&self, args: Value) -> McpResult<CallToolResult> {
         let days = usize::try_from(
             args.get("days")
                 .and_then(serde_json::Value::as_u64)
@@ -634,10 +1114,18 @@ impl ThingsMcpServer {
 
         // Get various metrics
         let db = self.db.lock().await;
-        let inbox_tasks = db.get_inbox(None)?;
-        let today_tasks = db.get_today(None)?;
-        let projects = db.get_projects(None)?;
-        let areas = db.get_areas()?;
+        let inbox_tasks = db
+            .get_inbox(None)
+            .map_err(|e| McpError::database_operation_failed("get_inbox for metrics", e))?;
+        let today_tasks = db
+            .get_today(None)
+            .map_err(|e| McpError::database_operation_failed("get_today for metrics", e))?;
+        let projects = db
+            .get_projects(None)
+            .map_err(|e| McpError::database_operation_failed("get_projects for metrics", e))?;
+        let areas = db
+            .get_areas()
+            .map_err(|e| McpError::database_operation_failed("get_areas for metrics", e))?;
         drop(db);
 
         let metrics = serde_json::json!({
@@ -653,45 +1141,63 @@ impl ThingsMcpServer {
 
         Ok(CallToolResult {
             content: vec![Content::Text {
-                text: serde_json::to_string_pretty(&metrics)?,
+                text: serde_json::to_string_pretty(&metrics).map_err(|e| {
+                    McpError::serialization_failed("productivity_metrics serialization", e)
+                })?,
             }],
             is_error: false,
         })
     }
 
-    async fn handle_export_data(&self, args: Value) -> Result<CallToolResult> {
+    async fn handle_export_data(&self, args: Value) -> McpResult<CallToolResult> {
         let format = args
             .get("format")
             .and_then(|v| v.as_str())
-            .ok_or_else(|| anyhow::anyhow!("Missing required parameter: format"))?;
+            .ok_or_else(|| McpError::missing_parameter("format"))?;
         let data_type = args
             .get("data_type")
             .and_then(|v| v.as_str())
-            .ok_or_else(|| anyhow::anyhow!("Missing required parameter: data_type"))?;
+            .ok_or_else(|| McpError::missing_parameter("data_type"))?;
 
         let db = self.db.lock().await;
         let export_data = match data_type {
             "tasks" => {
-                let inbox = db.get_inbox(None)?;
-                let today = db.get_today(None)?;
+                let inbox = db
+                    .get_inbox(None)
+                    .map_err(|e| McpError::database_operation_failed("get_inbox for export", e))?;
+                let today = db
+                    .get_today(None)
+                    .map_err(|e| McpError::database_operation_failed("get_today for export", e))?;
                 serde_json::json!({
                     "inbox": inbox,
                     "today": today
                 })
             }
             "projects" => {
-                let projects = db.get_projects(None)?;
+                let projects = db.get_projects(None).map_err(|e| {
+                    McpError::database_operation_failed("get_projects for export", e)
+                })?;
                 serde_json::json!({ "projects": projects })
             }
             "areas" => {
-                let areas = db.get_areas()?;
+                let areas = db
+                    .get_areas()
+                    .map_err(|e| McpError::database_operation_failed("get_areas for export", e))?;
                 serde_json::json!({ "areas": areas })
             }
             "all" => {
-                let inbox = db.get_inbox(None)?;
-                let today = db.get_today(None)?;
-                let projects = db.get_projects(None)?;
-                let areas = db.get_areas()?;
+                let inbox = db
+                    .get_inbox(None)
+                    .map_err(|e| McpError::database_operation_failed("get_inbox for export", e))?;
+                let today = db
+                    .get_today(None)
+                    .map_err(|e| McpError::database_operation_failed("get_today for export", e))?;
+                let projects = db.get_projects(None).map_err(|e| {
+                    McpError::database_operation_failed("get_projects for export", e)
+                })?;
+                let areas = db
+                    .get_areas()
+                    .map_err(|e| McpError::database_operation_failed("get_areas for export", e))?;
                 drop(db);
                 serde_json::json!({
                     "inbox": inbox,
@@ -700,14 +1206,20 @@ impl ThingsMcpServer {
                     "areas": areas
                 })
             }
-            _ => return Err(anyhow::anyhow!("Invalid data_type: {data_type}")),
+            _ => {
+                return Err(McpError::invalid_data_type(
+                    data_type,
+                    "tasks, projects, areas, all",
+                ))
+            }
         };
 
         let result = match format {
-            "json" => serde_json::to_string_pretty(&export_data)?,
+            "json" => serde_json::to_string_pretty(&export_data)
+                .map_err(|e| McpError::serialization_failed("export_data serialization", e))?,
             "csv" => "CSV export not yet implemented".to_string(),
             "markdown" => "Markdown export not yet implemented".to_string(),
-            _ => return Err(anyhow::anyhow!("Invalid format: {}", format)),
+            _ => return Err(McpError::invalid_format(format, "json, csv, markdown")),
         };
 
         Ok(CallToolResult {
@@ -716,11 +1228,11 @@ impl ThingsMcpServer {
         })
     }
 
-    fn handle_bulk_create_tasks(args: &Value) -> Result<CallToolResult> {
+    fn handle_bulk_create_tasks(args: &Value) -> McpResult<CallToolResult> {
         let tasks = args
             .get("tasks")
             .and_then(|v| v.as_array())
-            .ok_or_else(|| anyhow::anyhow!("Missing required parameter: tasks"))?;
+            .ok_or_else(|| McpError::missing_parameter("tasks"))?;
 
         let response = serde_json::json!({
             "message": "Bulk task creation not yet implemented",
@@ -730,13 +1242,14 @@ impl ThingsMcpServer {
 
         Ok(CallToolResult {
             content: vec![Content::Text {
-                text: serde_json::to_string_pretty(&response)?,
+                text: serde_json::to_string_pretty(&response)
+                    .map_err(|e| McpError::serialization_failed("bulk_create_tasks response", e))?,
             }],
             is_error: false,
         })
     }
 
-    async fn handle_get_recent_tasks(&self, args: Value) -> Result<CallToolResult> {
+    async fn handle_get_recent_tasks(&self, args: Value) -> McpResult<CallToolResult> {
         let limit = args
             .get("limit")
             .and_then(serde_json::Value::as_u64)
@@ -750,7 +1263,12 @@ impl ThingsMcpServer {
 
         // For now, return inbox tasks as a proxy for recent tasks
         // In a real implementation, this would query by creation/modification date
-        let tasks = self.db.lock().await.get_inbox(limit)?;
+        let tasks = self
+            .db
+            .lock()
+            .await
+            .get_inbox(limit)
+            .map_err(|e| McpError::database_operation_failed("get_recent_tasks", e))?;
 
         let response = serde_json::json!({
             "message": "Recent tasks (using inbox as proxy)",
@@ -760,17 +1278,18 @@ impl ThingsMcpServer {
 
         Ok(CallToolResult {
             content: vec![Content::Text {
-                text: serde_json::to_string_pretty(&response)?,
+                text: serde_json::to_string_pretty(&response)
+                    .map_err(|e| McpError::serialization_failed("get_recent_tasks response", e))?,
             }],
             is_error: false,
         })
     }
 
-    async fn handle_backup_database(&self, args: Value) -> Result<CallToolResult> {
+    async fn handle_backup_database(&self, args: Value) -> McpResult<CallToolResult> {
         let backup_dir = args
             .get("backup_dir")
             .and_then(|v| v.as_str())
-            .ok_or_else(|| anyhow::anyhow!("Missing required parameter: backup_dir"))?;
+            .ok_or_else(|| McpError::missing_parameter("backup_dir"))?;
         let description = args.get("description").and_then(|v| v.as_str());
 
         let backup_path = std::path::Path::new(backup_dir);
@@ -779,7 +1298,13 @@ impl ThingsMcpServer {
             .lock()
             .await
             .create_backup(backup_path, description)
-            .await?;
+            .await
+            .map_err(|e| {
+                McpError::backup_operation_failed(
+                    "create_backup",
+                    things3_core::ThingsError::unknown(e.to_string()),
+                )
+            })?;
 
         let response = serde_json::json!({
             "message": "Backup created successfully",
@@ -790,24 +1315,31 @@ impl ThingsMcpServer {
 
         Ok(CallToolResult {
             content: vec![Content::Text {
-                text: serde_json::to_string_pretty(&response)?,
+                text: serde_json::to_string_pretty(&response)
+                    .map_err(|e| McpError::serialization_failed("backup_database response", e))?,
             }],
             is_error: false,
         })
     }
 
-    async fn handle_restore_database(&self, args: Value) -> Result<CallToolResult> {
+    async fn handle_restore_database(&self, args: Value) -> McpResult<CallToolResult> {
         let backup_path = args
             .get("backup_path")
             .and_then(|v| v.as_str())
-            .ok_or_else(|| anyhow::anyhow!("Missing required parameter: backup_path"))?;
+            .ok_or_else(|| McpError::missing_parameter("backup_path"))?;
 
         let backup_file = std::path::Path::new(backup_path);
         self.backup_manager
             .lock()
             .await
             .restore_backup(backup_file)
-            .await?;
+            .await
+            .map_err(|e| {
+                McpError::backup_operation_failed(
+                    "restore_backup",
+                    things3_core::ThingsError::unknown(e.to_string()),
+                )
+            })?;
 
         let response = serde_json::json!({
             "message": "Database restored successfully",
@@ -816,20 +1348,31 @@ impl ThingsMcpServer {
 
         Ok(CallToolResult {
             content: vec![Content::Text {
-                text: serde_json::to_string_pretty(&response)?,
+                text: serde_json::to_string_pretty(&response)
+                    .map_err(|e| McpError::serialization_failed("restore_database response", e))?,
             }],
             is_error: false,
         })
     }
 
-    async fn handle_list_backups(&self, args: Value) -> Result<CallToolResult> {
+    async fn handle_list_backups(&self, args: Value) -> McpResult<CallToolResult> {
         let backup_dir = args
             .get("backup_dir")
             .and_then(|v| v.as_str())
-            .ok_or_else(|| anyhow::anyhow!("Missing required parameter: backup_dir"))?;
+            .ok_or_else(|| McpError::missing_parameter("backup_dir"))?;
 
         let backup_path = std::path::Path::new(backup_dir);
-        let backups = self.backup_manager.lock().await.list_backups(backup_path)?;
+        let backups = self
+            .backup_manager
+            .lock()
+            .await
+            .list_backups(backup_path)
+            .map_err(|e| {
+                McpError::backup_operation_failed(
+                    "list_backups",
+                    things3_core::ThingsError::unknown(e.to_string()),
+                )
+            })?;
 
         let response = serde_json::json!({
             "backups": backups,
@@ -838,13 +1381,14 @@ impl ThingsMcpServer {
 
         Ok(CallToolResult {
             content: vec![Content::Text {
-                text: serde_json::to_string_pretty(&response)?,
+                text: serde_json::to_string_pretty(&response)
+                    .map_err(|e| McpError::serialization_failed("list_backups response", e))?,
             }],
             is_error: false,
         })
     }
 
-    async fn handle_get_performance_stats(&self, _args: Value) -> Result<CallToolResult> {
+    async fn handle_get_performance_stats(&self, _args: Value) -> McpResult<CallToolResult> {
         let monitor = self.performance_monitor.lock().await;
         let stats = monitor.get_all_stats();
         let summary = monitor.get_summary();
@@ -857,29 +1401,42 @@ impl ThingsMcpServer {
 
         Ok(CallToolResult {
             content: vec![Content::Text {
-                text: serde_json::to_string_pretty(&response)?,
+                text: serde_json::to_string_pretty(&response)
+                    .map_err(|e| McpError::serialization_failed("performance_stats response", e))?,
             }],
             is_error: false,
         })
     }
 
-    async fn handle_get_system_metrics(&self, _args: Value) -> Result<CallToolResult> {
-        let metrics = self.performance_monitor.lock().await.get_system_metrics()?;
+    async fn handle_get_system_metrics(&self, _args: Value) -> McpResult<CallToolResult> {
+        let metrics = self
+            .performance_monitor
+            .lock()
+            .await
+            .get_system_metrics()
+            .map_err(|e| {
+                McpError::performance_monitoring_failed(
+                    "get_system_metrics",
+                    things3_core::ThingsError::unknown(e.to_string()),
+                )
+            })?;
 
         Ok(CallToolResult {
             content: vec![Content::Text {
-                text: serde_json::to_string_pretty(&metrics)?,
+                text: serde_json::to_string_pretty(&metrics)
+                    .map_err(|e| McpError::serialization_failed("system_metrics response", e))?,
             }],
             is_error: false,
         })
     }
 
-    async fn handle_get_cache_stats(&self, _args: Value) -> Result<CallToolResult> {
+    async fn handle_get_cache_stats(&self, _args: Value) -> McpResult<CallToolResult> {
         let stats = self.cache.lock().await.get_stats();
 
         Ok(CallToolResult {
             content: vec![Content::Text {
-                text: serde_json::to_string_pretty(&stats)?,
+                text: serde_json::to_string_pretty(&stats)
+                    .map_err(|e| McpError::serialization_failed("cache_stats response", e))?,
             }],
             is_error: false,
         })
@@ -1015,49 +1572,36 @@ impl ThingsMcpServer {
     }
 
     /// Handle prompt request
-    async fn handle_prompt_request(&self, request: GetPromptRequest) -> Result<GetPromptResult> {
+    async fn handle_prompt_request(&self, request: GetPromptRequest) -> McpResult<GetPromptResult> {
         let prompt_name = &request.name;
         let arguments = request.arguments.unwrap_or_default();
 
-        let result = match prompt_name.as_str() {
+        match prompt_name.as_str() {
             "task_review" => self.handle_task_review_prompt(arguments).await,
             "project_planning" => self.handle_project_planning_prompt(arguments).await,
             "productivity_analysis" => self.handle_productivity_analysis_prompt(arguments).await,
             "backup_strategy" => self.handle_backup_strategy_prompt(arguments).await,
-            _ => {
-                return Ok(GetPromptResult {
-                    content: vec![Content::Text {
-                        text: format!("Unknown prompt: {prompt_name}"),
-                    }],
-                    is_error: true,
-                });
-            }
-        };
-
-        match result {
-            Ok(prompt_result) => Ok(prompt_result),
-            Err(e) => Ok(GetPromptResult {
-                content: vec![Content::Text {
-                    text: format!("Error: {e}"),
-                }],
-                is_error: true,
-            }),
+            _ => Err(McpError::prompt_not_found(prompt_name)),
         }
     }
 
     /// Handle task review prompt
-    async fn handle_task_review_prompt(&self, args: Value) -> Result<GetPromptResult> {
+    async fn handle_task_review_prompt(&self, args: Value) -> McpResult<GetPromptResult> {
         let task_title = args
             .get("task_title")
             .and_then(|v| v.as_str())
-            .ok_or_else(|| anyhow::anyhow!("Missing required parameter: task_title"))?;
+            .ok_or_else(|| McpError::missing_parameter("task_title"))?;
         let task_notes = args.get("task_notes").and_then(|v| v.as_str());
         let context = args.get("context").and_then(|v| v.as_str());
 
         // Get current data for context
         let db = self.db.lock().await;
-        let inbox_tasks = db.get_inbox(Some(5))?;
-        let today_tasks = db.get_today(Some(5))?;
+        let inbox_tasks = db
+            .get_inbox(Some(5))
+            .map_err(|e| McpError::database_operation_failed("get_inbox for task_review", e))?;
+        let today_tasks = db
+            .get_today(Some(5))
+            .map_err(|e| McpError::database_operation_failed("get_today for task_review", e))?;
         drop(db);
 
         let prompt_text = format!(
@@ -1099,11 +1643,11 @@ impl ThingsMcpServer {
     }
 
     /// Handle project planning prompt
-    async fn handle_project_planning_prompt(&self, args: Value) -> Result<GetPromptResult> {
+    async fn handle_project_planning_prompt(&self, args: Value) -> McpResult<GetPromptResult> {
         let project_title = args
             .get("project_title")
             .and_then(|v| v.as_str())
-            .ok_or_else(|| anyhow::anyhow!("Missing required parameter: project_title"))?;
+            .ok_or_else(|| McpError::missing_parameter("project_title"))?;
         let project_description = args.get("project_description").and_then(|v| v.as_str());
         let deadline = args.get("deadline").and_then(|v| v.as_str());
         let complexity = args
@@ -1113,8 +1657,12 @@ impl ThingsMcpServer {
 
         // Get current data for context
         let db = self.db.lock().await;
-        let projects = db.get_projects(None)?;
-        let areas = db.get_areas()?;
+        let projects = db.get_projects(None).map_err(|e| {
+            McpError::database_operation_failed("get_projects for project_planning", e)
+        })?;
+        let areas = db.get_areas().map_err(|e| {
+            McpError::database_operation_failed("get_areas for project_planning", e)
+        })?;
         drop(db);
 
         let prompt_text = format!(
@@ -1166,11 +1714,11 @@ impl ThingsMcpServer {
     }
 
     /// Handle productivity analysis prompt
-    async fn handle_productivity_analysis_prompt(&self, args: Value) -> Result<GetPromptResult> {
+    async fn handle_productivity_analysis_prompt(&self, args: Value) -> McpResult<GetPromptResult> {
         let time_period = args
             .get("time_period")
             .and_then(|v| v.as_str())
-            .ok_or_else(|| anyhow::anyhow!("Missing required parameter: time_period"))?;
+            .ok_or_else(|| McpError::missing_parameter("time_period"))?;
         let focus_area = args
             .get("focus_area")
             .and_then(|v| v.as_str())
@@ -1182,10 +1730,18 @@ impl ThingsMcpServer {
 
         // Get current data for analysis
         let db = self.db.lock().await;
-        let inbox_tasks = db.get_inbox(None)?;
-        let today_tasks = db.get_today(None)?;
-        let projects = db.get_projects(None)?;
-        let areas = db.get_areas()?;
+        let inbox_tasks = db.get_inbox(None).map_err(|e| {
+            McpError::database_operation_failed("get_inbox for productivity_analysis", e)
+        })?;
+        let today_tasks = db.get_today(None).map_err(|e| {
+            McpError::database_operation_failed("get_today for productivity_analysis", e)
+        })?;
+        let projects = db.get_projects(None).map_err(|e| {
+            McpError::database_operation_failed("get_projects for productivity_analysis", e)
+        })?;
+        let areas = db.get_areas().map_err(|e| {
+            McpError::database_operation_failed("get_areas for productivity_analysis", e)
+        })?;
         drop(db);
 
         let completed_tasks = projects
@@ -1262,15 +1818,15 @@ impl ThingsMcpServer {
     }
 
     /// Handle backup strategy prompt
-    async fn handle_backup_strategy_prompt(&self, args: Value) -> Result<GetPromptResult> {
+    async fn handle_backup_strategy_prompt(&self, args: Value) -> McpResult<GetPromptResult> {
         let data_volume = args
             .get("data_volume")
             .and_then(|v| v.as_str())
-            .ok_or_else(|| anyhow::anyhow!("Missing required parameter: data_volume"))?;
+            .ok_or_else(|| McpError::missing_parameter("data_volume"))?;
         let frequency = args
             .get("frequency")
             .and_then(|v| v.as_str())
-            .ok_or_else(|| anyhow::anyhow!("Missing required parameter: frequency"))?;
+            .ok_or_else(|| McpError::missing_parameter("frequency"))?;
         let retention_period = args
             .get("retention_period")
             .and_then(|v| v.as_str())
@@ -1282,8 +1838,12 @@ impl ThingsMcpServer {
 
         // Get current data for context
         let db = self.db.lock().await;
-        let projects = db.get_projects(None)?;
-        let areas = db.get_areas()?;
+        let projects = db.get_projects(None).map_err(|e| {
+            McpError::database_operation_failed("get_projects for backup_strategy", e)
+        })?;
+        let areas = db
+            .get_areas()
+            .map_err(|e| McpError::database_operation_failed("get_areas for backup_strategy", e))?;
         drop(db);
 
         let prompt_text = format!(
@@ -1389,30 +1949,46 @@ impl ThingsMcpServer {
     async fn handle_resource_read(
         &self,
         request: ReadResourceRequest,
-    ) -> Result<ReadResourceResult> {
+    ) -> McpResult<ReadResourceResult> {
         let uri = &request.uri;
 
         let db = self.db.lock().await;
         let data = match uri.as_str() {
             "things://inbox" => {
-                let tasks = db.get_inbox(None)?;
-                serde_json::to_string_pretty(&tasks)?
+                let tasks = db.get_inbox(None).map_err(|e| {
+                    McpError::database_operation_failed("get_inbox for resource", e)
+                })?;
+                serde_json::to_string_pretty(&tasks).map_err(|e| {
+                    McpError::serialization_failed("inbox resource serialization", e)
+                })?
             }
             "things://projects" => {
-                let projects = db.get_projects(None)?;
-                serde_json::to_string_pretty(&projects)?
+                let projects = db.get_projects(None).map_err(|e| {
+                    McpError::database_operation_failed("get_projects for resource", e)
+                })?;
+                serde_json::to_string_pretty(&projects).map_err(|e| {
+                    McpError::serialization_failed("projects resource serialization", e)
+                })?
             }
             "things://areas" => {
-                let areas = db.get_areas()?;
-                serde_json::to_string_pretty(&areas)?
+                let areas = db.get_areas().map_err(|e| {
+                    McpError::database_operation_failed("get_areas for resource", e)
+                })?;
+                serde_json::to_string_pretty(&areas).map_err(|e| {
+                    McpError::serialization_failed("areas resource serialization", e)
+                })?
             }
             "things://today" => {
-                let tasks = db.get_today(None)?;
+                let tasks = db.get_today(None).map_err(|e| {
+                    McpError::database_operation_failed("get_today for resource", e)
+                })?;
                 drop(db);
-                serde_json::to_string_pretty(&tasks)?
+                serde_json::to_string_pretty(&tasks).map_err(|e| {
+                    McpError::serialization_failed("today resource serialization", e)
+                })?
             }
             _ => {
-                return Err(anyhow::anyhow!("Unknown resource: {uri}"));
+                return Err(McpError::resource_not_found(uri));
             }
         };
 

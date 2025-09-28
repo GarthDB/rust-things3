@@ -3,7 +3,7 @@
 use serde_json::json;
 use std::path::Path;
 use tempfile::NamedTempFile;
-use things3_cli::mcp::{CallToolRequest, Content, ThingsMcpServer};
+use things3_cli::mcp::{CallToolRequest, Content, McpError, ThingsMcpServer};
 use things3_core::{config::ThingsConfig, database::ThingsDatabase};
 
 /// Create a test MCP server with mock database
@@ -354,14 +354,13 @@ async fn test_search_tasks_tool_missing_query() {
         arguments: Some(json!({ "limit": 5 })),
     };
 
-    let result = server.call_tool(request).await.unwrap();
-    assert!(result.is_error);
-    assert_eq!(result.content.len(), 1);
-
-    match &result.content[0] {
-        Content::Text { text } => {
-            assert!(text.contains("Missing required parameter"));
+    let result = server.call_tool(request).await;
+    assert!(result.is_err());
+    match result.unwrap_err() {
+        McpError::MissingParameter { parameter_name } => {
+            assert_eq!(parameter_name, "query");
         }
+        _ => panic!("Expected MissingParameter error"),
     }
 }
 
@@ -400,14 +399,13 @@ async fn test_create_task_tool_missing_title() {
         })),
     };
 
-    let result = server.call_tool(request).await.unwrap();
-    assert!(result.is_error);
-    assert_eq!(result.content.len(), 1);
-
-    match &result.content[0] {
-        Content::Text { text } => {
-            assert!(text.contains("Missing required parameter"));
+    let result = server.call_tool(request).await;
+    assert!(result.is_err());
+    match result.unwrap_err() {
+        McpError::MissingParameter { parameter_name } => {
+            assert_eq!(parameter_name, "title");
         }
+        _ => panic!("Expected MissingParameter error"),
     }
 }
 
@@ -446,14 +444,13 @@ async fn test_update_task_tool_missing_uuid() {
         })),
     };
 
-    let result = server.call_tool(request).await.unwrap();
-    assert!(result.is_error);
-    assert_eq!(result.content.len(), 1);
-
-    match &result.content[0] {
-        Content::Text { text } => {
-            assert!(text.contains("Missing required parameter"));
+    let result = server.call_tool(request).await;
+    assert!(result.is_err());
+    match result.unwrap_err() {
+        McpError::MissingParameter { parameter_name } => {
+            assert_eq!(parameter_name, "uuid");
         }
+        _ => panic!("Expected MissingParameter error"),
     }
 }
 
@@ -561,14 +558,13 @@ async fn test_export_data_tool_missing_parameters() {
         })),
     };
 
-    let result = server.call_tool(request).await.unwrap();
-    assert!(result.is_error);
-    assert_eq!(result.content.len(), 1);
-
-    match &result.content[0] {
-        Content::Text { text } => {
-            assert!(text.contains("Missing required parameter"));
+    let result = server.call_tool(request).await;
+    assert!(result.is_err());
+    match result.unwrap_err() {
+        McpError::MissingParameter { parameter_name } => {
+            assert_eq!(parameter_name, "data_type");
         }
+        _ => panic!("Expected MissingParameter error"),
     }
 }
 
@@ -583,14 +579,14 @@ async fn test_export_data_tool_invalid_format() {
         })),
     };
 
-    let result = server.call_tool(request).await.unwrap();
-    assert!(result.is_error);
-    assert_eq!(result.content.len(), 1);
-
-    match &result.content[0] {
-        Content::Text { text } => {
-            assert!(text.contains("Invalid format"));
+    let result = server.call_tool(request).await;
+    assert!(result.is_err());
+    match result.unwrap_err() {
+        McpError::InvalidFormat { format, supported } => {
+            assert_eq!(format, "invalid");
+            assert_eq!(supported, "json, csv, markdown");
         }
+        _ => panic!("Expected InvalidFormat error"),
     }
 }
 
@@ -628,14 +624,13 @@ async fn test_bulk_create_tasks_tool_missing_tasks() {
         arguments: Some(json!({})),
     };
 
-    let result = server.call_tool(request).await.unwrap();
-    assert!(result.is_error);
-    assert_eq!(result.content.len(), 1);
-
-    match &result.content[0] {
-        Content::Text { text } => {
-            assert!(text.contains("Missing required parameter"));
+    let result = server.call_tool(request).await;
+    assert!(result.is_err());
+    match result.unwrap_err() {
+        McpError::MissingParameter { parameter_name } => {
+            assert_eq!(parameter_name, "tasks");
         }
+        _ => panic!("Expected MissingParameter error"),
     }
 }
 
@@ -749,14 +744,13 @@ async fn test_unknown_tool() {
         arguments: None,
     };
 
-    let result = server.call_tool(request).await.unwrap();
-    assert!(result.is_error);
-    assert_eq!(result.content.len(), 1);
-
-    match &result.content[0] {
-        Content::Text { text } => {
-            assert!(text.contains("Unknown tool"));
+    let result = server.call_tool(request).await;
+    assert!(result.is_err());
+    match result.unwrap_err() {
+        McpError::ToolNotFound { tool_name } => {
+            assert_eq!(tool_name, "unknown_tool");
         }
+        _ => panic!("Expected ToolNotFound error"),
     }
 }
 
@@ -774,16 +768,15 @@ async fn test_backup_database_tool() {
         })),
     };
 
-    let result = server.call_tool(request).await.unwrap();
+    let result = server.call_tool(request).await;
     // The backup will fail because the database path doesn't exist
     // This is expected behavior in the test environment
-    assert!(result.is_error);
-    assert_eq!(result.content.len(), 1);
-
-    match &result.content[0] {
-        Content::Text { text } => {
-            assert!(text.contains("Error"));
+    assert!(result.is_err());
+    match result.unwrap_err() {
+        McpError::BackupOperationFailed { operation, .. } => {
+            assert_eq!(operation, "create_backup");
         }
+        _ => panic!("Expected BackupOperationFailed error"),
     }
 }
 
@@ -797,14 +790,13 @@ async fn test_backup_database_tool_missing_backup_dir() {
         })),
     };
 
-    let result = server.call_tool(request).await.unwrap();
-    assert!(result.is_error);
-    assert_eq!(result.content.len(), 1);
-
-    match &result.content[0] {
-        Content::Text { text } => {
-            assert!(text.contains("Missing required parameter"));
+    let result = server.call_tool(request).await;
+    assert!(result.is_err());
+    match result.unwrap_err() {
+        McpError::MissingParameter { parameter_name } => {
+            assert_eq!(parameter_name, "backup_dir");
         }
+        _ => panic!("Expected MissingParameter error"),
     }
 }
 
@@ -842,14 +834,13 @@ async fn test_list_backups_tool_missing_backup_dir() {
         arguments: None,
     };
 
-    let result = server.call_tool(request).await.unwrap();
-    assert!(result.is_error);
-    assert_eq!(result.content.len(), 1);
-
-    match &result.content[0] {
-        Content::Text { text } => {
-            assert!(text.contains("Missing required parameter"));
+    let result = server.call_tool(request).await;
+    assert!(result.is_err());
+    match result.unwrap_err() {
+        McpError::MissingParameter { parameter_name } => {
+            assert_eq!(parameter_name, "backup_dir");
         }
+        _ => panic!("Expected MissingParameter error"),
     }
 }
 
@@ -866,16 +857,15 @@ async fn test_restore_database_tool() {
         })),
     };
 
-    let result = server.call_tool(request).await.unwrap();
+    let result = server.call_tool(request).await;
     // The restore will fail because the database path doesn't exist
     // This is expected behavior in the test environment
-    assert!(result.is_error);
-    assert_eq!(result.content.len(), 1);
-
-    match &result.content[0] {
-        Content::Text { text } => {
-            assert!(text.contains("Error"));
+    assert!(result.is_err());
+    match result.unwrap_err() {
+        McpError::BackupOperationFailed { operation, .. } => {
+            assert_eq!(operation, "restore_backup");
         }
+        _ => panic!("Expected BackupOperationFailed error"),
     }
 }
 
@@ -887,14 +877,13 @@ async fn test_restore_database_tool_missing_backup_path() {
         arguments: None,
     };
 
-    let result = server.call_tool(request).await.unwrap();
-    assert!(result.is_error);
-    assert_eq!(result.content.len(), 1);
-
-    match &result.content[0] {
-        Content::Text { text } => {
-            assert!(text.contains("Missing required parameter"));
+    let result = server.call_tool(request).await;
+    assert!(result.is_err());
+    match result.unwrap_err() {
+        McpError::MissingParameter { parameter_name } => {
+            assert_eq!(parameter_name, "backup_path");
         }
+        _ => panic!("Expected MissingParameter error"),
     }
 }
 
@@ -1107,7 +1096,12 @@ async fn test_read_unknown_resource() {
 
     // Should return an error for unknown resource
     assert!(result.is_err());
-    assert!(result.unwrap_err().to_string().contains("Unknown resource"));
+    match result.unwrap_err() {
+        McpError::ResourceNotFound { uri } => {
+            assert_eq!(uri, "things://unknown");
+        }
+        _ => panic!("Expected ResourceNotFound error"),
+    }
 }
 
 // ===== Prompt Tests =====
@@ -1242,14 +1236,13 @@ async fn test_task_review_prompt_missing_required() {
         })),
     };
 
-    let result = server.get_prompt(request).await.unwrap();
-    assert!(result.is_error);
-    assert_eq!(result.content.len(), 1);
-
-    match &result.content[0] {
-        Content::Text { text } => {
-            assert!(text.contains("Missing required parameter"));
+    let result = server.get_prompt(request).await;
+    assert!(result.is_err());
+    match result.unwrap_err() {
+        McpError::MissingParameter { parameter_name } => {
+            assert_eq!(parameter_name, "task_title");
         }
+        _ => panic!("Expected MissingParameter error"),
     }
 }
 
@@ -1461,14 +1454,13 @@ async fn test_backup_strategy_prompt_missing_required() {
         })),
     };
 
-    let result = server.get_prompt(request).await.unwrap();
-    assert!(result.is_error);
-    assert_eq!(result.content.len(), 1);
-
-    match &result.content[0] {
-        Content::Text { text } => {
-            assert!(text.contains("Missing required parameter"));
+    let result = server.get_prompt(request).await;
+    assert!(result.is_err());
+    match result.unwrap_err() {
+        McpError::MissingParameter { parameter_name } => {
+            assert_eq!(parameter_name, "frequency");
         }
+        _ => panic!("Expected MissingParameter error"),
     }
 }
 
@@ -1480,14 +1472,13 @@ async fn test_unknown_prompt() {
         arguments: None,
     };
 
-    let result = server.get_prompt(request).await.unwrap();
-    assert!(result.is_error);
-    assert_eq!(result.content.len(), 1);
-
-    match &result.content[0] {
-        Content::Text { text } => {
-            assert!(text.contains("Unknown prompt"));
+    let result = server.get_prompt(request).await;
+    assert!(result.is_err());
+    match result.unwrap_err() {
+        McpError::PromptNotFound { prompt_name } => {
+            assert_eq!(prompt_name, "unknown_prompt");
         }
+        _ => panic!("Expected PromptNotFound error"),
     }
 }
 
@@ -1499,14 +1490,13 @@ async fn test_prompt_with_no_arguments() {
         arguments: None,
     };
 
-    let result = server.get_prompt(request).await.unwrap();
-    assert!(result.is_error);
-    assert_eq!(result.content.len(), 1);
-
-    match &result.content[0] {
-        Content::Text { text } => {
-            assert!(text.contains("Missing required parameter"));
+    let result = server.get_prompt(request).await;
+    assert!(result.is_err());
+    match result.unwrap_err() {
+        McpError::MissingParameter { parameter_name } => {
+            assert_eq!(parameter_name, "task_title");
         }
+        _ => panic!("Expected MissingParameter error"),
     }
 }
 
@@ -1546,15 +1536,14 @@ async fn test_prompt_error_handling() {
         arguments: Some(json!({ "task_title": 123 })), // Should be string
     };
 
-    let result = server.get_prompt(request).await.unwrap();
+    let result = server.get_prompt(request).await;
     // Should error due to type mismatch
-    assert!(result.is_error);
-    assert_eq!(result.content.len(), 1);
-
-    match &result.content[0] {
-        Content::Text { text } => {
-            assert!(text.contains("Missing required parameter"));
+    assert!(result.is_err());
+    match result.unwrap_err() {
+        McpError::MissingParameter { parameter_name } => {
+            assert_eq!(parameter_name, "task_title");
         }
+        _ => panic!("Expected MissingParameter error"),
     }
 }
 
@@ -1622,5 +1611,419 @@ async fn test_prompt_schema_enum_validation() {
                 // Other prompts may not have enums
             }
         }
+    }
+}
+
+// ===== Error Handling Tests =====
+
+#[tokio::test]
+async fn test_mcp_error_creation() {
+    // Test McpError creation methods
+    let tool_not_found = McpError::tool_not_found("test_tool");
+    assert!(
+        matches!(tool_not_found, McpError::ToolNotFound { tool_name } if tool_name == "test_tool")
+    );
+
+    let resource_not_found = McpError::resource_not_found("test://resource");
+    assert!(
+        matches!(resource_not_found, McpError::ResourceNotFound { uri } if uri == "test://resource")
+    );
+
+    let prompt_not_found = McpError::prompt_not_found("test_prompt");
+    assert!(
+        matches!(prompt_not_found, McpError::PromptNotFound { prompt_name } if prompt_name == "test_prompt")
+    );
+
+    let missing_param = McpError::missing_parameter("test_param");
+    assert!(
+        matches!(missing_param, McpError::MissingParameter { parameter_name } if parameter_name == "test_param")
+    );
+
+    let invalid_param = McpError::invalid_parameter("test_param", "invalid value");
+    assert!(
+        matches!(invalid_param, McpError::InvalidParameter { parameter_name, message } 
+        if parameter_name == "test_param" && message == "invalid value")
+    );
+
+    let invalid_format = McpError::invalid_format("xml", "json, csv");
+    assert!(
+        matches!(invalid_format, McpError::InvalidFormat { format, supported }
+        if format == "xml" && supported == "json, csv")
+    );
+
+    let invalid_data_type = McpError::invalid_data_type("xml", "tasks, projects");
+    assert!(
+        matches!(invalid_data_type, McpError::InvalidDataType { data_type, supported }
+        if data_type == "xml" && supported == "tasks, projects")
+    );
+}
+
+#[tokio::test]
+async fn test_mcp_error_to_call_result() {
+    // Test tool not found error
+    let tool_error = McpError::tool_not_found("unknown_tool");
+    let call_result = tool_error.to_call_result();
+    assert!(call_result.is_error);
+    assert_eq!(call_result.content.len(), 1);
+    match &call_result.content[0] {
+        Content::Text { text } => {
+            assert!(text.contains("Tool 'unknown_tool' not found"));
+            assert!(text.contains("Available tools can be listed"));
+        }
+    }
+
+    // Test missing parameter error
+    let param_error = McpError::missing_parameter("query");
+    let call_result = param_error.to_call_result();
+    assert!(call_result.is_error);
+    match &call_result.content[0] {
+        Content::Text { text } => {
+            assert!(text.contains("Missing required parameter 'query'"));
+            assert!(text.contains("Please provide this parameter"));
+        }
+    }
+
+    // Test invalid format error
+    let format_error = McpError::invalid_format("xml", "json, csv, markdown");
+    let call_result = format_error.to_call_result();
+    assert!(call_result.is_error);
+    match &call_result.content[0] {
+        Content::Text { text } => {
+            assert!(text.contains("Invalid format 'xml'"));
+            assert!(text.contains("Supported formats: json, csv, markdown"));
+        }
+    }
+}
+
+#[tokio::test]
+async fn test_mcp_error_to_prompt_result() {
+    // Test prompt not found error
+    let prompt_error = McpError::prompt_not_found("unknown_prompt");
+    let prompt_result = prompt_error.to_prompt_result();
+    assert!(prompt_result.is_error);
+    match &prompt_result.content[0] {
+        Content::Text { text } => {
+            assert!(text.contains("Prompt 'unknown_prompt' not found"));
+            assert!(text.contains("Available prompts can be listed"));
+        }
+    }
+
+    // Test missing parameter error
+    let param_error = McpError::missing_parameter("task_title");
+    let prompt_result = param_error.to_prompt_result();
+    assert!(prompt_result.is_error);
+    match &prompt_result.content[0] {
+        Content::Text { text } => {
+            assert!(text.contains("Missing required parameter 'task_title'"));
+        }
+    }
+}
+
+#[tokio::test]
+async fn test_mcp_error_to_resource_result() {
+    // Test resource not found error
+    let resource_error = McpError::resource_not_found("things://unknown");
+    let resource_result = resource_error.to_resource_result();
+    match &resource_result.contents[0] {
+        Content::Text { text } => {
+            assert!(text.contains("Resource 'things://unknown' not found"));
+            assert!(text.contains("Available resources can be listed"));
+        }
+    }
+}
+
+#[tokio::test]
+async fn test_from_traits() {
+    // Test From<ThingsError> for McpError
+    let things_error = things3_core::ThingsError::validation("Test validation error");
+    let mcp_error: McpError = things_error.into();
+    assert!(matches!(mcp_error, McpError::ValidationError { message }
+        if message == "Test validation error"));
+
+    // Test From<serde_json::Error> for McpError
+    let json_error = serde_json::from_str::<serde_json::Value>("invalid json").unwrap_err();
+    let mcp_error: McpError = json_error.into();
+    assert!(
+        matches!(mcp_error, McpError::SerializationFailed { operation, .. }
+        if operation == "json serialization")
+    );
+
+    // Test From<std::io::Error> for McpError
+    let io_error = std::io::Error::new(std::io::ErrorKind::NotFound, "file not found");
+    let mcp_error: McpError = io_error.into();
+    assert!(
+        matches!(mcp_error, McpError::IoOperationFailed { operation, .. }
+        if operation == "file operation")
+    );
+}
+
+#[tokio::test]
+async fn test_fallback_error_handling() {
+    let server = create_test_mcp_server();
+
+    // Test call_tool_with_fallback for unknown tool
+    let request = CallToolRequest {
+        name: "unknown_tool".to_string(),
+        arguments: None,
+    };
+
+    let result = server.call_tool_with_fallback(request).await;
+    assert!(result.is_error);
+    match &result.content[0] {
+        Content::Text { text } => {
+            assert!(text.contains("Tool 'unknown_tool' not found"));
+            assert!(text.contains("Available tools can be listed"));
+        }
+    }
+}
+
+#[tokio::test]
+async fn test_prompt_fallback_error_handling() {
+    let server = create_test_mcp_server();
+
+    // Test get_prompt_with_fallback for unknown prompt
+    let request = things3_cli::mcp::GetPromptRequest {
+        name: "unknown_prompt".to_string(),
+        arguments: None,
+    };
+
+    let result = server.get_prompt_with_fallback(request).await;
+    assert!(result.is_error);
+    match &result.content[0] {
+        Content::Text { text } => {
+            assert!(text.contains("Prompt 'unknown_prompt' not found"));
+            assert!(text.contains("Available prompts can be listed"));
+        }
+    }
+}
+
+#[tokio::test]
+async fn test_resource_fallback_error_handling() {
+    let server = create_test_mcp_server();
+
+    // Test read_resource_with_fallback for unknown resource
+    let request = things3_cli::mcp::ReadResourceRequest {
+        uri: "things://unknown".to_string(),
+    };
+
+    let result = server.read_resource_with_fallback(request).await;
+    match &result.contents[0] {
+        Content::Text { text } => {
+            assert!(text.contains("Resource 'things://unknown' not found"));
+            assert!(text.contains("Available resources can be listed"));
+        }
+    }
+}
+
+#[tokio::test]
+async fn test_specific_error_types_in_tool_handlers() {
+    let server = create_test_mcp_server();
+
+    // Test missing parameter error
+    let request = CallToolRequest {
+        name: "search_tasks".to_string(),
+        arguments: Some(json!({ "limit": 5 })), // Missing required 'query' parameter
+    };
+
+    let result = server.call_tool(request).await;
+    assert!(result.is_err());
+    match result.unwrap_err() {
+        McpError::MissingParameter { parameter_name } => {
+            assert_eq!(parameter_name, "query");
+        }
+        _ => panic!("Expected MissingParameter error"),
+    }
+}
+
+#[tokio::test]
+async fn test_invalid_format_error() {
+    let server = create_test_mcp_server();
+
+    // Test invalid format error
+    let request = CallToolRequest {
+        name: "export_data".to_string(),
+        arguments: Some(json!({
+            "format": "xml", // Invalid format
+            "data_type": "tasks"
+        })),
+    };
+
+    let result = server.call_tool(request).await;
+    assert!(result.is_err());
+    match result.unwrap_err() {
+        McpError::InvalidFormat { format, supported } => {
+            assert_eq!(format, "xml");
+            assert_eq!(supported, "json, csv, markdown");
+        }
+        _ => panic!("Expected InvalidFormat error"),
+    }
+}
+
+#[tokio::test]
+async fn test_invalid_data_type_error() {
+    let server = create_test_mcp_server();
+
+    // Test invalid data type error
+    let request = CallToolRequest {
+        name: "export_data".to_string(),
+        arguments: Some(json!({
+            "format": "json",
+            "data_type": "invalid_type" // Invalid data type
+        })),
+    };
+
+    let result = server.call_tool(request).await;
+    assert!(result.is_err());
+    match result.unwrap_err() {
+        McpError::InvalidDataType {
+            data_type,
+            supported,
+        } => {
+            assert_eq!(data_type, "invalid_type");
+            assert_eq!(supported, "tasks, projects, areas, all");
+        }
+        _ => panic!("Expected InvalidDataType error"),
+    }
+}
+
+#[tokio::test]
+async fn test_tool_not_found_error() {
+    let server = create_test_mcp_server();
+
+    // Test tool not found error
+    let request = CallToolRequest {
+        name: "nonexistent_tool".to_string(),
+        arguments: None,
+    };
+
+    let result = server.call_tool(request).await;
+    assert!(result.is_err());
+    match result.unwrap_err() {
+        McpError::ToolNotFound { tool_name } => {
+            assert_eq!(tool_name, "nonexistent_tool");
+        }
+        _ => panic!("Expected ToolNotFound error"),
+    }
+}
+
+#[tokio::test]
+async fn test_prompt_not_found_error() {
+    let server = create_test_mcp_server();
+
+    // Test prompt not found error
+    let request = things3_cli::mcp::GetPromptRequest {
+        name: "nonexistent_prompt".to_string(),
+        arguments: None,
+    };
+
+    let result = server.get_prompt(request).await;
+    assert!(result.is_err());
+    match result.unwrap_err() {
+        McpError::PromptNotFound { prompt_name } => {
+            assert_eq!(prompt_name, "nonexistent_prompt");
+        }
+        _ => panic!("Expected PromptNotFound error"),
+    }
+}
+
+#[tokio::test]
+async fn test_resource_not_found_error() {
+    let server = create_test_mcp_server();
+
+    // Test resource not found error
+    let request = things3_cli::mcp::ReadResourceRequest {
+        uri: "things://nonexistent".to_string(),
+    };
+
+    let result = server.read_resource(request).await;
+    assert!(result.is_err());
+    match result.unwrap_err() {
+        McpError::ResourceNotFound { uri } => {
+            assert_eq!(uri, "things://nonexistent");
+        }
+        _ => panic!("Expected ResourceNotFound error"),
+    }
+}
+
+#[tokio::test]
+async fn test_error_message_quality() {
+    // Test that error messages are helpful and actionable
+    let errors = vec![
+        McpError::tool_not_found("test_tool"),
+        McpError::missing_parameter("test_param"),
+        McpError::invalid_format("xml", "json, csv"),
+        McpError::invalid_data_type("xml", "tasks, projects"),
+    ];
+
+    for error in errors {
+        let call_result = error.to_call_result();
+        assert!(call_result.is_error);
+
+        match &call_result.content[0] {
+            Content::Text { text } => {
+                // Error messages should be informative
+                assert!(text.len() > 20);
+                // Should contain helpful suggestions
+                assert!(
+                    text.contains("Please")
+                        || text.contains("Available")
+                        || text.contains("Supported")
+                );
+                // Should not be just generic error messages
+                assert!(!text.contains("Error: Error"));
+            }
+        }
+    }
+}
+
+#[tokio::test]
+async fn test_error_consistency() {
+    // Test that similar errors produce consistent messages
+    let param_errors = vec![
+        McpError::missing_parameter("param1"),
+        McpError::missing_parameter("param2"),
+    ];
+
+    for error in param_errors {
+        let call_result = error.to_call_result();
+        match &call_result.content[0] {
+            Content::Text { text } => {
+                assert!(text.contains("Missing required parameter"));
+                assert!(text.contains("Please provide this parameter"));
+            }
+        }
+    }
+}
+
+#[tokio::test]
+async fn test_error_serialization() {
+    // Test that McpError can be serialized/deserialized for logging
+    let error = McpError::tool_not_found("test_tool");
+    let error_string = format!("{error:?}");
+    assert!(error_string.contains("ToolNotFound"));
+    assert!(error_string.contains("test_tool"));
+}
+
+#[tokio::test]
+async fn test_error_display() {
+    // Test that McpError implements Display trait properly
+    let error = McpError::missing_parameter("test_param");
+    let error_string = error.to_string();
+    assert!(error_string.contains("Missing required parameter"));
+    assert!(error_string.contains("test_param"));
+}
+
+#[tokio::test]
+async fn test_error_chain() {
+    // Test error chaining and source information
+    let io_error = std::io::Error::new(std::io::ErrorKind::NotFound, "file not found");
+    let mcp_error: McpError = io_error.into();
+
+    match mcp_error {
+        McpError::IoOperationFailed { operation, source } => {
+            assert_eq!(operation, "file operation");
+            assert_eq!(source.kind(), std::io::ErrorKind::NotFound);
+        }
+        _ => panic!("Expected IoOperationFailed error"),
     }
 }
