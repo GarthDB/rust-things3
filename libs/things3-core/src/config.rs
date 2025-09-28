@@ -84,7 +84,11 @@ impl ThingsConfig {
         let fallback_to_default = std::env::var("THINGS_FALLBACK_TO_DEFAULT")
             .map(|v| {
                 let lower = v.to_lowercase();
-                lower == "true" || lower == "1" || lower == "yes" || lower == "on"
+                match lower.as_str() {
+                    "true" | "1" | "yes" | "on" => true,
+                    "false" | "0" | "no" | "off" => false,
+                    _ => false, // Default to false for invalid values
+                }
             })
             .unwrap_or(true);
 
