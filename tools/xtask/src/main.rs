@@ -771,8 +771,11 @@ mod tests {
                 "setup_git_hooks failed (expected in test environment): {:?}",
                 result
             );
+            // In CI environments, the function might fail due to permissions
+            // We'll just log this and not assert anything
+            println!("Skipping directory existence check due to function failure");
         } else {
-            // Verify hooks directory was created
+            // Only verify hooks directory was created if the function succeeded
             assert!(std::path::Path::new(".git/hooks").exists());
         }
 
