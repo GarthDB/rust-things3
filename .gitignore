@@ -7,5 +7,13 @@
 target/
 Cargo.lock
 
+# Coverage files
+*.profraw
+*.profdata
+coverage-reports/
+lcov.info
+coverage.json
+cobertura.xml
+
 # Homebrew tap (separate repository)
 homebrew-tap/
