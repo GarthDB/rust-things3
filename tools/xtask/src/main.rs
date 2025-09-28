@@ -503,12 +503,39 @@ mod tests {
             println!("Skipping hooks directory verification due to function failure");
         } else {
             // Only verify directory creation if the function succeeded
-            // Verify hooks directory was created (if we're in a git repository)
-            if std::path::Path::new(".git").exists() {
-                assert!(std::path::Path::new(".git/hooks").exists());
-            } else {
-                println!("Warning: Not in a git repository, skipping hooks directory check");
+            // Debug: Check current working directory and what exists
+            let current_dir =
+                std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
+            println!("Current working directory: {:?}", current_dir);
+
+            // Check if .git exists
+            let git_path = std::path::Path::new(".git");
+            println!(".git exists: {}", git_path.exists());
+
+            if git_path.exists() {
+                // List contents of .git directory
+                if let Ok(entries) = std::fs::read_dir(".git") {
+                    println!("Contents of .git directory:");
+                    for entry in entries.flatten() {
+                        println!("  {:?}", entry.path());
+                    }
+                }
             }
+
+            // Verify hooks directory was created
+            let hooks_path = std::path::Path::new(".git/hooks");
+            println!("Checking if .git/hooks exists: {}", hooks_path.exists());
+
+            // Also check with absolute path
+            let abs_hooks_path = current_dir.join(".git/hooks");
+            println!(
+                "Checking if absolute .git/hooks exists: {}",
+                abs_hooks_path.exists()
+            );
+
+            assert!(hooks_path.exists() || abs_hooks_path.exists(),
+                "Expected .git/hooks directory to exist after setup_git_hooks succeeded. Current dir: {:?}, .git exists: {}, .git/hooks exists: {}",
+                current_dir, git_path.exists(), hooks_path.exists());
         }
 
         // Restore original directory - handle potential errors gracefully
