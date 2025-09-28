@@ -81,8 +81,8 @@ impl ThingsConfig {
         let database_path = std::env::var("THINGS_DATABASE_PATH")
             .map_or_else(|_| Self::get_default_database_path(), PathBuf::from);
 
-        let fallback_to_default = std::env::var("THINGS_FALLBACK_TO_DEFAULT")
-            .map(|v| {
+        let fallback_to_default = match std::env::var("THINGS_FALLBACK_TO_DEFAULT") {
+            Ok(v) => {
                 let lower = v.to_lowercase();
                 let result = match lower.as_str() {
                     "true" | "1" | "yes" | "on" => true,
@@ -94,13 +94,14 @@ impl ThingsConfig {
                     v, lower, result
                 );
                 result
-            })
-            .unwrap_or_else(|_| {
+            }
+            Err(_) => {
                 println!(
                     "DEBUG: from_env() no THINGS_FALLBACK_TO_DEFAULT env var, using default true"
                 );
                 true
-            });
+            }
+        };
 
         Self::new(database_path, fallback_to_default)
     }
