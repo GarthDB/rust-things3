@@ -2341,3 +2341,363 @@ async fn test_error_chain() {
         _ => panic!("Expected IoOperationFailed error"),
     }
 }
+
+#[tokio::test]
+async fn test_all_error_variants_to_call_result() {
+    // Test all error variants in to_call_result method
+    let tool_error = McpError::tool_not_found("test_tool");
+    let result = tool_error.to_call_result();
+    assert!(result.is_error);
+    match &result.content[0] {
+        Content::Text { text } => {
+            assert!(text.contains("Tool 'test_tool' not found"));
+            assert!(text.contains("list_tools method"));
+        }
+    }
+
+    let resource_error = McpError::resource_not_found("test_resource");
+    let result = resource_error.to_call_result();
+    assert!(result.is_error);
+    match &result.content[0] {
+        Content::Text { text } => {
+            assert!(text.contains("Resource 'test_resource' not found"));
+            assert!(text.contains("list_resources method"));
+        }
+    }
+
+    let prompt_error = McpError::prompt_not_found("test_prompt");
+    let result = prompt_error.to_call_result();
+    assert!(result.is_error);
+    match &result.content[0] {
+        Content::Text { text } => {
+            assert!(text.contains("Prompt 'test_prompt' not found"));
+            assert!(text.contains("list_prompts method"));
+        }
+    }
+
+    let invalid_data_type = McpError::invalid_data_type("xml", "json, csv");
+    let result = invalid_data_type.to_call_result();
+    assert!(result.is_error);
+    match &result.content[0] {
+        Content::Text { text } => {
+            assert!(text.contains("Invalid data type 'xml'"));
+            assert!(text.contains("Supported types: json, csv"));
+            assert!(text.contains("Please use one of the supported types"));
+        }
+    }
+
+    let backup_error = McpError::backup_operation_failed(
+        "test_backup",
+        things3_core::ThingsError::validation("backup error"),
+    );
+    let result = backup_error.to_call_result();
+    assert!(result.is_error);
+    match &result.content[0] {
+        Content::Text { text } => {
+            assert!(text.contains("Backup operation 'test_backup' failed"));
+            assert!(text.contains("Please check backup permissions"));
+        }
+    }
+
+    let export_error = McpError::export_operation_failed(
+        "test_export",
+        things3_core::ThingsError::validation("export error"),
+    );
+    let result = export_error.to_call_result();
+    assert!(result.is_error);
+    match &result.content[0] {
+        Content::Text { text } => {
+            assert!(text.contains("Export operation 'test_export' failed"));
+            assert!(text.contains("Please check export parameters"));
+        }
+    }
+
+    let perf_error = McpError::performance_monitoring_failed(
+        "test_perf",
+        things3_core::ThingsError::validation("perf error"),
+    );
+    let result = perf_error.to_call_result();
+    assert!(result.is_error);
+    match &result.content[0] {
+        Content::Text { text } => {
+            assert!(text.contains("Performance monitoring 'test_perf' failed"));
+            assert!(text.contains("Please try again later"));
+        }
+    }
+
+    let cache_error = McpError::cache_operation_failed(
+        "test_cache",
+        things3_core::ThingsError::validation("cache error"),
+    );
+    let result = cache_error.to_call_result();
+    assert!(result.is_error);
+    match &result.content[0] {
+        Content::Text { text } => {
+            assert!(text.contains("Cache operation 'test_cache' failed"));
+            assert!(text.contains("Please try again later"));
+        }
+    }
+
+    let serialization_error = McpError::serialization_failed(
+        "test_serialization",
+        serde_json::from_str::<serde_json::Value>("invalid json").unwrap_err(),
+    );
+    let result = serialization_error.to_call_result();
+    assert!(result.is_error);
+    match &result.content[0] {
+        Content::Text { text } => {
+            assert!(text.contains("Serialization 'test_serialization' failed"));
+            assert!(text.contains("Please check data format"));
+        }
+    }
+
+    let io_error = McpError::io_operation_failed(
+        "test_io",
+        std::io::Error::new(std::io::ErrorKind::NotFound, "file not found"),
+    );
+    let result = io_error.to_call_result();
+    assert!(result.is_error);
+    match &result.content[0] {
+        Content::Text { text } => {
+            assert!(text.contains("IO operation 'test_io' failed"));
+            assert!(text.contains("Please check file permissions"));
+        }
+    }
+
+    let config_error = McpError::configuration_error("test config error");
+    let result = config_error.to_call_result();
+    assert!(result.is_error);
+    match &result.content[0] {
+        Content::Text { text } => {
+            assert!(text.contains("Configuration error: test config error"));
+            assert!(text.contains("Please check your configuration"));
+        }
+    }
+
+    let validation_error = McpError::validation_error("test validation error");
+    let result = validation_error.to_call_result();
+    assert!(result.is_error);
+    match &result.content[0] {
+        Content::Text { text } => {
+            assert!(text.contains("Validation error: test validation error"));
+            assert!(text.contains("Please check your input"));
+        }
+    }
+
+    let internal_error = McpError::internal_error("test internal error");
+    let result = internal_error.to_call_result();
+    assert!(result.is_error);
+    match &result.content[0] {
+        Content::Text { text } => {
+            assert!(text.contains("Internal error: test internal error"));
+            assert!(text.contains("Please try again later or contact support"));
+        }
+    }
+}
+
+#[tokio::test]
+async fn test_all_error_variants_to_prompt_result() {
+    // Test all error variants in to_prompt_result method
+    let prompt_error = McpError::prompt_not_found("test_prompt");
+    let result = prompt_error.to_prompt_result();
+    assert!(result.is_error);
+    match &result.content[0] {
+        Content::Text { text } => {
+            assert!(text.contains("Prompt 'test_prompt' not found"));
+            assert!(text.contains("list_prompts method"));
+        }
+    }
+
+    let invalid_param = McpError::invalid_parameter("test_param", "invalid value");
+    let result = invalid_param.to_prompt_result();
+    assert!(result.is_error);
+    match &result.content[0] {
+        Content::Text { text } => {
+            assert!(text.contains("Invalid parameter 'test_param'"));
+            assert!(text.contains("invalid value"));
+            assert!(text.contains("Please check the parameter format"));
+        }
+    }
+
+    let missing_param = McpError::missing_parameter("test_param");
+    let result = missing_param.to_prompt_result();
+    assert!(result.is_error);
+    match &result.content[0] {
+        Content::Text { text } => {
+            assert!(text.contains("Missing required parameter 'test_param'"));
+            assert!(text.contains("Please provide this parameter"));
+        }
+    }
+
+    let invalid_format = McpError::invalid_format("xml", "json, csv");
+    let result = invalid_format.to_prompt_result();
+    assert!(result.is_error);
+    match &result.content[0] {
+        Content::Text { text } => {
+            // to_prompt_result uses catch-all pattern for InvalidFormat
+            assert!(text.contains("Error: Invalid format: xml - supported formats: json, csv"));
+            assert!(text.contains("Please try again later"));
+        }
+    }
+
+    let invalid_data_type = McpError::invalid_data_type("xml", "json, csv");
+    let result = invalid_data_type.to_prompt_result();
+    assert!(result.is_error);
+    match &result.content[0] {
+        Content::Text { text } => {
+            // to_prompt_result uses catch-all pattern for InvalidDataType
+            assert!(text.contains("Error: Invalid data type: xml - supported types: json, csv"));
+            assert!(text.contains("Please try again later"));
+        }
+    }
+
+    let db_error = McpError::database_operation_failed(
+        "test_op",
+        things3_core::ThingsError::validation("test error"),
+    );
+    let result = db_error.to_prompt_result();
+    assert!(result.is_error);
+    match &result.content[0] {
+        Content::Text { text } => {
+            assert!(text.contains("Database operation 'test_op' failed"));
+            assert!(text.contains("Please check your database connection"));
+        }
+    }
+
+    let serialization_error = McpError::serialization_failed(
+        "test_serialization",
+        serde_json::from_str::<serde_json::Value>("invalid json").unwrap_err(),
+    );
+    let result = serialization_error.to_prompt_result();
+    assert!(result.is_error);
+    match &result.content[0] {
+        Content::Text { text } => {
+            assert!(text.contains("Serialization 'test_serialization' failed"));
+            assert!(text.contains("Please check data format"));
+        }
+    }
+
+    let io_error = McpError::io_operation_failed(
+        "test_io",
+        std::io::Error::new(std::io::ErrorKind::NotFound, "file not found"),
+    );
+    let result = io_error.to_prompt_result();
+    assert!(result.is_error);
+    match &result.content[0] {
+        Content::Text { text } => {
+            // to_prompt_result uses catch-all pattern for IoOperationFailed
+            assert!(text.contains("Error: IO operation failed: test_io"));
+            assert!(text.contains("Please try again later"));
+        }
+    }
+
+    let config_error = McpError::configuration_error("test config error");
+    let result = config_error.to_prompt_result();
+    assert!(result.is_error);
+    match &result.content[0] {
+        Content::Text { text } => {
+            // to_prompt_result uses catch-all pattern for ConfigurationError
+            assert!(text.contains("Error: Configuration error: test config error"));
+            assert!(text.contains("Please try again later"));
+        }
+    }
+
+    let validation_error = McpError::validation_error("test validation error");
+    let result = validation_error.to_prompt_result();
+    assert!(result.is_error);
+    match &result.content[0] {
+        Content::Text { text } => {
+            assert!(text.contains("Validation error: test validation error"));
+            assert!(text.contains("Please check your input"));
+        }
+    }
+
+    let internal_error = McpError::internal_error("test internal error");
+    let result = internal_error.to_prompt_result();
+    assert!(result.is_error);
+    match &result.content[0] {
+        Content::Text { text } => {
+            assert!(text.contains("Internal error: test internal error"));
+            assert!(text.contains("Please try again later or contact support"));
+        }
+    }
+}
+
+#[tokio::test]
+async fn test_all_error_variants_to_resource_result() {
+    // Test all error variants in to_resource_result method
+    let resource_error = McpError::resource_not_found("test_resource");
+    let result = resource_error.to_resource_result();
+    match &result.contents[0] {
+        Content::Text { text } => {
+            assert!(text.contains("Resource 'test_resource' not found"));
+            assert!(text.contains("list_resources method"));
+        }
+    }
+
+    let db_error = McpError::database_operation_failed(
+        "test_op",
+        things3_core::ThingsError::validation("test error"),
+    );
+    let result = db_error.to_resource_result();
+    match &result.contents[0] {
+        Content::Text { text } => {
+            assert!(text.contains("Database operation 'test_op' failed"));
+            assert!(text.contains("Please check your database connection"));
+        }
+    }
+
+    let serialization_error = McpError::serialization_failed(
+        "test_serialization",
+        serde_json::from_str::<serde_json::Value>("invalid json").unwrap_err(),
+    );
+    let result = serialization_error.to_resource_result();
+    match &result.contents[0] {
+        Content::Text { text } => {
+            assert!(text.contains("Serialization 'test_serialization' failed"));
+            assert!(text.contains("Please check data format"));
+        }
+    }
+
+    let io_error = McpError::io_operation_failed(
+        "test_io",
+        std::io::Error::new(std::io::ErrorKind::NotFound, "file not found"),
+    );
+    let result = io_error.to_resource_result();
+    match &result.contents[0] {
+        Content::Text { text } => {
+            // to_resource_result uses catch-all pattern for IoOperationFailed
+            assert!(text.contains("Error: IO operation failed: test_io"));
+            assert!(text.contains("Please try again later"));
+        }
+    }
+
+    let config_error = McpError::configuration_error("test config error");
+    let result = config_error.to_resource_result();
+    match &result.contents[0] {
+        Content::Text { text } => {
+            // to_resource_result uses catch-all pattern for ConfigurationError
+            assert!(text.contains("Error: Configuration error: test config error"));
+            assert!(text.contains("Please try again later"));
+        }
+    }
+
+    let validation_error = McpError::validation_error("test validation error");
+    let result = validation_error.to_resource_result();
+    match &result.contents[0] {
+        Content::Text { text } => {
+            // to_resource_result uses catch-all pattern for ValidationError
+            assert!(text.contains("Error: Validation error: test validation error"));
+            assert!(text.contains("Please try again later"));
+        }
+    }
+
+    let internal_error = McpError::internal_error("test internal error");
+    let result = internal_error.to_resource_result();
+    match &result.contents[0] {
+        Content::Text { text } => {
+            assert!(text.contains("Internal error: test internal error"));
+            assert!(text.contains("Please try again later or contact support"));
+        }
+    }
+}
