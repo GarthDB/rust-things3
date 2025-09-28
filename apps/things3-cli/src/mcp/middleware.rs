@@ -1266,191 +1266,191 @@ mod tests {
         assert!(!chain.is_empty());
         // Should default to info level
     }
-}
 
-#[tokio::test]
-async fn test_middleware_chain_execution_with_empty_middleware() {
-    let chain = MiddlewareChain::new();
-    let request = CallToolRequest {
-        name: "test_tool".to_string(),
-        arguments: Some(serde_json::json!({"param": "value"})),
-    };
+    #[tokio::test]
+    async fn test_middleware_chain_execution_with_empty_middleware() {
+        let chain = MiddlewareChain::new();
+        let request = CallToolRequest {
+            name: "test_tool".to_string(),
+            arguments: Some(serde_json::json!({"param": "value"})),
+        };
 
-    let result = chain
-        .execute(request, |_| async {
-            Ok(CallToolResult {
-                content: vec![Content::Text {
-                    text: "Test response".to_string(),
-                }],
-                is_error: false,
+        let result = chain
+            .execute(request, |_| async {
+                Ok(CallToolResult {
+                    content: vec![Content::Text {
+                        text: "Test response".to_string(),
+                    }],
+                    is_error: false,
+                })
             })
-        })
-        .await;
+            .await;
 
-    assert!(result.is_ok());
-    let result = result.unwrap();
-    assert!(!result.is_error);
-    assert_eq!(result.content.len(), 1);
-}
-
-#[tokio::test]
-async fn test_middleware_chain_execution_with_multiple_middleware() {
-    let chain = MiddlewareChain::new()
-        .add_middleware(LoggingMiddleware::new(LogLevel::Info))
-        .add_middleware(ValidationMiddleware::new(false))
-        .add_middleware(PerformanceMiddleware::new(Duration::from_millis(100)));
-
-    let request = CallToolRequest {
-        name: "test_tool".to_string(),
-        arguments: Some(serde_json::json!({"param": "value"})),
-    };
-
-    let result = chain
-        .execute(request, |_| async {
-            Ok(CallToolResult {
-                content: vec![Content::Text {
-                    text: "Test response".to_string(),
-                }],
-                is_error: false,
-            })
-        })
-        .await;
-
-    assert!(result.is_ok());
-    let result = result.unwrap();
-    assert!(!result.is_error);
-    assert_eq!(result.content.len(), 1);
-}
-
-#[tokio::test]
-async fn test_middleware_chain_execution_with_middleware_stop() {
-    struct StopMiddleware;
-    #[async_trait::async_trait]
-    impl McpMiddleware for StopMiddleware {
-        fn name(&self) -> &'static str {
-            "stop_middleware"
-        }
-
-        fn priority(&self) -> i32 {
-            100
-        }
-
-        async fn before_request(
-            &self,
-            _request: &CallToolRequest,
-            _context: &mut MiddlewareContext,
-        ) -> McpResult<MiddlewareResult> {
-            Ok(MiddlewareResult::Stop(CallToolResult {
-                content: vec![Content::Text {
-                    text: "Stopped by middleware".to_string(),
-                }],
-                is_error: false,
-            }))
-        }
-
-        async fn after_request(
-            &self,
-            _request: &CallToolRequest,
-            _result: &mut CallToolResult,
-            _context: &mut MiddlewareContext,
-        ) -> McpResult<MiddlewareResult> {
-            Ok(MiddlewareResult::Continue)
-        }
-
-        async fn on_error(
-            &self,
-            _request: &CallToolRequest,
-            _error: &McpError,
-            _context: &mut MiddlewareContext,
-        ) -> McpResult<MiddlewareResult> {
-            Ok(MiddlewareResult::Continue)
-        }
+        assert!(result.is_ok());
+        let result = result.unwrap();
+        assert!(!result.is_error);
+        assert_eq!(result.content.len(), 1);
     }
 
-    let chain = MiddlewareChain::new().add_middleware(StopMiddleware);
+    #[tokio::test]
+    async fn test_middleware_chain_execution_with_multiple_middleware() {
+        let chain = MiddlewareChain::new()
+            .add_middleware(LoggingMiddleware::new(LogLevel::Info))
+            .add_middleware(ValidationMiddleware::new(false))
+            .add_middleware(PerformanceMiddleware::new(Duration::from_millis(100)));
 
-    let request = CallToolRequest {
-        name: "test_tool".to_string(),
-        arguments: None,
-    };
+        let request = CallToolRequest {
+            name: "test_tool".to_string(),
+            arguments: Some(serde_json::json!({"param": "value"})),
+        };
 
-    let result = chain
-        .execute(request, |_| async {
-            Ok(CallToolResult {
-                content: vec![Content::Text {
-                    text: "Should not reach here".to_string(),
-                }],
-                is_error: false,
+        let result = chain
+            .execute(request, |_| async {
+                Ok(CallToolResult {
+                    content: vec![Content::Text {
+                        text: "Test response".to_string(),
+                    }],
+                    is_error: false,
+                })
             })
-        })
-        .await;
+            .await;
 
-    assert!(result.is_ok());
-    let result = result.unwrap();
-    assert!(!result.is_error);
-    let Content::Text { text } = &result.content[0];
-    assert_eq!(text, "Stopped by middleware");
-}
-
-#[tokio::test]
-async fn test_middleware_chain_execution_with_middleware_error() {
-    struct ErrorMiddleware;
-    #[async_trait::async_trait]
-    impl McpMiddleware for ErrorMiddleware {
-        fn name(&self) -> &'static str {
-            "error_middleware"
-        }
-
-        fn priority(&self) -> i32 {
-            100
-        }
-
-        async fn before_request(
-            &self,
-            _request: &CallToolRequest,
-            _context: &mut MiddlewareContext,
-        ) -> McpResult<MiddlewareResult> {
-            Err(McpError::internal_error("Middleware error"))
-        }
-
-        async fn after_request(
-            &self,
-            _request: &CallToolRequest,
-            _result: &mut CallToolResult,
-            _context: &mut MiddlewareContext,
-        ) -> McpResult<MiddlewareResult> {
-            Ok(MiddlewareResult::Continue)
-        }
-
-        async fn on_error(
-            &self,
-            _request: &CallToolRequest,
-            _error: &McpError,
-            _context: &mut MiddlewareContext,
-        ) -> McpResult<MiddlewareResult> {
-            Ok(MiddlewareResult::Continue)
-        }
+        assert!(result.is_ok());
+        let result = result.unwrap();
+        assert!(!result.is_error);
+        assert_eq!(result.content.len(), 1);
     }
 
-    let chain = MiddlewareChain::new().add_middleware(ErrorMiddleware);
+    #[tokio::test]
+    async fn test_middleware_chain_execution_with_middleware_stop() {
+        struct StopMiddleware;
+        #[async_trait::async_trait]
+        impl McpMiddleware for StopMiddleware {
+            fn name(&self) -> &'static str {
+                "stop_middleware"
+            }
 
-    let request = CallToolRequest {
-        name: "test_tool".to_string(),
-        arguments: None,
-    };
+            fn priority(&self) -> i32 {
+                100
+            }
 
-    let result = chain
-        .execute(request, |_| async {
-            Ok(CallToolResult {
-                content: vec![Content::Text {
-                    text: "Should not reach here".to_string(),
-                }],
-                is_error: false,
+            async fn before_request(
+                &self,
+                _request: &CallToolRequest,
+                _context: &mut MiddlewareContext,
+            ) -> McpResult<MiddlewareResult> {
+                Ok(MiddlewareResult::Stop(CallToolResult {
+                    content: vec![Content::Text {
+                        text: "Stopped by middleware".to_string(),
+                    }],
+                    is_error: false,
+                }))
+            }
+
+            async fn after_request(
+                &self,
+                _request: &CallToolRequest,
+                _result: &mut CallToolResult,
+                _context: &mut MiddlewareContext,
+            ) -> McpResult<MiddlewareResult> {
+                Ok(MiddlewareResult::Continue)
+            }
+
+            async fn on_error(
+                &self,
+                _request: &CallToolRequest,
+                _error: &McpError,
+                _context: &mut MiddlewareContext,
+            ) -> McpResult<MiddlewareResult> {
+                Ok(MiddlewareResult::Continue)
+            }
+        }
+
+        let chain = MiddlewareChain::new().add_middleware(StopMiddleware);
+
+        let request = CallToolRequest {
+            name: "test_tool".to_string(),
+            arguments: None,
+        };
+
+        let result = chain
+            .execute(request, |_| async {
+                Ok(CallToolResult {
+                    content: vec![Content::Text {
+                        text: "Should not reach here".to_string(),
+                    }],
+                    is_error: false,
+                })
             })
-        })
-        .await;
+            .await;
 
-    assert!(result.is_err());
-    let error = result.unwrap_err();
-    assert!(matches!(error, McpError::InternalError { .. }));
+        assert!(result.is_ok());
+        let result = result.unwrap();
+        assert!(!result.is_error);
+        let Content::Text { text } = &result.content[0];
+        assert_eq!(text, "Stopped by middleware");
+    }
+
+    #[tokio::test]
+    async fn test_middleware_chain_execution_with_middleware_error_duplicate() {
+        struct ErrorMiddleware;
+        #[async_trait::async_trait]
+        impl McpMiddleware for ErrorMiddleware {
+            fn name(&self) -> &'static str {
+                "error_middleware"
+            }
+
+            fn priority(&self) -> i32 {
+                100
+            }
+
+            async fn before_request(
+                &self,
+                _request: &CallToolRequest,
+                _context: &mut MiddlewareContext,
+            ) -> McpResult<MiddlewareResult> {
+                Err(McpError::internal_error("Middleware error"))
+            }
+
+            async fn after_request(
+                &self,
+                _request: &CallToolRequest,
+                _result: &mut CallToolResult,
+                _context: &mut MiddlewareContext,
+            ) -> McpResult<MiddlewareResult> {
+                Ok(MiddlewareResult::Continue)
+            }
+
+            async fn on_error(
+                &self,
+                _request: &CallToolRequest,
+                _error: &McpError,
+                _context: &mut MiddlewareContext,
+            ) -> McpResult<MiddlewareResult> {
+                Ok(MiddlewareResult::Continue)
+            }
+        }
+
+        let chain = MiddlewareChain::new().add_middleware(ErrorMiddleware);
+
+        let request = CallToolRequest {
+            name: "test_tool".to_string(),
+            arguments: None,
+        };
+
+        let result = chain
+            .execute(request, |_| async {
+                Ok(CallToolResult {
+                    content: vec![Content::Text {
+                        text: "Should not reach here".to_string(),
+                    }],
+                    is_error: false,
+                })
+            })
+            .await;
+
+        assert!(result.is_err());
+        let error = result.unwrap_err();
+        assert!(matches!(error, McpError::InternalError { .. }));
+    }
 }
