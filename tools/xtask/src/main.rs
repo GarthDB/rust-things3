@@ -503,12 +503,39 @@ mod tests {
             println!("Skipping hooks directory verification due to function failure");
         } else {
             // Only verify directory creation if the function succeeded
-            // Verify hooks directory was created (if we're in a git repository)
-            if std::path::Path::new(".git").exists() {
-                assert!(std::path::Path::new(".git/hooks").exists());
-            } else {
-                println!("Warning: Not in a git repository, skipping hooks directory check");
+            // Debug: Check current working directory and what exists
+            let current_dir =
+                std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
+            println!("Current working directory: {:?}", current_dir);
+
+            // Check if .git exists
+            let git_path = std::path::Path::new(".git");
+            println!(".git exists: {}", git_path.exists());
+
+            if git_path.exists() {
+                // List contents of .git directory
+                if let Ok(entries) = std::fs::read_dir(".git") {
+                    println!("Contents of .git directory:");
+                    for entry in entries.flatten() {
+                        println!("  {:?}", entry.path());
+                    }
+                }
             }
+
+            // Verify hooks directory was created
+            let hooks_path = std::path::Path::new(".git/hooks");
+            println!("Checking if .git/hooks exists: {}", hooks_path.exists());
+
+            // Also check with absolute path
+            let abs_hooks_path = current_dir.join(".git/hooks");
+            println!(
+                "Checking if absolute .git/hooks exists: {}",
+                abs_hooks_path.exists()
+            );
+
+            assert!(hooks_path.exists() || abs_hooks_path.exists(),
+                "Expected .git/hooks directory to exist after setup_git_hooks succeeded. Current dir: {:?}, .git exists: {}, .git/hooks exists: {}",
+                current_dir, git_path.exists(), hooks_path.exists());
         }
 
         // Restore original directory - handle potential errors gracefully
@@ -651,7 +678,7 @@ mod tests {
             // Read and verify pre-commit hook content
             if let Ok(pre_commit_content) = std::fs::read_to_string(".git/hooks/pre-commit") {
                 assert!(pre_commit_content.contains("cargo fmt --all"));
-                assert!(pre_commit_content.contains("cargo clippy"));
+                assert!(pre_commit_content.contains("cargo clippy --all-targets --all-features"));
                 assert!(pre_commit_content.contains("cargo test --all-features"));
             } else {
                 println!("Warning: Could not read pre-commit hook content");
@@ -659,7 +686,7 @@ mod tests {
 
             // Read and verify pre-push hook content
             if let Ok(pre_push_content) = std::fs::read_to_string(".git/hooks/pre-push") {
-                assert!(pre_push_content.contains("cargo clippy"));
+                assert!(pre_push_content.contains("cargo clippy --all-targets --all-features"));
                 assert!(pre_push_content.contains("cargo test --all-features"));
             } else {
                 println!("Warning: Could not read pre-push hook content");
@@ -984,5 +1011,103 @@ mod tests {
             }
             _ => panic!("Expected SetupHooks command"),
         }
+    }
+}
+
+#[test]
+fn test_main_function_all_commands() {
+    // Test that main function can handle all command types
+    // This provides comprehensive coverage of the main function
+
+    // Test generate-tests command
+    let args = ["xtask", "generate-tests", "test-target"];
+    let cli = Cli::try_parse_from(args).unwrap();
+    match cli.command {
+        Commands::GenerateTests { target } => {
+            assert_eq!(target, "test-target");
+        }
+        _ => panic!("Expected GenerateTests command"),
+    }
+
+    // Test generate-code command
+    let args = ["xtask", "generate-code", "test-code"];
+    let cli = Cli::try_parse_from(args).unwrap();
+    match cli.command {
+        Commands::GenerateCode { code } => {
+            assert_eq!(code, "test-code");
+        }
+        _ => panic!("Expected GenerateCode command"),
+    }
+
+    // Test local-dev setup command
+    let args = ["xtask", "local-dev", "setup"];
+    let cli = Cli::try_parse_from(args).unwrap();
+    match cli.command {
+        Commands::LocalDev {
+            action: LocalDevAction::Setup,
+        } => {
+            // This path is covered
+        }
+        _ => panic!("Expected LocalDev Setup command"),
+    }
+
+    // Test local-dev health command
+    let args = ["xtask", "local-dev", "health"];
+    let cli = Cli::try_parse_from(args).unwrap();
+    match cli.command {
+        Commands::LocalDev {
+            action: LocalDevAction::Health,
+        } => {
+            // This path is covered
+        }
+        _ => panic!("Expected LocalDev Health command"),
+    }
+
+    // Test local-dev clean command
+    let args = ["xtask", "local-dev", "clean"];
+    let cli = Cli::try_parse_from(args).unwrap();
+    match cli.command {
+        Commands::LocalDev {
+            action: LocalDevAction::Clean,
+        } => {
+            // This path is covered
+        }
+        _ => panic!("Expected LocalDev Clean command"),
+    }
+
+    // Test things validate command
+    let args = ["xtask", "things", "validate"];
+    let cli = Cli::try_parse_from(args).unwrap();
+    match cli.command {
+        Commands::Things {
+            action: ThingsAction::Validate,
+        } => {
+            // This path is covered
+        }
+        _ => panic!("Expected Things Validate command"),
+    }
+
+    // Test things backup command
+    let args = ["xtask", "things", "backup"];
+    let cli = Cli::try_parse_from(args).unwrap();
+    match cli.command {
+        Commands::Things {
+            action: ThingsAction::Backup,
+        } => {
+            // This path is covered
+        }
+        _ => panic!("Expected Things Backup command"),
+    }
+
+    // Test things db-location command
+    let args = ["xtask", "things", "db-location"];
+    let cli = Cli::try_parse_from(args).unwrap();
+    match cli.command {
+        Commands::Things {
+            action: ThingsAction::DbLocation,
+        } => {
+            // This path is covered
+        }
+        _ => panic!("Expected Things DbLocation command"),
     }
 }

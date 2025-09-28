@@ -1,0 +1,3510 @@
+/Users/garthdb/Projects/rust-things/apps/things3-cli/src/lib.rs:
+    1|       |//! Things CLI library
+    2|       |
+    3|       |pub mod mcp;
+    4|       |
+    5|       |use clap::{Parser, Subcommand};
+    6|       |use std::io::Write;
+    7|       |use std::path::PathBuf;
+    8|       |use things3_core::{Result, ThingsConfig, ThingsDatabase};
+    9|       |
+   10|       |#[derive(Parser, Debug)]
+   11|       |#[command(name = "things3")]
+   12|       |#[command(about = "Things 3 CLI with integrated MCP server")]
+   13|       |#[command(version)]
+   14|       |pub struct Cli {
+   15|       |    /// Database path (defaults to Things 3 default location)
+   16|       |    #[arg(long, short)]
+   17|       |    pub database: Option<PathBuf>,
+   18|       |
+   19|       |    /// Fall back to default database path if specified path doesn't exist
+   20|       |    #[arg(long)]
+   21|       |    pub fallback_to_default: bool,
+   22|       |
+   23|       |    /// Verbose output
+   24|       |    #[arg(long, short)]
+   25|       |    pub verbose: bool,
+   26|       |
+   27|       |    #[command(subcommand)]
+   28|       |    pub command: Commands,
+   29|       |}
+   30|       |
+   31|       |#[derive(Subcommand, Debug, PartialEq, Eq)]
+   32|       |pub enum Commands {
+   33|       |    /// Get inbox tasks
+   34|       |    Inbox {
+   35|       |        /// Limit number of results
+   36|       |        #[arg(long, short)]
+   37|       |        limit: Option<usize>,
+   38|       |    },
+   39|       |    /// Get today's tasks
+   40|       |    Today {
+   41|       |        /// Limit number of results
+   42|       |        #[arg(long, short)]
+   43|       |        limit: Option<usize>,
+   44|       |    },
+   45|       |    /// Get projects
+   46|       |    Projects {
+   47|       |        /// Filter by area UUID
+   48|       |        #[arg(long)]
+   49|       |        area: Option<String>,
+   50|       |        /// Limit number of results
+   51|       |        #[arg(long, short)]
+   52|       |        limit: Option<usize>,
+   53|       |    },
+   54|       |    /// Get areas
+   55|       |    Areas {
+   56|       |        /// Limit number of results
+   57|       |        #[arg(long, short)]
+   58|       |        limit: Option<usize>,
+   59|       |    },
+   60|       |    /// Search tasks
+   61|       |    Search {
+   62|       |        /// Search query
+   63|       |        query: String,
+   64|       |        /// Limit number of results
+   65|       |        #[arg(long, short)]
+   66|       |        limit: Option<usize>,
+   67|       |    },
+   68|       |    /// Start MCP server mode
+   69|       |    Mcp,
+   70|       |    /// Health check
+   71|       |    Health,
+   72|       |}
+   73|       |
+   74|       |/// Print tasks to the given writer
+   75|       |///
+   76|       |/// # Errors
+   77|       |/// Returns an error if writing fails
+   78|      9|pub fn print_tasks<W: Write>(
+   79|      9|    _db: &ThingsDatabase,
+   80|      9|    tasks: &[things3_core::Task],
+   81|      9|    writer: &mut W,
+   82|      9|) -> Result<()> {
+   83|      9|    if tasks.is_empty() {
+   84|      2|        writeln!(writer, "No tasks found")?;
+                                                        ^0
+   85|      2|        return Ok(());
+   86|      7|    }
+   87|       |
+   88|      7|    writeln!(writer, "Found {} tasks:", tasks.len())?;
+                                                                  ^0
+   89|     39|    for task in tasks {
+                      ^32
+   90|     32|        writeln!(writer, "  • {} ({:?})", task.title, task.task_type)?;
+                                                                                     ^0
+   91|     32|        if let Some(notes) = &task.notes {
+   92|     32|            writeln!(writer, "    Notes: {notes}")?;
+                                                                ^0
+   93|      0|        }
+   94|     32|        if let Some(deadline) = &task.deadline {
+                                  ^6
+   95|      6|            writeln!(writer, "    Deadline: {deadline}")?;
+                                                                      ^0
+   96|     26|        }
+   97|     32|        if !task.tags.is_empty() {
+   98|      0|            writeln!(writer, "    Tags: {}", task.tags.join(", "))?;
+   99|     32|        }
+  100|     32|        writeln!(writer)?;
+                                      ^0
+  101|       |    }
+  102|      7|    Ok(())
+  103|      9|}
+  104|       |
+  105|       |/// Print projects to the given writer
+  106|       |///
+  107|       |/// # Errors
+  108|       |/// Returns an error if writing fails
+  109|      3|pub fn print_projects<W: Write>(
+  110|      3|    _db: &ThingsDatabase,
+  111|      3|    projects: &[things3_core::Project],
+  112|      3|    writer: &mut W,
+  113|      3|) -> Result<()> {
+  114|      3|    if projects.is_empty() {
+  115|      1|        writeln!(writer, "No projects found")?;
+                                                           ^0
+  116|      1|        return Ok(());
+  117|      2|    }
+  118|       |
+  119|      2|    writeln!(writer, "Found {} projects:", projects.len())?;
+                                                                        ^0
+  120|      6|    for project in projects {
+                      ^4
+  121|      4|        writeln!(writer, "  • {} ({:?})", project.title, project.status)?;
+                                                                                        ^0
+  122|      4|        if let Some(notes) = &project.notes {
+  123|      4|            writeln!(writer, "    Notes: {notes}")?;
+                                                                ^0
+  124|      0|        }
+  125|      4|        if let Some(deadline) = &project.deadline {
+                                  ^2
+  126|      2|            writeln!(writer, "    Deadline: {deadline}")?;
+                                                                      ^0
+  127|      2|        }
+  128|      4|        if !project.tags.is_empty() {
+  129|      0|            writeln!(writer, "    Tags: {}", project.tags.join(", "))?;
+  130|      4|        }
+  131|      4|        writeln!(writer)?;
+                                      ^0
+  132|       |    }
+  133|      2|    Ok(())
+  134|      3|}
+  135|       |
+  136|       |/// Print areas to the given writer
+  137|       |///
+  138|       |/// # Errors
+  139|       |/// Returns an error if writing fails
+  140|      3|pub fn print_areas<W: Write>(
+  141|      3|    _db: &ThingsDatabase,
+  142|      3|    areas: &[things3_core::Area],
+  143|      3|    writer: &mut W,
+  144|      3|) -> Result<()> {
+  145|      3|    if areas.is_empty() {
+  146|      1|        writeln!(writer, "No areas found")?;
+                                                        ^0
+  147|      1|        return Ok(());
+  148|      2|    }
+  149|       |
+  150|      2|    writeln!(writer, "Found {} areas:", areas.len())?;
+                                                                  ^0
+  151|      8|    for area in areas {
+                      ^6
+  152|      6|        writeln!(writer, "  • {}", area.title)?;
+                                                              ^0
+  153|      6|        if let Some(notes) = &area.notes {
+                                  ^0
+  154|      0|            writeln!(writer, "    Notes: {notes}")?;
+  155|      6|        }
+  156|      6|        if !area.tags.is_empty() {
+  157|      0|            writeln!(writer, "    Tags: {}", area.tags.join(", "))?;
+  158|      6|        }
+  159|      6|        writeln!(writer)?;
+                                      ^0
+  160|       |    }
+  161|      2|    Ok(())
+  162|      3|}
+  163|       |
+  164|       |/// Perform a health check on the database
+  165|       |///
+  166|       |/// # Errors
+  167|       |/// Returns an error if the database is not accessible
+  168|      2|pub fn health_check(db: &ThingsDatabase) -> Result<()> {
+  169|      2|    println!("🔍 Checking Things 3 database connection...");
+  170|       |
+  171|       |    // Try to get a small sample of tasks to verify connection
+  172|      2|    let tasks = db.get_inbox(Some(1))?;
+                                                   ^0
+  173|      2|    println!("✅ Database connection successful!");
+  174|      2|    println!("   Found {} tasks in inbox", tasks.len());
+  175|       |
+  176|       |    // Try to get projects
+  177|      2|    let projects = db.get_projects(None)?;
+                                                      ^0
+  178|      2|    println!("   Found {} projects", projects.len());
+  179|       |
+  180|       |    // Try to get areas
+  181|      2|    let areas = db.get_areas()?;
+                                            ^0
+  182|      2|    println!("   Found {} areas", areas.len());
+  183|       |
+  184|      2|    println!("🎉 All systems operational!");
+  185|      2|    Ok(())
+  186|      2|}
+  187|       |
+  188|       |/// Start the MCP server
+  189|       |///
+  190|       |/// # Errors
+  191|       |/// Returns an error if the server fails to start
+  192|      1|pub fn start_mcp_server(db: ThingsDatabase, config: ThingsConfig) -> Result<()> {
+  193|      1|    println!("🚀 Starting MCP server...");
+  194|       |
+  195|      1|    let _server = mcp::ThingsMcpServer::new(db, config);
+  196|       |
+  197|       |    // In a real implementation, this would start the MCP server
+  198|       |    // For now, we'll just print that it would start
+  199|      1|    println!("✅ MCP server would start here");
+  200|      1|    println!("   (This is a placeholder - actual MCP server implementation would go here)");
+  201|       |
+  202|      1|    Ok(())
+  203|      1|}
+
+/Users/garthdb/Projects/rust-things/apps/things3-cli/src/main.rs:
+    1|       |//! Things CLI - Command line interface for Things 3 with integrated MCP server
+    2|       |
+    3|       |use clap::Parser;
+    4|       |use things3_cli::{
+    5|       |    health_check, print_areas, print_projects, print_tasks, start_mcp_server, Cli, Commands,
+    6|       |};
+    7|       |use things3_core::{Result, ThingsConfig, ThingsDatabase};
+    8|       |
+    9|       |#[tokio::main]
+   10|      0|async fn main() -> Result<()> {
+   11|      0|    let cli = Cli::parse();
+   12|       |
+   13|       |    // Set up logging if verbose
+   14|      0|    if cli.verbose {
+   15|      0|        env_logger::Builder::from_default_env()
+   16|      0|            .filter_level(log::LevelFilter::Debug)
+   17|      0|            .init();
+   18|      0|    }
+   19|       |
+   20|       |    // Create configuration
+   21|      0|    let config = if let Some(db_path) = cli.database {
+   22|      0|        ThingsConfig::new(db_path, cli.fallback_to_default)
+   23|       |    } else {
+   24|      0|        ThingsConfig::from_env()
+   25|       |    };
+   26|       |
+   27|       |    // Create database connection
+   28|      0|    let db = ThingsDatabase::with_config(&config)?;
+   29|       |
+   30|      0|    match cli.command {
+   31|      0|        Commands::Inbox { limit } => {
+   32|      0|            let tasks = db.get_inbox(limit)?;
+   33|      0|            print_tasks(&db, &tasks, &mut std::io::stdout())?;
+   34|      0|        }
+   35|      0|        Commands::Today { limit } => {
+   36|      0|            let tasks = db.get_today(limit)?;
+   37|      0|            print_tasks(&db, &tasks, &mut std::io::stdout())?;
+   38|      0|        }
+   39|      0|        Commands::Projects { area, limit } => {
+   40|      0|            let area_uuid = area.and_then(|a| uuid::Uuid::parse_str(&a).ok());
+   41|      0|            let projects = db.get_projects(area_uuid)?;
+   42|      0|            let projects = if let Some(limit) = limit {
+   43|      0|                projects.into_iter().take(limit).collect::<Vec<_>>()
+   44|      0|            } else {
+   45|      0|                projects
+   46|      0|            };
+   47|      0|            print_projects(&db, &projects, &mut std::io::stdout())?;
+   48|      0|        }
+   49|      0|        Commands::Areas { limit } => {
+   50|      0|            let areas = db.get_areas()?;
+   51|      0|            let areas = if let Some(limit) = limit {
+   52|      0|                areas.into_iter().take(limit).collect::<Vec<_>>()
+   53|      0|            } else {
+   54|      0|                areas
+   55|      0|            };
+   56|      0|            print_areas(&db, &areas, &mut std::io::stdout())?;
+   57|      0|        }
+   58|      0|        Commands::Search { query, limit } => {
+   59|      0|            let tasks = db.search_tasks(&query, limit)?;
+   60|      0|            print_tasks(&db, &tasks, &mut std::io::stdout())?;
+   61|      0|        }
+   62|      0|        Commands::Mcp => {
+   63|      0|            start_mcp_server(db, config)?;
+   64|      0|        }
+   65|      0|        Commands::Health => {
+   66|      0|            health_check(&db)?;
+   67|      0|        }
+   68|      0|    }
+   69|      0|
+   70|      0|    Ok(())
+   71|      0|}
+   72|       |
+   73|       |#[cfg(test)]
+   74|       |mod tests {
+   75|       |    use super::*;
+   76|       |    use std::io::Cursor;
+   77|       |    use tempfile::NamedTempFile;
+   78|       |    use things3_core::test_utils::create_test_database;
+   79|       |
+   80|       |    /// Test the main function with various command combinations
+   81|       |    #[tokio::test]
+   82|      1|    async fn test_main_inbox_command() {
+   83|      1|        let temp_file = NamedTempFile::new().unwrap();
+   84|      1|        let db_path = temp_file.path();
+   85|      1|        create_test_database(db_path).unwrap();
+   86|       |
+   87|      1|        let config = ThingsConfig::new(db_path, false);
+   88|      1|        let db = ThingsDatabase::with_config(&config).unwrap();
+   89|       |
+   90|       |        // Test inbox command
+   91|      1|        let cli = Cli::try_parse_from(["things-cli", "inbox"]).unwrap();
+   92|      1|        let result = match cli.command {
+   93|      1|            Commands::Inbox { limit } => {
+   94|      1|                let tasks = db.get_inbox(limit).unwrap();
+   95|      1|                let mut output = Cursor::new(Vec::new());
+   96|      1|                print_tasks(&db, &tasks, &mut output).unwrap();
+   97|      1|                String::from_utf8(output.into_inner()).unwrap()
+   98|       |            }
+   99|      0|            _ => panic!("Expected inbox command"),
+  100|       |        };
+  101|      1|        assert!(!result.is_empty());
+  102|      1|    }
+  103|       |
+  104|       |    #[tokio::test]
+  105|      1|    async fn test_main_today_command() {
+  106|      1|        let temp_file = NamedTempFile::new().unwrap();
+  107|      1|        let db_path = temp_file.path();
+  108|      1|        create_test_database(db_path).unwrap();
+  109|       |
+  110|      1|        let config = ThingsConfig::new(db_path, false);
+  111|      1|        let db = ThingsDatabase::with_config(&config).unwrap();
+  112|       |
+  113|       |        // Test today command
+  114|      1|        let cli = Cli::try_parse_from(["things-cli", "today"]).unwrap();
+  115|      1|        let result = match cli.command {
+  116|      1|            Commands::Today { limit } => {
+  117|      1|                let tasks = db.get_today(limit).unwrap();
+  118|      1|                let mut output = Cursor::new(Vec::new());
+  119|      1|                print_tasks(&db, &tasks, &mut output).unwrap();
+  120|      1|                String::from_utf8(output.into_inner()).unwrap()
+  121|       |            }
+  122|      0|            _ => panic!("Expected today command"),
+  123|       |        };
+  124|      1|        assert!(!result.is_empty());
+  125|      1|    }
+  126|       |
+  127|       |    #[tokio::test]
+  128|      1|    async fn test_main_projects_command() {
+  129|      1|        let temp_file = NamedTempFile::new().unwrap();
+  130|      1|        let db_path = temp_file.path();
+  131|      1|        create_test_database(db_path).unwrap();
+  132|       |
+  133|      1|        let config = ThingsConfig::new(db_path, false);
+  134|      1|        let db = ThingsDatabase::with_config(&config).unwrap();
+  135|       |
+  136|       |        // Test projects command
+  137|      1|        let cli = Cli::try_parse_from(["things-cli", "projects"]).unwrap();
+  138|      1|        let result = match cli.command {
+  139|      1|            Commands::Projects { area, limit } => {
+  140|      1|                let area_uuid = area.and_then(|a| uuid::Uuid::parse_str(&a).ok());
+                                                                ^0                    ^0  ^0
+  141|      1|                let projects = db.get_projects(area_uuid).unwrap();
+  142|      1|                let projects = if let Some(limit) = limit {
+                                                         ^0
+  143|      0|                    projects.into_iter().take(limit).collect::<Vec<_>>()
+  144|       |                } else {
+  145|      1|                    projects
+  146|       |                };
+  147|      1|                let mut output = Cursor::new(Vec::new());
+  148|      1|                print_projects(&db, &projects, &mut output).unwrap();
+  149|      1|                String::from_utf8(output.into_inner()).unwrap()
+  150|       |            }
+  151|      0|            _ => panic!("Expected projects command"),
+  152|       |        };
+  153|      1|        assert!(!result.is_empty());
+  154|      1|    }
+  155|       |
+  156|       |    #[tokio::test]
+  157|      1|    async fn test_main_areas_command() {
+  158|      1|        let temp_file = NamedTempFile::new().unwrap();
+  159|      1|        let db_path = temp_file.path();
+  160|      1|        create_test_database(db_path).unwrap();
+  161|       |
+  162|      1|        let config = ThingsConfig::new(db_path, false);
+  163|      1|        let db = ThingsDatabase::with_config(&config).unwrap();
+  164|       |
+  165|       |        // Test areas command
+  166|      1|        let cli = Cli::try_parse_from(["things-cli", "areas"]).unwrap();
+  167|      1|        let result = match cli.command {
+  168|      1|            Commands::Areas { limit } => {
+  169|      1|                let areas = db.get_areas().unwrap();
+  170|      1|                let areas = if let Some(limit) = limit {
+                                                      ^0
+  171|      0|                    areas.into_iter().take(limit).collect::<Vec<_>>()
+  172|       |                } else {
+  173|      1|                    areas
+  174|       |                };
+  175|      1|                let mut output = Cursor::new(Vec::new());
+  176|      1|                print_areas(&db, &areas, &mut output).unwrap();
+  177|      1|                String::from_utf8(output.into_inner()).unwrap()
+  178|       |            }
+  179|      0|            _ => panic!("Expected areas command"),
+  180|       |        };
+  181|      1|        assert!(!result.is_empty());
+  182|      1|    }
+  183|       |
+  184|       |    #[tokio::test]
+  185|      1|    async fn test_main_search_command() {
+  186|      1|        let temp_file = NamedTempFile::new().unwrap();
+  187|      1|        let db_path = temp_file.path();
+  188|      1|        create_test_database(db_path).unwrap();
+  189|       |
+  190|      1|        let config = ThingsConfig::new(db_path, false);
+  191|      1|        let db = ThingsDatabase::with_config(&config).unwrap();
+  192|       |
+  193|       |        // Test search command
+  194|      1|        let cli = Cli::try_parse_from(["things-cli", "search", "test"]).unwrap();
+  195|      1|        let result = match cli.command {
+  196|      1|            Commands::Search { query, limit } => {
+  197|      1|                let tasks = db.search_tasks(&query, limit).unwrap();
+  198|      1|                let mut output = Cursor::new(Vec::new());
+  199|      1|                print_tasks(&db, &tasks, &mut output).unwrap();
+  200|      1|                String::from_utf8(output.into_inner()).unwrap()
+  201|       |            }
+  202|      0|            _ => panic!("Expected search command"),
+  203|       |        };
+  204|      1|        assert!(!result.is_empty());
+  205|      1|    }
+  206|       |
+  207|       |    #[tokio::test]
+  208|      1|    async fn test_main_health_command() {
+  209|      1|        let temp_file = NamedTempFile::new().unwrap();
+  210|      1|        let db_path = temp_file.path();
+  211|      1|        create_test_database(db_path).unwrap();
+  212|       |
+  213|      1|        let config = ThingsConfig::new(db_path, false);
+  214|      1|        let db = ThingsDatabase::with_config(&config).unwrap();
+  215|       |
+  216|       |        // Test health command
+  217|      1|        let cli = Cli::try_parse_from(["things-cli", "health"]).unwrap();
+  218|      1|        match cli.command {
+  219|      1|            Commands::Health => {
+  220|      1|                health_check(&db).unwrap();
+  221|      1|            }
+  222|      1|            _ => panic!("Expected health command"),
+                               ^0     ^0
+  223|      1|        }
+  224|      1|    }
+  225|       |
+  226|       |    #[tokio::test]
+  227|      1|    async fn test_main_mcp_command() {
+  228|      1|        let temp_file = NamedTempFile::new().unwrap();
+  229|      1|        let db_path = temp_file.path();
+  230|      1|        create_test_database(db_path).unwrap();
+  231|       |
+  232|      1|        let config = ThingsConfig::new(db_path, false);
+  233|      1|        let db = ThingsDatabase::with_config(&config).unwrap();
+  234|       |
+  235|       |        // Test MCP command
+  236|      1|        let cli = Cli::try_parse_from(["things-cli", "mcp"]).unwrap();
+  237|      1|        match cli.command {
+  238|      1|            Commands::Mcp => {
+  239|      1|                start_mcp_server(db, config).unwrap();
+  240|      1|            }
+  241|      1|            _ => panic!("Expected MCP command"),
+                               ^0     ^0
+  242|      1|        }
+  243|      1|    }
+  244|       |
+  245|       |    #[tokio::test]
+  246|      1|    async fn test_main_with_verbose_flag() {
+  247|      1|        let temp_file = NamedTempFile::new().unwrap();
+  248|      1|        let db_path = temp_file.path();
+  249|      1|        create_test_database(db_path).unwrap();
+  250|       |
+  251|      1|        let config = ThingsConfig::new(db_path, false);
+  252|      1|        let db = ThingsDatabase::with_config(&config).unwrap();
+  253|       |
+  254|       |        // Test with verbose flag
+  255|      1|        let cli = Cli::try_parse_from(["things-cli", "--verbose", "inbox"]).unwrap();
+  256|      1|        assert!(cli.verbose);
+  257|       |
+  258|      1|        match cli.command {
+  259|      1|            Commands::Inbox { limit } => {
+  260|      1|                let tasks = db.get_inbox(limit).unwrap();
+  261|      1|                let mut output = Cursor::new(Vec::new());
+  262|      1|                print_tasks(&db, &tasks, &mut output).unwrap();
+  263|      1|                let result = String::from_utf8(output.into_inner()).unwrap();
+  264|      1|                assert!(!result.is_empty());
+  265|      1|            }
+  266|      1|            _ => panic!("Expected inbox command"),
+                               ^0     ^0
+  267|      1|        }
+  268|      1|    }
+  269|       |
+  270|       |    #[tokio::test]
+  271|      1|    async fn test_main_with_database_path() {
+  272|      1|        let temp_file = NamedTempFile::new().unwrap();
+  273|      1|        let db_path = temp_file.path();
+  274|      1|        create_test_database(db_path).unwrap();
+  275|       |
+  276|       |        // Test with database path
+  277|      1|        let cli = Cli::try_parse_from([
+  278|      1|            "things-cli",
+  279|      1|            "--database",
+  280|      1|            db_path.to_str().unwrap(),
+  281|      1|            "inbox",
+  282|      1|        ])
+  283|      1|        .unwrap();
+  284|      1|        assert_eq!(cli.database, Some(db_path.to_path_buf()));
+  285|       |
+  286|      1|        let config = ThingsConfig::new(db_path, false);
+  287|      1|        let db = ThingsDatabase::with_config(&config).unwrap();
+  288|       |
+  289|      1|        match cli.command {
+  290|      1|            Commands::Inbox { limit } => {
+  291|      1|                let tasks = db.get_inbox(limit).unwrap();
+  292|      1|                let mut output = Cursor::new(Vec::new());
+  293|      1|                print_tasks(&db, &tasks, &mut output).unwrap();
+  294|      1|                let result = String::from_utf8(output.into_inner()).unwrap();
+  295|      1|                assert!(!result.is_empty());
+  296|      1|            }
+  297|      1|            _ => panic!("Expected inbox command"),
+                               ^0     ^0
+  298|      1|        }
+  299|      1|    }
+  300|       |
+  301|       |    #[tokio::test]
+  302|      1|    async fn test_main_with_fallback_flag() {
+  303|      1|        let temp_file = NamedTempFile::new().unwrap();
+  304|      1|        let db_path = temp_file.path();
+  305|      1|        create_test_database(db_path).unwrap();
+  306|       |
+  307|       |        // Test with fallback flag
+  308|      1|        let cli = Cli::try_parse_from(["things-cli", "--fallback-to-default", "inbox"]).unwrap();
+  309|      1|        assert!(cli.fallback_to_default);
+  310|       |
+  311|      1|        let config = ThingsConfig::new(db_path, false);
+  312|      1|        let db = ThingsDatabase::with_config(&config).unwrap();
+  313|       |
+  314|      1|        match cli.command {
+  315|      1|            Commands::Inbox { limit } => {
+  316|      1|                let tasks = db.get_inbox(limit).unwrap();
+  317|      1|                let mut output = Cursor::new(Vec::new());
+  318|      1|                print_tasks(&db, &tasks, &mut output).unwrap();
+  319|      1|                let result = String::from_utf8(output.into_inner()).unwrap();
+  320|      1|                assert!(!result.is_empty());
+  321|      1|            }
+  322|      1|            _ => panic!("Expected inbox command"),
+                               ^0     ^0
+  323|      1|        }
+  324|      1|    }
+  325|       |
+  326|       |    #[tokio::test]
+  327|      1|    async fn test_main_with_limit() {
+  328|      1|        let temp_file = NamedTempFile::new().unwrap();
+  329|      1|        let db_path = temp_file.path();
+  330|      1|        create_test_database(db_path).unwrap();
+  331|       |
+  332|      1|        let config = ThingsConfig::new(db_path, false);
+  333|      1|        let db = ThingsDatabase::with_config(&config).unwrap();
+  334|       |
+  335|       |        // Test with limit
+  336|      1|        let cli = Cli::try_parse_from(["things-cli", "inbox", "--limit", "5"]).unwrap();
+  337|      1|        match cli.command {
+  338|      1|            Commands::Inbox { limit } => {
+  339|      1|                assert_eq!(limit, Some(5));
+  340|      1|                let tasks = db.get_inbox(limit).unwrap();
+  341|      1|                let mut output = Cursor::new(Vec::new());
+  342|      1|                print_tasks(&db, &tasks, &mut output).unwrap();
+  343|      1|                let result = String::from_utf8(output.into_inner()).unwrap();
+  344|      1|                assert!(!result.is_empty());
+  345|      1|            }
+  346|      1|            _ => panic!("Expected inbox command"),
+                               ^0     ^0
+  347|      1|        }
+  348|      1|    }
+  349|       |
+  350|       |    #[tokio::test]
+  351|      1|    async fn test_main_config_creation_from_env() {
+  352|       |        // Test configuration creation from environment
+  353|      1|        let cli = Cli::try_parse_from(["things-cli", "inbox"]).unwrap();
+  354|       |
+  355|       |        // Test that config creation doesn't panic
+  356|      1|        let config = if let Some(db_path) = cli.database {
+                                               ^0
+  357|      0|            ThingsConfig::new(db_path, cli.fallback_to_default)
+  358|       |        } else {
+  359|      1|            ThingsConfig::from_env()
+  360|       |        };
+  361|       |
+  362|       |        // Just verify it creates a config (it might fail due to missing database, but that's ok)
+  363|      1|        let _ = config;
+  364|      1|    }
+  365|       |
+  366|       |    #[tokio::test]
+  367|      1|    async fn test_main_config_creation_with_database_path() {
+  368|      1|        let temp_file = NamedTempFile::new().unwrap();
+  369|      1|        let db_path = temp_file.path();
+  370|       |
+  371|       |        // Test configuration creation with database path
+  372|      1|        let cli = Cli::try_parse_from([
+  373|      1|            "things-cli",
+  374|      1|            "--database",
+  375|      1|            db_path.to_str().unwrap(),
+  376|      1|            "inbox",
+  377|      1|        ])
+  378|      1|        .unwrap();
+  379|       |
+  380|      1|        let config = if let Some(db_path) = cli.database {
+  381|      1|            ThingsConfig::new(db_path, cli.fallback_to_default)
+  382|       |        } else {
+  383|      0|            ThingsConfig::from_env()
+  384|       |        };
+  385|       |
+  386|       |        // This should work since we're providing a valid path
+  387|       |        // Just verify it creates a config (ThingsConfig::new doesn't return a Result)
+  388|      1|        let _ = config;
+  389|      1|    }
+  390|       |}
+
+/Users/garthdb/Projects/rust-things/apps/things3-cli/src/mcp.rs:
+    1|       |//! MCP (Model Context Protocol) server implementation for Things 3 integration
+    2|       |
+    3|       |use serde::{Deserialize, Serialize};
+    4|       |use serde_json::Value;
+    5|       |use std::sync::Arc;
+    6|       |use things3_core::{
+    7|       |    BackupManager, DataExporter, PerformanceMonitor, ThingsCache, ThingsConfig, ThingsDatabase,
+    8|       |    ThingsError,
+    9|       |};
+   10|       |use thiserror::Error;
+   11|       |use tokio::sync::Mutex;
+   12|       |
+   13|       |pub mod middleware;
+   14|       |use middleware::{MiddlewareChain, MiddlewareConfig};
+   15|       |
+   16|       |/// MCP-specific error types for better error handling and user experience
+   17|       |#[derive(Error, Debug)]
+   18|       |pub enum McpError {
+   19|       |    #[error("Tool not found: {tool_name}")]
+   20|       |    ToolNotFound { tool_name: String },
+   21|       |
+   22|       |    #[error("Resource not found: {uri}")]
+   23|       |    ResourceNotFound { uri: String },
+   24|       |
+   25|       |    #[error("Prompt not found: {prompt_name}")]
+   26|       |    PromptNotFound { prompt_name: String },
+   27|       |
+   28|       |    #[error("Invalid parameter: {parameter_name} - {message}")]
+   29|       |    InvalidParameter {
+   30|       |        parameter_name: String,
+   31|       |        message: String,
+   32|       |    },
+   33|       |
+   34|       |    #[error("Missing required parameter: {parameter_name}")]
+   35|       |    MissingParameter { parameter_name: String },
+   36|       |
+   37|       |    #[error("Invalid format: {format} - supported formats: {supported}")]
+   38|       |    InvalidFormat { format: String, supported: String },
+   39|       |
+   40|       |    #[error("Invalid data type: {data_type} - supported types: {supported}")]
+   41|       |    InvalidDataType {
+   42|       |        data_type: String,
+   43|       |        supported: String,
+   44|       |    },
+   45|       |
+   46|       |    #[error("Database operation failed: {operation}")]
+   47|       |    DatabaseOperationFailed {
+   48|       |        operation: String,
+   49|       |        source: ThingsError,
+   50|       |    },
+   51|       |
+   52|       |    #[error("Backup operation failed: {operation}")]
+   53|       |    BackupOperationFailed {
+   54|       |        operation: String,
+   55|       |        source: ThingsError,
+   56|       |    },
+   57|       |
+   58|       |    #[error("Export operation failed: {operation}")]
+   59|       |    ExportOperationFailed {
+   60|       |        operation: String,
+   61|       |        source: ThingsError,
+   62|       |    },
+   63|       |
+   64|       |    #[error("Performance monitoring failed: {operation}")]
+   65|       |    PerformanceMonitoringFailed {
+   66|       |        operation: String,
+   67|       |        source: ThingsError,
+   68|       |    },
+   69|       |
+   70|       |    #[error("Cache operation failed: {operation}")]
+   71|       |    CacheOperationFailed {
+   72|       |        operation: String,
+   73|       |        source: ThingsError,
+   74|       |    },
+   75|       |
+   76|       |    #[error("Serialization failed: {operation}")]
+   77|       |    SerializationFailed {
+   78|       |        operation: String,
+   79|       |        source: serde_json::Error,
+   80|       |    },
+   81|       |
+   82|       |    #[error("IO operation failed: {operation}")]
+   83|       |    IoOperationFailed {
+   84|       |        operation: String,
+   85|       |        source: std::io::Error,
+   86|       |    },
+   87|       |
+   88|       |    #[error("Configuration error: {message}")]
+   89|       |    ConfigurationError { message: String },
+   90|       |
+   91|       |    #[error("Validation error: {message}")]
+   92|       |    ValidationError { message: String },
+   93|       |
+   94|       |    #[error("Internal error: {message}")]
+   95|       |    InternalError { message: String },
+   96|       |}
+   97|       |
+   98|       |impl McpError {
+   99|       |    /// Create a tool not found error
+  100|     10|    pub fn tool_not_found(tool_name: impl Into<String>) -> Self {
+  101|     10|        Self::ToolNotFound {
+  102|     10|            tool_name: tool_name.into(),
+  103|     10|        }
+  104|     10|    }
+  105|       |
+  106|       |    /// Create a resource not found error
+  107|     10|    pub fn resource_not_found(uri: impl Into<String>) -> Self {
+  108|     10|        Self::ResourceNotFound { uri: uri.into() }
+  109|     10|    }
+  110|       |
+  111|       |    /// Create a prompt not found error
+  112|     10|    pub fn prompt_not_found(prompt_name: impl Into<String>) -> Self {
+  113|     10|        Self::PromptNotFound {
+  114|     10|            prompt_name: prompt_name.into(),
+  115|     10|        }
+  116|     10|    }
+  117|       |
+  118|       |    /// Create an invalid parameter error
+  119|      4|    pub fn invalid_parameter(
+  120|      4|        parameter_name: impl Into<String>,
+  121|      4|        message: impl Into<String>,
+  122|      4|    ) -> Self {
+  123|      4|        Self::InvalidParameter {
+  124|      4|            parameter_name: parameter_name.into(),
+  125|      4|            message: message.into(),
+  126|      4|        }
+  127|      4|    }
+  128|       |
+  129|       |    /// Create a missing parameter error
+  130|     23|    pub fn missing_parameter(parameter_name: impl Into<String>) -> Self {
+  131|     23|        Self::MissingParameter {
+  132|     23|            parameter_name: parameter_name.into(),
+  133|     23|        }
+  134|     23|    }
+  135|       |
+  136|       |    /// Create an invalid format error
+  137|      8|    pub fn invalid_format(format: impl Into<String>, supported: impl Into<String>) -> Self {
+  138|      8|        Self::InvalidFormat {
+  139|      8|            format: format.into(),
+  140|      8|            supported: supported.into(),
+  141|      8|        }
+  142|      8|    }
+  143|       |
+  144|       |    /// Create an invalid data type error
+  145|      6|    pub fn invalid_data_type(data_type: impl Into<String>, supported: impl Into<String>) -> Self {
+  146|      6|        Self::InvalidDataType {
+  147|      6|            data_type: data_type.into(),
+  148|      6|            supported: supported.into(),
+  149|      6|        }
+  150|      6|    }
+  151|       |
+  152|       |    /// Create a database operation failed error
+  153|      5|    pub fn database_operation_failed(operation: impl Into<String>, source: ThingsError) -> Self {
+  154|      5|        Self::DatabaseOperationFailed {
+  155|      5|            operation: operation.into(),
+  156|      5|            source,
+  157|      5|        }
+  158|      5|    }
+  159|       |
+  160|       |    /// Create a backup operation failed error
+  161|      4|    pub fn backup_operation_failed(operation: impl Into<String>, source: ThingsError) -> Self {
+  162|      4|        Self::BackupOperationFailed {
+  163|      4|            operation: operation.into(),
+  164|      4|            source,
+  165|      4|        }
+  166|      4|    }
+  167|       |
+  168|       |    /// Create an export operation failed error
+  169|      2|    pub fn export_operation_failed(operation: impl Into<String>, source: ThingsError) -> Self {
+  170|      2|        Self::ExportOperationFailed {
+  171|      2|            operation: operation.into(),
+  172|      2|            source,
+  173|      2|        }
+  174|      2|    }
+  175|       |
+  176|       |    /// Create a performance monitoring failed error
+  177|      2|    pub fn performance_monitoring_failed(
+  178|      2|        operation: impl Into<String>,
+  179|      2|        source: ThingsError,
+  180|      2|    ) -> Self {
+  181|      2|        Self::PerformanceMonitoringFailed {
+  182|      2|            operation: operation.into(),
+  183|      2|            source,
+  184|      2|        }
+  185|      2|    }
+  186|       |
+  187|       |    /// Create a cache operation failed error
+  188|      2|    pub fn cache_operation_failed(operation: impl Into<String>, source: ThingsError) -> Self {
+  189|      2|        Self::CacheOperationFailed {
+  190|      2|            operation: operation.into(),
+  191|      2|            source,
+  192|      2|        }
+  193|      2|    }
+  194|       |
+  195|       |    /// Create a serialization failed error
+  196|      6|    pub fn serialization_failed(operation: impl Into<String>, source: serde_json::Error) -> Self {
+  197|      6|        Self::SerializationFailed {
+  198|      6|            operation: operation.into(),
+  199|      6|            source,
+  200|      6|        }
+  201|      6|    }
+  202|       |
+  203|       |    /// Create an IO operation failed error
+  204|      7|    pub fn io_operation_failed(operation: impl Into<String>, source: std::io::Error) -> Self {
+  205|      7|        Self::IoOperationFailed {
+  206|      7|            operation: operation.into(),
+  207|      7|            source,
+  208|      7|        }
+  209|      7|    }
+  210|       |
+  211|       |    /// Create a configuration error
+  212|      6|    pub fn configuration_error(message: impl Into<String>) -> Self {
+  213|      6|        Self::ConfigurationError {
+  214|      6|            message: message.into(),
+  215|      6|        }
+  216|      6|    }
+  217|       |
+  218|       |    /// Create a validation error
+  219|     13|    pub fn validation_error(message: impl Into<String>) -> Self {
+  220|     13|        Self::ValidationError {
+  221|     13|            message: message.into(),
+  222|     13|        }
+  223|     13|    }
+  224|       |
+  225|       |    /// Create an internal error
+  226|      6|    pub fn internal_error(message: impl Into<String>) -> Self {
+  227|      6|        Self::InternalError {
+  228|      6|            message: message.into(),
+  229|      6|        }
+  230|      6|    }
+  231|       |
+  232|       |    /// Convert error to MCP call result
+  233|       |    #[must_use]
+  234|     30|    pub fn to_call_result(self) -> CallToolResult {
+  235|     30|        let error_message = match &self {
+  236|      5|            McpError::ToolNotFound { tool_name } => {
+  237|      5|                format!("Tool '{tool_name}' not found. Available tools can be listed using the list_tools method.")
+  238|       |            }
+  239|      2|            McpError::ResourceNotFound { uri } => {
+  240|      2|                format!("Resource '{uri}' not found. Available resources can be listed using the list_resources method.")
+  241|       |            }
+  242|      2|            McpError::PromptNotFound { prompt_name } => {
+  243|      2|                format!("Prompt '{prompt_name}' not found. Available prompts can be listed using the list_prompts method.")
+  244|       |            }
+  245|       |            McpError::InvalidParameter {
+  246|      1|                parameter_name,
+  247|      1|                message,
+  248|       |            } => {
+  249|      1|                format!("Invalid parameter '{parameter_name}': {message}. Please check the parameter format and try again.")
+  250|       |            }
+  251|      5|            McpError::MissingParameter { parameter_name } => {
+  252|      5|                format!("Missing required parameter '{parameter_name}'. Please provide this parameter and try again.")
+  253|       |            }
+  254|      3|            McpError::InvalidFormat { format, supported } => {
+  255|      3|                format!("Invalid format '{format}'. Supported formats: {supported}. Please use one of the supported formats.")
+  256|       |            }
+  257|       |            McpError::InvalidDataType {
+  258|      2|                data_type,
+  259|      2|                supported,
+  260|       |            } => {
+  261|      2|                format!("Invalid data type '{data_type}'. Supported types: {supported}. Please use one of the supported types.")
+  262|       |            }
+  263|      1|            McpError::DatabaseOperationFailed { operation, source } => {
+  264|      1|                format!("Database operation '{operation}' failed: {source}. Please check your database connection and try again.")
+  265|       |            }
+  266|      1|            McpError::BackupOperationFailed { operation, source } => {
+  267|      1|                format!("Backup operation '{operation}' failed: {source}. Please check backup permissions and try again.")
+  268|       |            }
+  269|      1|            McpError::ExportOperationFailed { operation, source } => {
+  270|      1|                format!("Export operation '{operation}' failed: {source}. Please check export parameters and try again.")
+  271|       |            }
+  272|      1|            McpError::PerformanceMonitoringFailed { operation, source } => {
+  273|      1|                format!("Performance monitoring '{operation}' failed: {source}. Please try again later.")
+  274|       |            }
+  275|      1|            McpError::CacheOperationFailed { operation, source } => {
+  276|      1|                format!("Cache operation '{operation}' failed: {source}. Please try again later.")
+  277|       |            }
+  278|      1|            McpError::SerializationFailed { operation, source } => {
+  279|      1|                format!("Serialization '{operation}' failed: {source}. Please check data format and try again.")
+  280|       |            }
+  281|      1|            McpError::IoOperationFailed { operation, source } => {
+  282|      1|                format!("IO operation '{operation}' failed: {source}. Please check file permissions and try again.")
+  283|       |            }
+  284|      1|            McpError::ConfigurationError { message } => {
+  285|      1|                format!("Configuration error: {message}. Please check your configuration and try again.")
+  286|       |            }
+  287|      1|            McpError::ValidationError { message } => {
+  288|      1|                format!("Validation error: {message}. Please check your input and try again.")
+  289|       |            }
+  290|      1|            McpError::InternalError { message } => {
+  291|      1|                format!("Internal error: {message}. Please try again later or contact support if the issue persists.")
+  292|       |            }
+  293|       |        };
+  294|       |
+  295|     30|        CallToolResult {
+  296|     30|            content: vec![Content::Text {
+  297|     30|                text: error_message,
+  298|     30|            }],
+  299|     30|            is_error: true,
+  300|     30|        }
+  301|     30|    }
+  302|       |
+  303|       |    /// Convert error to MCP prompt result
+  304|       |    #[must_use]
+  305|     15|    pub fn to_prompt_result(self) -> GetPromptResult {
+  306|     15|        let error_message = match &self {
+  307|      4|            McpError::PromptNotFound { prompt_name } => {
+  308|      4|                format!("Prompt '{prompt_name}' not found. Available prompts can be listed using the list_prompts method.")
+  309|       |            }
+  310|       |            McpError::InvalidParameter {
+  311|      1|                parameter_name,
+  312|      1|                message,
+  313|       |            } => {
+  314|      1|                format!("Invalid parameter '{parameter_name}': {message}. Please check the parameter format and try again.")
+  315|       |            }
+  316|      2|            McpError::MissingParameter { parameter_name } => {
+  317|      2|                format!("Missing required parameter '{parameter_name}'. Please provide this parameter and try again.")
+  318|       |            }
+  319|      1|            McpError::DatabaseOperationFailed { operation, source } => {
+  320|      1|                format!("Database operation '{operation}' failed: {source}. Please check your database connection and try again.")
+  321|       |            }
+  322|      1|            McpError::SerializationFailed { operation, source } => {
+  323|      1|                format!("Serialization '{operation}' failed: {source}. Please check data format and try again.")
+  324|       |            }
+  325|      1|            McpError::ValidationError { message } => {
+  326|      1|                format!("Validation error: {message}. Please check your input and try again.")
+  327|       |            }
+  328|      1|            McpError::InternalError { message } => {
+  329|      1|                format!("Internal error: {message}. Please try again later or contact support if the issue persists.")
+  330|       |            }
+  331|       |            _ => {
+  332|      4|                format!("Error: {self}. Please try again later.")
+  333|       |            }
+  334|       |        };
+  335|       |
+  336|     15|        GetPromptResult {
+  337|     15|            content: vec![Content::Text {
+  338|     15|                text: error_message,
+  339|     15|            }],
+  340|     15|            is_error: true,
+  341|     15|        }
+  342|     15|    }
+  343|       |
+  344|       |    /// Convert error to MCP resource result
+  345|       |    #[must_use]
+  346|     10|    pub fn to_resource_result(self) -> ReadResourceResult {
+  347|     10|        let error_message = match &self {
+  348|      4|            McpError::ResourceNotFound { uri } => {
+  349|      4|                format!("Resource '{uri}' not found. Available resources can be listed using the list_resources method.")
+  350|       |            }
+  351|      1|            McpError::DatabaseOperationFailed { operation, source } => {
+  352|      1|                format!("Database operation '{operation}' failed: {source}. Please check your database connection and try again.")
+  353|       |            }
+  354|      1|            McpError::SerializationFailed { operation, source } => {
+  355|      1|                format!("Serialization '{operation}' failed: {source}. Please check data format and try again.")
+  356|       |            }
+  357|      1|            McpError::InternalError { message } => {
+  358|      1|                format!("Internal error: {message}. Please try again later or contact support if the issue persists.")
+  359|       |            }
+  360|       |            _ => {
+  361|      3|                format!("Error: {self}. Please try again later.")
+  362|       |            }
+  363|       |        };
+  364|       |
+  365|     10|        ReadResourceResult {
+  366|     10|            contents: vec![Content::Text {
+  367|     10|                text: error_message,
+  368|     10|            }],
+  369|     10|        }
+  370|     10|    }
+  371|       |}
+  372|       |
+  373|       |/// Result type alias for MCP operations
+  374|       |pub type McpResult<T> = std::result::Result<T, McpError>;
+  375|       |
+  376|       |/// From trait implementations for common error types
+  377|       |impl From<ThingsError> for McpError {
+  378|     13|    fn from(error: ThingsError) -> Self {
+  379|     13|        match error {
+  380|      1|            ThingsError::Database(e) => {
+  381|      1|                McpError::database_operation_failed("database operation", ThingsError::Database(e))
+  382|       |            }
+  383|      1|            ThingsError::Serialization(e) => McpError::serialization_failed("serialization", e),
+  384|      1|            ThingsError::Io(e) => McpError::io_operation_failed("io operation", e),
+  385|      1|            ThingsError::DatabaseNotFound { path } => {
+  386|      1|                McpError::configuration_error(format!("Database not found at: {path}"))
+  387|       |            }
+  388|      1|            ThingsError::InvalidUuid { uuid } => {
+  389|      1|                McpError::validation_error(format!("Invalid UUID format: {uuid}"))
+  390|       |            }
+  391|      1|            ThingsError::InvalidDate { date } => {
+  392|      1|                McpError::validation_error(format!("Invalid date format: {date}"))
+  393|       |            }
+  394|      1|            ThingsError::TaskNotFound { uuid } => {
+  395|      1|                McpError::validation_error(format!("Task not found: {uuid}"))
+  396|       |            }
+  397|      1|            ThingsError::ProjectNotFound { uuid } => {
+  398|      1|                McpError::validation_error(format!("Project not found: {uuid}"))
+  399|       |            }
+  400|      1|            ThingsError::AreaNotFound { uuid } => {
+  401|      1|                McpError::validation_error(format!("Area not found: {uuid}"))
+  402|       |            }
+  403|      2|            ThingsError::Validation { message } => McpError::validation_error(message),
+  404|      1|            ThingsError::Configuration { message } => McpError::configuration_error(message),
+  405|      1|            ThingsError::Unknown { message } => McpError::internal_error(message),
+  406|       |        }
+  407|     13|    }
+  408|       |}
+  409|       |
+  410|       |impl From<serde_json::Error> for McpError {
+  411|      1|    fn from(error: serde_json::Error) -> Self {
+  412|      1|        McpError::serialization_failed("json serialization", error)
+  413|      1|    }
+  414|       |}
+  415|       |
+  416|       |impl From<std::io::Error> for McpError {
+  417|      2|    fn from(error: std::io::Error) -> Self {
+  418|      2|        McpError::io_operation_failed("file operation", error)
+  419|      2|    }
+  420|       |}
+  421|       |
+  422|       |/// Simplified MCP types for our implementation
+  423|       |#[derive(Debug, Serialize, Deserialize)]
+  424|       |pub struct Tool {
+  425|       |    pub name: String,
+  426|       |    pub description: String,
+  427|       |    pub input_schema: Value,
+  428|       |}
+  429|       |
+  430|       |#[derive(Debug, Clone, Serialize, Deserialize)]
+  431|       |pub struct CallToolRequest {
+  432|       |    pub name: String,
+  433|       |    pub arguments: Option<Value>,
+  434|       |}
+  435|       |
+  436|       |#[derive(Debug, Serialize, Deserialize)]
+  437|       |pub struct CallToolResult {
+  438|       |    pub content: Vec<Content>,
+  439|       |    pub is_error: bool,
+  440|       |}
+  441|       |
+  442|       |#[derive(Debug, Serialize, Deserialize)]
+  443|       |pub enum Content {
+  444|       |    Text { text: String },
+  445|       |}
+  446|       |
+  447|       |#[derive(Debug, Serialize, Deserialize)]
+  448|       |pub struct ListToolsResult {
+  449|       |    pub tools: Vec<Tool>,
+  450|       |}
+  451|       |
+  452|       |/// MCP Resource for data exposure
+  453|       |#[derive(Debug, Serialize, Deserialize)]
+  454|       |pub struct Resource {
+  455|       |    pub uri: String,
+  456|       |    pub name: String,
+  457|       |    pub description: String,
+  458|       |    pub mime_type: Option<String>,
+  459|       |}
+  460|       |
+  461|       |#[derive(Debug, Serialize, Deserialize)]
+  462|       |pub struct ListResourcesResult {
+  463|       |    pub resources: Vec<Resource>,
+  464|       |}
+  465|       |
+  466|       |#[derive(Debug, Serialize, Deserialize)]
+  467|       |pub struct ReadResourceRequest {
+  468|       |    pub uri: String,
+  469|       |}
+  470|       |
+  471|       |#[derive(Debug, Serialize, Deserialize)]
+  472|       |pub struct ReadResourceResult {
+  473|       |    pub contents: Vec<Content>,
+  474|       |}
+  475|       |
+  476|       |/// MCP Prompt for reusable templates
+  477|       |#[derive(Debug, Serialize, Deserialize)]
+  478|       |pub struct Prompt {
+  479|       |    pub name: String,
+  480|       |    pub description: String,
+  481|       |    pub arguments: Value,
+  482|       |}
+  483|       |
+  484|       |#[derive(Debug, Serialize, Deserialize)]
+  485|       |pub struct ListPromptsResult {
+  486|       |    pub prompts: Vec<Prompt>,
+  487|       |}
+  488|       |
+  489|       |#[derive(Debug, Serialize, Deserialize)]
+  490|       |pub struct GetPromptRequest {
+  491|       |    pub name: String,
+  492|       |    pub arguments: Option<Value>,
+  493|       |}
+  494|       |
+  495|       |#[derive(Debug, Serialize, Deserialize)]
+  496|       |pub struct GetPromptResult {
+  497|       |    pub content: Vec<Content>,
+  498|       |    pub is_error: bool,
+  499|       |}
+  500|       |
+  501|       |/// MCP server for Things 3 integration
+  502|       |pub struct ThingsMcpServer {
+  503|       |    #[allow(dead_code)]
+  504|       |    db: Arc<Mutex<ThingsDatabase>>,
+  505|       |    #[allow(dead_code)]
+  506|       |    cache: Arc<Mutex<ThingsCache>>,
+  507|       |    #[allow(dead_code)]
+  508|       |    performance_monitor: Arc<Mutex<PerformanceMonitor>>,
+  509|       |    #[allow(dead_code)]
+  510|       |    exporter: DataExporter,
+  511|       |    #[allow(dead_code)]
+  512|       |    backup_manager: Arc<Mutex<BackupManager>>,
+  513|       |    /// Middleware chain for cross-cutting concerns
+  514|       |    middleware_chain: MiddlewareChain,
+  515|       |}
+  516|       |
+  517|       |#[allow(dead_code)]
+  518|       |impl ThingsMcpServer {
+  519|     73|    pub fn new(db: ThingsDatabase, config: ThingsConfig) -> Self {
+  520|     73|        let cache = ThingsCache::new_default();
+  521|     73|        let performance_monitor = PerformanceMonitor::new_default();
+  522|     73|        let exporter = DataExporter::new_default();
+  523|     73|        let backup_manager = BackupManager::new(config);
+  524|     73|        let middleware_chain = MiddlewareConfig::default().build_chain();
+  525|       |
+  526|     73|        Self {
+  527|     73|            db: Arc::new(Mutex::new(db)),
+  528|     73|            cache: Arc::new(Mutex::new(cache)),
+  529|     73|            performance_monitor: Arc::new(Mutex::new(performance_monitor)),
+  530|     73|            exporter,
+  531|     73|            backup_manager: Arc::new(Mutex::new(backup_manager)),
+  532|     73|            middleware_chain,
+  533|     73|        }
+  534|     73|    }
+  535|       |
+  536|       |    /// Create a new MCP server with custom middleware configuration
+  537|      0|    pub fn with_middleware_config(
+  538|      0|        db: ThingsDatabase,
+  539|      0|        config: ThingsConfig,
+  540|      0|        middleware_config: MiddlewareConfig,
+  541|      0|    ) -> Self {
+  542|      0|        let cache = ThingsCache::new_default();
+  543|      0|        let performance_monitor = PerformanceMonitor::new_default();
+  544|      0|        let exporter = DataExporter::new_default();
+  545|      0|        let backup_manager = BackupManager::new(config);
+  546|      0|        let middleware_chain = middleware_config.build_chain();
+  547|       |
+  548|      0|        Self {
+  549|      0|            db: Arc::new(Mutex::new(db)),
+  550|      0|            cache: Arc::new(Mutex::new(cache)),
+  551|      0|            performance_monitor: Arc::new(Mutex::new(performance_monitor)),
+  552|      0|            exporter,
+  553|      0|            backup_manager: Arc::new(Mutex::new(backup_manager)),
+  554|      0|            middleware_chain,
+  555|      0|        }
+  556|      0|    }
+  557|       |
+  558|       |    /// Get the middleware chain for inspection or modification
+  559|      0|    pub fn middleware_chain(&self) -> &MiddlewareChain {
+  560|      0|        &self.middleware_chain
+  561|      0|    }
+  562|       |
+  563|       |    /// List available MCP tools
+  564|       |    ///
+  565|       |    /// # Errors
+  566|       |    /// Returns an error if tool generation fails
+  567|      4|    pub fn list_tools(&self) -> McpResult<ListToolsResult> {
+  568|      4|        Ok(ListToolsResult {
+  569|      4|            tools: Self::get_available_tools(),
+  570|      4|        })
+  571|      4|    }
+  572|       |
+  573|       |    /// Call a specific MCP tool
+  574|       |    ///
+  575|       |    /// # Errors
+  576|       |    /// Returns an error if tool execution fails or tool is not found
+  577|     38|    pub async fn call_tool(&self, request: CallToolRequest) -> McpResult<CallToolResult> {
+  578|     38|        self.middleware_chain.execute(request, |req| async move {
+  579|     38|            self.handle_tool_call(req).await
+  580|     76|        }).await
+                         ^38
+  581|     38|    }
+  582|       |
+  583|       |    /// Call a specific MCP tool with fallback error handling
+  584|       |    ///
+  585|       |    /// This method provides backward compatibility by converting `McpError` to `CallToolResult`
+  586|       |    /// for cases where the caller expects a `CallToolResult` even on error
+  587|      1|    pub async fn call_tool_with_fallback(&self, request: CallToolRequest) -> CallToolResult {
+  588|      1|        match self.handle_tool_call(request).await {
+  589|      0|            Ok(result) => result,
+  590|      1|            Err(error) => error.to_call_result(),
+  591|       |        }
+  592|      1|    }
+  593|       |
+  594|       |    /// List available MCP resources
+  595|       |    ///
+  596|       |    /// # Errors
+  597|       |    /// Returns an error if resource generation fails
+  598|      1|    pub fn list_resources(&self) -> McpResult<ListResourcesResult> {
+  599|      1|        Ok(ListResourcesResult {
+  600|      1|            resources: Self::get_available_resources(),
+  601|      1|        })
+  602|      1|    }
+  603|       |
+  604|       |    /// Read a specific MCP resource
+  605|       |    ///
+  606|       |    /// # Errors
+  607|       |    /// Returns an error if resource reading fails or resource is not found
+  608|      6|    pub async fn read_resource(
+  609|      6|        &self,
+  610|      6|        request: ReadResourceRequest,
+  611|      6|    ) -> McpResult<ReadResourceResult> {
+  612|      6|        self.handle_resource_read(request).await
+  613|      6|    }
+  614|       |
+  615|       |    /// Read a specific MCP resource with fallback error handling
+  616|       |    ///
+  617|       |    /// This method provides backward compatibility by converting `McpError` to `ReadResourceResult`
+  618|       |    /// for cases where the caller expects a `ReadResourceResult` even on error
+  619|      1|    pub async fn read_resource_with_fallback(
+  620|      1|        &self,
+  621|      1|        request: ReadResourceRequest,
+  622|      1|    ) -> ReadResourceResult {
+  623|      1|        match self.handle_resource_read(request).await {
+  624|      0|            Ok(result) => result,
+  625|      1|            Err(error) => error.to_resource_result(),
+  626|       |        }
+  627|      1|    }
+  628|       |
+  629|       |    /// List available MCP prompts
+  630|       |    ///
+  631|       |    /// # Errors
+  632|       |    /// Returns an error if prompt generation fails
+  633|      3|    pub fn list_prompts(&self) -> McpResult<ListPromptsResult> {
+  634|      3|        Ok(ListPromptsResult {
+  635|      3|            prompts: Self::get_available_prompts(),
+  636|      3|        })
+  637|      3|    }
+  638|       |
+  639|       |    /// Get a specific MCP prompt with arguments
+  640|       |    ///
+  641|       |    /// # Errors
+  642|       |    /// Returns an error if prompt retrieval fails or prompt is not found
+  643|     16|    pub async fn get_prompt(&self, request: GetPromptRequest) -> McpResult<GetPromptResult> {
+  644|     16|        self.handle_prompt_request(request).await
+  645|     16|    }
+  646|       |
+  647|       |    /// Get a specific MCP prompt with fallback error handling
+  648|       |    ///
+  649|       |    /// This method provides backward compatibility by converting `McpError` to `GetPromptResult`
+  650|       |    /// for cases where the caller expects a `GetPromptResult` even on error
+  651|      1|    pub async fn get_prompt_with_fallback(&self, request: GetPromptRequest) -> GetPromptResult {
+  652|      1|        match self.handle_prompt_request(request).await {
+  653|      0|            Ok(result) => result,
+  654|      1|            Err(error) => error.to_prompt_result(),
+  655|       |        }
+  656|      1|    }
+  657|       |
+  658|       |    /// Get available MCP tools
+  659|      4|    fn get_available_tools() -> Vec<Tool> {
+  660|      4|        let mut tools = Vec::new();
+  661|      4|        tools.extend(Self::get_data_retrieval_tools());
+  662|      4|        tools.extend(Self::get_task_management_tools());
+  663|      4|        tools.extend(Self::get_analytics_tools());
+  664|      4|        tools.extend(Self::get_backup_tools());
+  665|      4|        tools.extend(Self::get_system_tools());
+  666|      4|        tools
+  667|      4|    }
+  668|       |
+  669|      4|    fn get_data_retrieval_tools() -> Vec<Tool> {
+  670|      4|        vec![
+  671|      4|            Tool {
+  672|      4|                name: "get_inbox".to_string(),
+  673|      4|                description: "Get tasks from the inbox".to_string(),
+  674|      4|                input_schema: serde_json::json!({
+  675|      4|                    "type": "object",
+  676|      4|                    "properties": {
+  677|      4|                        "limit": {
+  678|      4|                            "type": "integer",
+  679|      4|                            "description": "Maximum number of tasks to return"
+  680|      4|                        }
+  681|      4|                    }
+  682|      4|                }),
+  683|      4|            },
+  684|      4|            Tool {
+  685|      4|                name: "get_today".to_string(),
+  686|      4|                description: "Get tasks scheduled for today".to_string(),
+  687|      4|                input_schema: serde_json::json!({
+  688|      4|                    "type": "object",
+  689|      4|                    "properties": {
+  690|      4|                        "limit": {
+  691|      4|                            "type": "integer",
+  692|      4|                            "description": "Maximum number of tasks to return"
+  693|      4|                        }
+  694|      4|                    }
+  695|      4|                }),
+  696|      4|            },
+  697|      4|            Tool {
+  698|      4|                name: "get_projects".to_string(),
+  699|      4|                description: "Get all projects, optionally filtered by area".to_string(),
+  700|      4|                input_schema: serde_json::json!({
+  701|      4|                    "type": "object",
+  702|      4|                    "properties": {
+  703|      4|                        "area_uuid": {
+  704|      4|                            "type": "string",
+  705|      4|                            "description": "Optional area UUID to filter projects"
+  706|      4|                        }
+  707|      4|                    }
+  708|      4|                }),
+  709|      4|            },
+  710|      4|            Tool {
+  711|      4|                name: "get_areas".to_string(),
+  712|      4|                description: "Get all areas".to_string(),
+  713|      4|                input_schema: serde_json::json!({
+  714|      4|                    "type": "object",
+  715|      4|                    "properties": {}
+  716|      4|                }),
+  717|      4|            },
+  718|      4|            Tool {
+  719|      4|                name: "search_tasks".to_string(),
+  720|      4|                description: "Search for tasks by query".to_string(),
+  721|      4|                input_schema: serde_json::json!({
+  722|      4|                    "type": "object",
+  723|      4|                    "properties": {
+  724|      4|                        "query": {
+  725|      4|                            "type": "string",
+  726|      4|                            "description": "Search query"
+  727|      4|                        },
+  728|      4|                        "limit": {
+  729|      4|                            "type": "integer",
+  730|      4|                            "description": "Maximum number of tasks to return"
+  731|      4|                        }
+  732|      4|                    },
+  733|      4|                    "required": ["query"]
+  734|      4|                }),
+  735|      4|            },
+  736|      4|            Tool {
+  737|      4|                name: "get_recent_tasks".to_string(),
+  738|      4|                description: "Get recently created or modified tasks".to_string(),
+  739|      4|                input_schema: serde_json::json!({
+  740|      4|                    "type": "object",
+  741|      4|                    "properties": {
+  742|      4|                        "limit": {
+  743|      4|                            "type": "integer",
+  744|      4|                            "description": "Maximum number of tasks to return"
+  745|      4|                        },
+  746|      4|                        "hours": {
+  747|      4|                            "type": "integer",
+  748|      4|                            "description": "Number of hours to look back"
+  749|      4|                        }
+  750|      4|                    }
+  751|      4|                }),
+  752|      4|            },
+  753|       |        ]
+  754|      4|    }
+  755|       |
+  756|      4|    fn get_task_management_tools() -> Vec<Tool> {
+  757|      4|        vec![
+  758|      4|            Tool {
+  759|      4|                name: "create_task".to_string(),
+  760|      4|                description: "Create a new task".to_string(),
+  761|      4|                input_schema: serde_json::json!({
+  762|      4|                    "type": "object",
+  763|      4|                    "properties": {
+  764|      4|                        "title": {
+  765|      4|                            "type": "string",
+  766|      4|                            "description": "Task title"
+  767|      4|                        },
+  768|      4|                        "notes": {
+  769|      4|                            "type": "string",
+  770|      4|                            "description": "Optional task notes"
+  771|      4|                        },
+  772|      4|                        "project_uuid": {
+  773|      4|                            "type": "string",
+  774|      4|                            "description": "Optional project UUID"
+  775|      4|                        },
+  776|      4|                        "area_uuid": {
+  777|      4|                            "type": "string",
+  778|      4|                            "description": "Optional area UUID"
+  779|      4|                        }
+  780|      4|                    },
+  781|      4|                    "required": ["title"]
+  782|      4|                }),
+  783|      4|            },
+  784|      4|            Tool {
+  785|      4|                name: "update_task".to_string(),
+  786|      4|                description: "Update an existing task".to_string(),
+  787|      4|                input_schema: serde_json::json!({
+  788|      4|                    "type": "object",
+  789|      4|                    "properties": {
+  790|      4|                        "uuid": {
+  791|      4|                            "type": "string",
+  792|      4|                            "description": "Task UUID"
+  793|      4|                        },
+  794|      4|                        "title": {
+  795|      4|                            "type": "string",
+  796|      4|                            "description": "New task title"
+  797|      4|                        },
+  798|      4|                        "notes": {
+  799|      4|                            "type": "string",
+  800|      4|                            "description": "New task notes"
+  801|      4|                        },
+  802|      4|                        "status": {
+  803|      4|                            "type": "string",
+  804|      4|                            "description": "New task status",
+  805|      4|                            "enum": ["incomplete", "completed", "canceled", "trashed"]
+  806|      4|                        }
+  807|      4|                    },
+  808|      4|                    "required": ["uuid"]
+  809|      4|                }),
+  810|      4|            },
+  811|      4|            Tool {
+  812|      4|                name: "bulk_create_tasks".to_string(),
+  813|      4|                description: "Create multiple tasks at once".to_string(),
+  814|      4|                input_schema: serde_json::json!({
+  815|      4|                    "type": "object",
+  816|      4|                    "properties": {
+  817|      4|                        "tasks": {
+  818|      4|                            "type": "array",
+  819|      4|                            "description": "Array of task objects to create",
+  820|      4|                            "items": {
+  821|      4|                                "type": "object",
+  822|      4|                                "properties": {
+  823|      4|                                    "title": {"type": "string"},
+  824|      4|                                    "notes": {"type": "string"},
+  825|      4|                                    "project_uuid": {"type": "string"},
+  826|      4|                                    "area_uuid": {"type": "string"}
+  827|      4|                                },
+  828|      4|                                "required": ["title"]
+  829|      4|                            }
+  830|      4|                        }
+  831|      4|                    },
+  832|      4|                    "required": ["tasks"]
+  833|      4|                }),
+  834|      4|            },
+  835|       |        ]
+  836|      4|    }
+  837|       |
+  838|      4|    fn get_analytics_tools() -> Vec<Tool> {
+  839|      4|        vec![
+  840|      4|            Tool {
+  841|      4|                name: "get_productivity_metrics".to_string(),
+  842|      4|                description: "Get productivity metrics and statistics".to_string(),
+  843|      4|                input_schema: serde_json::json!({
+  844|      4|                    "type": "object",
+  845|      4|                    "properties": {
+  846|      4|                        "days": {
+  847|      4|                            "type": "integer",
+  848|      4|                            "description": "Number of days to look back for metrics"
+  849|      4|                        }
+  850|      4|                    }
+  851|      4|                }),
+  852|      4|            },
+  853|      4|            Tool {
+  854|      4|                name: "export_data".to_string(),
+  855|      4|                description: "Export data in various formats".to_string(),
+  856|      4|                input_schema: serde_json::json!({
+  857|      4|                    "type": "object",
+  858|      4|                    "properties": {
+  859|      4|                        "format": {
+  860|      4|                            "type": "string",
+  861|      4|                            "description": "Export format",
+  862|      4|                            "enum": ["json", "csv", "markdown"]
+  863|      4|                        },
+  864|      4|                        "data_type": {
+  865|      4|                            "type": "string",
+  866|      4|                            "description": "Type of data to export",
+  867|      4|                            "enum": ["tasks", "projects", "areas", "all"]
+  868|      4|                        }
+  869|      4|                    },
+  870|      4|                    "required": ["format", "data_type"]
+  871|      4|                }),
+  872|      4|            },
+  873|       |        ]
+  874|      4|    }
+  875|       |
+  876|      4|    fn get_backup_tools() -> Vec<Tool> {
+  877|      4|        vec![
+  878|      4|            Tool {
+  879|      4|                name: "backup_database".to_string(),
+  880|      4|                description: "Create a backup of the Things 3 database".to_string(),
+  881|      4|                input_schema: serde_json::json!({
+  882|      4|                    "type": "object",
+  883|      4|                    "properties": {
+  884|      4|                        "backup_dir": {
+  885|      4|                            "type": "string",
+  886|      4|                            "description": "Directory to store the backup"
+  887|      4|                        },
+  888|      4|                        "description": {
+  889|      4|                            "type": "string",
+  890|      4|                            "description": "Optional description for the backup"
+  891|      4|                        }
+  892|      4|                    },
+  893|      4|                    "required": ["backup_dir"]
+  894|      4|                }),
+  895|      4|            },
+  896|      4|            Tool {
+  897|      4|                name: "restore_database".to_string(),
+  898|      4|                description: "Restore from a backup".to_string(),
+  899|      4|                input_schema: serde_json::json!({
+  900|      4|                    "type": "object",
+  901|      4|                    "properties": {
+  902|      4|                        "backup_path": {
+  903|      4|                            "type": "string",
+  904|      4|                            "description": "Path to the backup file"
+  905|      4|                        }
+  906|      4|                    },
+  907|      4|                    "required": ["backup_path"]
+  908|      4|                }),
+  909|      4|            },
+  910|      4|            Tool {
+  911|      4|                name: "list_backups".to_string(),
+  912|      4|                description: "List available backups".to_string(),
+  913|      4|                input_schema: serde_json::json!({
+  914|      4|                    "type": "object",
+  915|      4|                    "properties": {
+  916|      4|                        "backup_dir": {
+  917|      4|                            "type": "string",
+  918|      4|                            "description": "Directory containing backups"
+  919|      4|                        }
+  920|      4|                    },
+  921|      4|                    "required": ["backup_dir"]
+  922|      4|                }),
+  923|      4|            },
+  924|       |        ]
+  925|      4|    }
+  926|       |
+  927|      4|    fn get_system_tools() -> Vec<Tool> {
+  928|      4|        vec![
+  929|      4|            Tool {
+  930|      4|                name: "get_performance_stats".to_string(),
+  931|      4|                description: "Get performance statistics and metrics".to_string(),
+  932|      4|                input_schema: serde_json::json!({
+  933|      4|                    "type": "object",
+  934|      4|                    "properties": {}
+  935|      4|                }),
+  936|      4|            },
+  937|      4|            Tool {
+  938|      4|                name: "get_system_metrics".to_string(),
+  939|      4|                description: "Get current system resource metrics".to_string(),
+  940|      4|                input_schema: serde_json::json!({
+  941|      4|                    "type": "object",
+  942|      4|                    "properties": {}
+  943|      4|                }),
+  944|      4|            },
+  945|      4|            Tool {
+  946|      4|                name: "get_cache_stats".to_string(),
+  947|      4|                description: "Get cache statistics and hit rates".to_string(),
+  948|      4|                input_schema: serde_json::json!({
+  949|      4|                    "type": "object",
+  950|      4|                    "properties": {}
+  951|      4|                }),
+  952|      4|            },
+  953|       |        ]
+  954|      4|    }
+  955|       |
+  956|       |    /// Handle tool call
+  957|     39|    async fn handle_tool_call(&self, request: CallToolRequest) -> McpResult<CallToolResult> {
+  958|     39|        let tool_name = &request.name;
+  959|     39|        let arguments = request.arguments.unwrap_or_default();
+  960|       |
+  961|     39|        let result = match tool_name.as_str() {
+                          ^36
+  962|     39|            "get_inbox" => self.handle_get_inbox(arguments).await,
+                                         ^4   ^4
+  963|     35|            "get_today" => self.handle_get_today(arguments).await,
+                                         ^1   ^1
+  964|     34|            "get_projects" => self.handle_get_projects(arguments).await,
+                                            ^2   ^2
+  965|     32|            "get_areas" => self.handle_get_areas(arguments).await,
+                                         ^1   ^1
+  966|     31|            "search_tasks" => self.handle_search_tasks(arguments).await,
+                                            ^3   ^3
+  967|     28|            "create_task" => Self::handle_create_task(&arguments),
+                                           ^2                       ^2
+  968|     26|            "update_task" => Self::handle_update_task(&arguments),
+                                           ^2                       ^2
+  969|     24|            "get_productivity_metrics" => self.handle_get_productivity_metrics(arguments).await,
+                                                        ^2   ^2
+  970|     22|            "export_data" => self.handle_export_data(arguments).await,
+                                           ^6   ^6
+  971|     16|            "bulk_create_tasks" => Self::handle_bulk_create_tasks(&arguments),
+                                                 ^2                             ^2
+  972|     14|            "get_recent_tasks" => self.handle_get_recent_tasks(arguments).await,
+                                                ^2   ^2
+  973|     12|            "backup_database" => self.handle_backup_database(arguments).await,
+                                               ^2   ^2
+  974|     10|            "restore_database" => self.handle_restore_database(arguments).await,
+                                                ^2   ^2
+  975|      8|            "list_backups" => self.handle_list_backups(arguments).await,
+                                            ^2   ^2
+  976|      6|            "get_performance_stats" => self.handle_get_performance_stats(arguments).await,
+                                                     ^1   ^1
+  977|      5|            "get_system_metrics" => self.handle_get_system_metrics(arguments).await,
+                                                  ^1   ^1
+  978|      4|            "get_cache_stats" => self.handle_get_cache_stats(arguments).await,
+                                               ^1   ^1
+  979|       |            _ => {
+  980|      3|                return Err(McpError::tool_not_found(tool_name));
+  981|       |            }
+  982|       |        };
+  983|       |
+  984|     36|        result
+  985|     39|    }
+  986|       |
+  987|      4|    async fn handle_get_inbox(&self, args: Value) -> McpResult<CallToolResult> {
+  988|      4|        let limit = args
+  989|      4|            .get("limit")
+  990|      4|            .and_then(serde_json::Value::as_u64)
+  991|      4|            .map(|v| usize::try_from(v).unwrap_or(usize::MAX));
+                                   ^1              ^1 ^1
+  992|       |
+  993|      4|        let tasks = self
+  994|      4|            .db
+  995|      4|            .lock()
+  996|      4|            .await
+  997|      4|            .get_inbox(limit)
+  998|      4|            .map_err(|e| McpError::database_operation_failed("get_inbox", e))?;
+                                       ^0                                               ^0 ^0
+  999|       |
+ 1000|      4|        let json = serde_json::to_string_pretty(&tasks)
+ 1001|      4|            .map_err(|e| McpError::serialization_failed("get_inbox serialization", e))?;
+                                       ^0                                                        ^0 ^0
+ 1002|       |
+ 1003|      4|        Ok(CallToolResult {
+ 1004|      4|            content: vec![Content::Text { text: json }],
+ 1005|      4|            is_error: false,
+ 1006|      4|        })
+ 1007|      4|    }
+ 1008|       |
+ 1009|      1|    async fn handle_get_today(&self, args: Value) -> McpResult<CallToolResult> {
+ 1010|      1|        let limit = args
+ 1011|      1|            .get("limit")
+ 1012|      1|            .and_then(serde_json::Value::as_u64)
+ 1013|      1|            .map(|v| usize::try_from(v).unwrap_or(usize::MAX));
+ 1014|       |
+ 1015|      1|        let tasks = self
+ 1016|      1|            .db
+ 1017|      1|            .lock()
+ 1018|      1|            .await
+ 1019|      1|            .get_today(limit)
+ 1020|      1|            .map_err(|e| McpError::database_operation_failed("get_today", e))?;
+                                       ^0                                               ^0 ^0
+ 1021|       |
+ 1022|      1|        let json = serde_json::to_string_pretty(&tasks)
+ 1023|      1|            .map_err(|e| McpError::serialization_failed("get_today serialization", e))?;
+                                       ^0                                                        ^0 ^0
+ 1024|       |
+ 1025|      1|        Ok(CallToolResult {
+ 1026|      1|            content: vec![Content::Text { text: json }],
+ 1027|      1|            is_error: false,
+ 1028|      1|        })
+ 1029|      1|    }
+ 1030|       |
+ 1031|      2|    async fn handle_get_projects(&self, args: Value) -> McpResult<CallToolResult> {
+ 1032|      2|        let area_uuid = args
+ 1033|      2|            .get("area_uuid")
+ 1034|      2|            .and_then(|v| v.as_str())
+                                        ^1^1
+ 1035|      2|            .and_then(|s| uuid::Uuid::parse_str(s).ok());
+                                        ^1                    ^1 ^1
+ 1036|       |
+ 1037|      2|        let projects = self
+ 1038|      2|            .db
+ 1039|      2|            .lock()
+ 1040|      2|            .await
+ 1041|      2|            .get_projects(area_uuid)
+ 1042|      2|            .map_err(|e| McpError::database_operation_failed("get_projects", e))?;
+                                       ^0                                                  ^0 ^0
+ 1043|       |
+ 1044|      2|        let json = serde_json::to_string_pretty(&projects)
+ 1045|      2|            .map_err(|e| McpError::serialization_failed("get_projects serialization", e))?;
+                                       ^0                                                           ^0 ^0
+ 1046|       |
+ 1047|      2|        Ok(CallToolResult {
+ 1048|      2|            content: vec![Content::Text { text: json }],
+ 1049|      2|            is_error: false,
+ 1050|      2|        })
+ 1051|      2|    }
+ 1052|       |
+ 1053|      1|    async fn handle_get_areas(&self, _args: Value) -> McpResult<CallToolResult> {
+ 1054|      1|        let areas = self
+ 1055|      1|            .db
+ 1056|      1|            .lock()
+ 1057|      1|            .await
+ 1058|      1|            .get_areas()
+ 1059|      1|            .map_err(|e| McpError::database_operation_failed("get_areas", e))?;
+                                       ^0                                               ^0 ^0
+ 1060|       |
+ 1061|      1|        let json = serde_json::to_string_pretty(&areas)
+ 1062|      1|            .map_err(|e| McpError::serialization_failed("get_areas serialization", e))?;
+                                       ^0                                                        ^0 ^0
+ 1063|       |
+ 1064|      1|        Ok(CallToolResult {
+ 1065|      1|            content: vec![Content::Text { text: json }],
+ 1066|      1|            is_error: false,
+ 1067|      1|        })
+ 1068|      1|    }
+ 1069|       |
+ 1070|      3|    async fn handle_search_tasks(&self, args: Value) -> McpResult<CallToolResult> {
+ 1071|      3|        let query = args
+                          ^1
+ 1072|      3|            .get("query")
+ 1073|      3|            .and_then(|v| v.as_str())
+                                        ^1^1
+ 1074|      3|            .ok_or_else(|| McpError::missing_parameter("query"))?;
+                                         ^2                                   ^2
+ 1075|       |
+ 1076|      1|        let limit = args
+ 1077|      1|            .get("limit")
+ 1078|      1|            .and_then(serde_json::Value::as_u64)
+ 1079|      1|            .map(|v| usize::try_from(v).unwrap_or(usize::MAX));
+ 1080|       |
+ 1081|      1|        let tasks = self
+ 1082|      1|            .db
+ 1083|      1|            .lock()
+ 1084|      1|            .await
+ 1085|      1|            .search_tasks(query, limit)
+ 1086|      1|            .map_err(|e| McpError::database_operation_failed("search_tasks", e))?;
+                                       ^0                                                  ^0 ^0
+ 1087|       |
+ 1088|      1|        let json = serde_json::to_string_pretty(&tasks)
+ 1089|      1|            .map_err(|e| McpError::serialization_failed("search_tasks serialization", e))?;
+                                       ^0                                                           ^0 ^0
+ 1090|       |
+ 1091|      1|        Ok(CallToolResult {
+ 1092|      1|            content: vec![Content::Text { text: json }],
+ 1093|      1|            is_error: false,
+ 1094|      1|        })
+ 1095|      3|    }
+ 1096|       |
+ 1097|      2|    fn handle_create_task(args: &Value) -> McpResult<CallToolResult> {
+ 1098|       |        // Note: This is a placeholder - actual task creation would need to be implemented
+ 1099|       |        // in the things-core library
+ 1100|      2|        let title = args
+                          ^1
+ 1101|      2|            .get("title")
+ 1102|      2|            .and_then(|v| v.as_str())
+                                        ^1^1
+ 1103|      2|            .ok_or_else(|| McpError::missing_parameter("title"))?;
+                                         ^1                                   ^1
+ 1104|       |
+ 1105|      1|        let response = serde_json::json!({
+ 1106|      1|            "message": "Task creation not yet implemented",
+ 1107|      1|            "title": title,
+ 1108|      1|            "status": "placeholder"
+ 1109|       |        });
+ 1110|       |
+ 1111|       |        Ok(CallToolResult {
+ 1112|      1|            content: vec![Content::Text {
+ 1113|      1|                text: serde_json::to_string_pretty(&response)
+ 1114|      1|                    .map_err(|e| McpError::serialization_failed("create_task response", e))?,
+                                               ^0                                                     ^0 ^0
+ 1115|       |            }],
+ 1116|       |            is_error: false,
+ 1117|       |        })
+ 1118|      2|    }
+ 1119|       |
+ 1120|      2|    fn handle_update_task(args: &Value) -> McpResult<CallToolResult> {
+ 1121|       |        // Note: This is a placeholder - actual task updating would need to be implemented
+ 1122|       |        // in the things-core library
+ 1123|      2|        let uuid = args
+                          ^1
+ 1124|      2|            .get("uuid")
+ 1125|      2|            .and_then(|v| v.as_str())
+                                        ^1^1
+ 1126|      2|            .ok_or_else(|| McpError::missing_parameter("uuid"))?;
+                                         ^1                                  ^1
+ 1127|       |
+ 1128|      1|        let response = serde_json::json!({
+ 1129|      1|            "message": "Task updating not yet implemented",
+ 1130|      1|            "uuid": uuid,
+ 1131|      1|            "status": "placeholder"
+ 1132|       |        });
+ 1133|       |
+ 1134|       |        Ok(CallToolResult {
+ 1135|      1|            content: vec![Content::Text {
+ 1136|      1|                text: serde_json::to_string_pretty(&response)
+ 1137|      1|                    .map_err(|e| McpError::serialization_failed("update_task response", e))?,
+                                               ^0                                                     ^0 ^0
+ 1138|       |            }],
+ 1139|       |            is_error: false,
+ 1140|       |        })
+ 1141|      2|    }
+ 1142|       |
+ 1143|      2|    async fn handle_get_productivity_metrics(&self, args: Value) -> McpResult<CallToolResult> {
+ 1144|      2|        let days = usize::try_from(
+ 1145|      2|            args.get("days")
+ 1146|      2|                .and_then(serde_json::Value::as_u64)
+ 1147|      2|                .unwrap_or(7),
+ 1148|       |        )
+ 1149|      2|        .unwrap_or(7);
+ 1150|       |
+ 1151|       |        // Get various metrics
+ 1152|      2|        let db = self.db.lock().await;
+ 1153|      2|        let inbox_tasks = db
+ 1154|      2|            .get_inbox(None)
+ 1155|      2|            .map_err(|e| McpError::database_operation_failed("get_inbox for metrics", e))?;
+                                       ^0                                                           ^0 ^0
+ 1156|      2|        let today_tasks = db
+ 1157|      2|            .get_today(None)
+ 1158|      2|            .map_err(|e| McpError::database_operation_failed("get_today for metrics", e))?;
+                                       ^0                                                           ^0 ^0
+ 1159|      2|        let projects = db
+ 1160|      2|            .get_projects(None)
+ 1161|      2|            .map_err(|e| McpError::database_operation_failed("get_projects for metrics", e))?;
+                                       ^0                                                              ^0 ^0
+ 1162|      2|        let areas = db
+ 1163|      2|            .get_areas()
+ 1164|      2|            .map_err(|e| McpError::database_operation_failed("get_areas for metrics", e))?;
+                                       ^0                                                           ^0 ^0
+ 1165|      2|        drop(db);
+ 1166|       |
+ 1167|      2|        let metrics = serde_json::json!({
+ 1168|      2|            "period_days": days,
+ 1169|      2|            "inbox_tasks_count": inbox_tasks.len(),
+ 1170|      2|            "today_tasks_count": today_tasks.len(),
+ 1171|      2|            "projects_count": projects.len(),
+ 1172|      2|            "areas_count": areas.len(),
+ 1173|      2|            "completed_tasks": projects.iter().filter(|p| p.status == things3_core::TaskStatus::Completed).count(),
+                                                                        ^0          ^0
+ 1174|      2|            "incomplete_tasks": projects.iter().filter(|p| p.status == things3_core::TaskStatus::Incomplete).count(),
+                                                                         ^0          ^0
+ 1175|      2|            "timestamp": chrono::Utc::now()
+ 1176|       |        });
+ 1177|       |
+ 1178|       |        Ok(CallToolResult {
+ 1179|      2|            content: vec![Content::Text {
+ 1180|      2|                text: serde_json::to_string_pretty(&metrics).map_err(|e| {
+                                                                                       ^0
+ 1181|      0|                    McpError::serialization_failed("productivity_metrics serialization", e)
+ 1182|      0|                })?,
+ 1183|       |            }],
+ 1184|       |            is_error: false,
+ 1185|       |        })
+ 1186|      2|    }
+ 1187|       |
+ 1188|      6|    async fn handle_export_data(&self, args: Value) -> McpResult<CallToolResult> {
+ 1189|      6|        let format = args
+ 1190|      6|            .get("format")
+ 1191|      6|            .and_then(|v| v.as_str())
+ 1192|      6|            .ok_or_else(|| McpError::missing_parameter("format"))?;
+                                         ^0                                    ^0
+ 1193|      6|        let data_type = args
+                          ^5
+ 1194|      6|            .get("data_type")
+ 1195|      6|            .and_then(|v| v.as_str())
+                                        ^5^5
+ 1196|      6|            .ok_or_else(|| McpError::missing_parameter("data_type"))?;
+                                         ^1                                       ^1
+ 1197|       |
+ 1198|      5|        let db = self.db.lock().await;
+ 1199|      5|        let export_data = match data_type {
+                          ^4
+ 1200|      5|            "tasks" => {
+ 1201|      3|                let inbox = db
+ 1202|      3|                    .get_inbox(None)
+ 1203|      3|                    .map_err(|e| McpError::database_operation_failed("get_inbox for export", e))?;
+                                               ^0                                                          ^0 ^0
+ 1204|      3|                let today = db
+ 1205|      3|                    .get_today(None)
+ 1206|      3|                    .map_err(|e| McpError::database_operation_failed("get_today for export", e))?;
+                                               ^0                                                          ^0 ^0
+ 1207|      3|                serde_json::json!({
+ 1208|      3|                    "inbox": inbox,
+ 1209|      3|                    "today": today
+ 1210|       |                })
+ 1211|       |            }
+ 1212|      2|            "projects" => {
+ 1213|      0|                let projects = db.get_projects(None).map_err(|e| {
+ 1214|      0|                    McpError::database_operation_failed("get_projects for export", e)
+ 1215|      0|                })?;
+ 1216|      0|                serde_json::json!({ "projects": projects })
+ 1217|       |            }
+ 1218|      2|            "areas" => {
+ 1219|      0|                let areas = db
+ 1220|      0|                    .get_areas()
+ 1221|      0|                    .map_err(|e| McpError::database_operation_failed("get_areas for export", e))?;
+ 1222|      0|                serde_json::json!({ "areas": areas })
+ 1223|       |            }
+ 1224|      2|            "all" => {
+ 1225|      1|                let inbox = db
+ 1226|      1|                    .get_inbox(None)
+ 1227|      1|                    .map_err(|e| McpError::database_operation_failed("get_inbox for export", e))?;
+                                               ^0                                                          ^0 ^0
+ 1228|      1|                let today = db
+ 1229|      1|                    .get_today(None)
+ 1230|      1|                    .map_err(|e| McpError::database_operation_failed("get_today for export", e))?;
+                                               ^0                                                          ^0 ^0
+ 1231|      1|                let projects = db.get_projects(None).map_err(|e| {
+                                                                               ^0
+ 1232|      0|                    McpError::database_operation_failed("get_projects for export", e)
+ 1233|      0|                })?;
+ 1234|      1|                let areas = db
+ 1235|      1|                    .get_areas()
+ 1236|      1|                    .map_err(|e| McpError::database_operation_failed("get_areas for export", e))?;
+                                               ^0                                                          ^0 ^0
+ 1237|      1|                drop(db);
+ 1238|      1|                serde_json::json!({
+ 1239|      1|                    "inbox": inbox,
+ 1240|      1|                    "today": today,
+ 1241|      1|                    "projects": projects,
+ 1242|      1|                    "areas": areas
+ 1243|       |                })
+ 1244|       |            }
+ 1245|       |            _ => {
+ 1246|      1|                return Err(McpError::invalid_data_type(
+ 1247|      1|                    data_type,
+ 1248|      1|                    "tasks, projects, areas, all",
+ 1249|      1|                ))
+ 1250|       |            }
+ 1251|       |        };
+ 1252|       |
+ 1253|      4|        let result = match format {
+                          ^2
+ 1254|      4|            "json" => serde_json::to_string_pretty(&export_data)
+                                    ^2                           ^2
+ 1255|      2|                .map_err(|e| McpError::serialization_failed("export_data serialization", e))?,
+                                           ^0                                                          ^0 ^0
+ 1256|      2|            "csv" => "CSV export not yet implemented".to_string(),
+                                   ^0                               ^0
+ 1257|      2|            "markdown" => "Markdown export not yet implemented".to_string(),
+                                        ^0                                    ^0
+ 1258|      2|            _ => return Err(McpError::invalid_format(format, "json, csv, markdown")),
+ 1259|       |        };
+ 1260|       |
+ 1261|      2|        Ok(CallToolResult {
+ 1262|      2|            content: vec![Content::Text { text: result }],
+ 1263|      2|            is_error: false,
+ 1264|      2|        })
+ 1265|      6|    }
+ 1266|       |
+ 1267|      2|    fn handle_bulk_create_tasks(args: &Value) -> McpResult<CallToolResult> {
+ 1268|      2|        let tasks = args
+                          ^1
+ 1269|      2|            .get("tasks")
+ 1270|      2|            .and_then(|v| v.as_array())
+                                        ^1^1
+ 1271|      2|            .ok_or_else(|| McpError::missing_parameter("tasks"))?;
+                                         ^1                                   ^1
+ 1272|       |
+ 1273|      1|        let response = serde_json::json!({
+ 1274|      1|            "message": "Bulk task creation not yet implemented",
+ 1275|      1|            "tasks_count": tasks.len(),
+ 1276|      1|            "status": "placeholder"
+ 1277|       |        });
+ 1278|       |
+ 1279|       |        Ok(CallToolResult {
+ 1280|      1|            content: vec![Content::Text {
+ 1281|      1|                text: serde_json::to_string_pretty(&response)
+ 1282|      1|                    .map_err(|e| McpError::serialization_failed("bulk_create_tasks response", e))?,
+                                               ^0                                                           ^0 ^0
+ 1283|       |            }],
+ 1284|       |            is_error: false,
+ 1285|       |        })
+ 1286|      2|    }
+ 1287|       |
+ 1288|      2|    async fn handle_get_recent_tasks(&self, args: Value) -> McpResult<CallToolResult> {
+ 1289|      2|        let limit = args
+ 1290|      2|            .get("limit")
+ 1291|      2|            .and_then(serde_json::Value::as_u64)
+ 1292|      2|            .map(|v| usize::try_from(v).unwrap_or(usize::MAX));
+                                   ^1              ^1 ^1
+ 1293|      2|        let hours = i64::try_from(
+ 1294|      2|            args.get("hours")
+ 1295|      2|                .and_then(serde_json::Value::as_u64)
+ 1296|      2|                .unwrap_or(24),
+ 1297|       |        )
+ 1298|      2|        .unwrap_or(24);
+ 1299|       |
+ 1300|       |        // For now, return inbox tasks as a proxy for recent tasks
+ 1301|       |        // In a real implementation, this would query by creation/modification date
+ 1302|      2|        let tasks = self
+ 1303|      2|            .db
+ 1304|      2|            .lock()
+ 1305|      2|            .await
+ 1306|      2|            .get_inbox(limit)
+ 1307|      2|            .map_err(|e| McpError::database_operation_failed("get_recent_tasks", e))?;
+                                       ^0                                                      ^0 ^0
+ 1308|       |
+ 1309|      2|        let response = serde_json::json!({
+ 1310|      2|            "message": "Recent tasks (using inbox as proxy)",
+ 1311|      2|            "hours_lookback": hours,
+ 1312|      2|            "tasks": tasks
+ 1313|       |        });
+ 1314|       |
+ 1315|       |        Ok(CallToolResult {
+ 1316|      2|            content: vec![Content::Text {
+ 1317|      2|                text: serde_json::to_string_pretty(&response)
+ 1318|      2|                    .map_err(|e| McpError::serialization_failed("get_recent_tasks response", e))?,
+                                               ^0                                                          ^0 ^0
+ 1319|       |            }],
+ 1320|       |            is_error: false,
+ 1321|       |        })
+ 1322|      2|    }
+ 1323|       |
+ 1324|      2|    async fn handle_backup_database(&self, args: Value) -> McpResult<CallToolResult> {
+ 1325|      2|        let backup_dir = args
+                          ^1
+ 1326|      2|            .get("backup_dir")
+ 1327|      2|            .and_then(|v| v.as_str())
+                                        ^1^1
+ 1328|      2|            .ok_or_else(|| McpError::missing_parameter("backup_dir"))?;
+                                         ^1                                        ^1
+ 1329|      1|        let description = args.get("description").and_then(|v| v.as_str());
+ 1330|       |
+ 1331|      1|        let backup_path = std::path::Path::new(backup_dir);
+ 1332|      1|        let metadata = self
+                          ^0
+ 1333|      1|            .backup_manager
+ 1334|      1|            .lock()
+ 1335|      1|            .await
+ 1336|      1|            .create_backup(backup_path, description)
+ 1337|      1|            .await
+ 1338|      1|            .map_err(|e| {
+ 1339|      1|                McpError::backup_operation_failed(
+ 1340|       |                    "create_backup",
+ 1341|      1|                    things3_core::ThingsError::unknown(e.to_string()),
+ 1342|       |                )
+ 1343|      1|            })?;
+ 1344|       |
+ 1345|      0|        let response = serde_json::json!({
+ 1346|      0|            "message": "Backup created successfully",
+ 1347|      0|            "backup_path": metadata.backup_path,
+ 1348|      0|            "file_size": metadata.file_size,
+ 1349|      0|            "created_at": metadata.created_at
+ 1350|       |        });
+ 1351|       |
+ 1352|       |        Ok(CallToolResult {
+ 1353|      0|            content: vec![Content::Text {
+ 1354|      0|                text: serde_json::to_string_pretty(&response)
+ 1355|      0|                    .map_err(|e| McpError::serialization_failed("backup_database response", e))?,
+ 1356|       |            }],
+ 1357|       |            is_error: false,
+ 1358|       |        })
+ 1359|      2|    }
+ 1360|       |
+ 1361|      2|    async fn handle_restore_database(&self, args: Value) -> McpResult<CallToolResult> {
+ 1362|      2|        let backup_path = args
+                          ^1
+ 1363|      2|            .get("backup_path")
+ 1364|      2|            .and_then(|v| v.as_str())
+                                        ^1^1
+ 1365|      2|            .ok_or_else(|| McpError::missing_parameter("backup_path"))?;
+                                         ^1                                         ^1
+ 1366|       |
+ 1367|      1|        let backup_file = std::path::Path::new(backup_path);
+ 1368|      1|        self.backup_manager
+ 1369|      1|            .lock()
+ 1370|      1|            .await
+ 1371|      1|            .restore_backup(backup_file)
+ 1372|      1|            .await
+ 1373|      1|            .map_err(|e| {
+ 1374|      1|                McpError::backup_operation_failed(
+ 1375|       |                    "restore_backup",
+ 1376|      1|                    things3_core::ThingsError::unknown(e.to_string()),
+ 1377|       |                )
+ 1378|      1|            })?;
+ 1379|       |
+ 1380|      0|        let response = serde_json::json!({
+ 1381|      0|            "message": "Database restored successfully",
+ 1382|      0|            "backup_path": backup_path
+ 1383|       |        });
+ 1384|       |
+ 1385|       |        Ok(CallToolResult {
+ 1386|      0|            content: vec![Content::Text {
+ 1387|      0|                text: serde_json::to_string_pretty(&response)
+ 1388|      0|                    .map_err(|e| McpError::serialization_failed("restore_database response", e))?,
+ 1389|       |            }],
+ 1390|       |            is_error: false,
+ 1391|       |        })
+ 1392|      2|    }
+ 1393|       |
+ 1394|      2|    async fn handle_list_backups(&self, args: Value) -> McpResult<CallToolResult> {
+ 1395|      2|        let backup_dir = args
+                          ^1
+ 1396|      2|            .get("backup_dir")
+ 1397|      2|            .and_then(|v| v.as_str())
+                                        ^1^1
+ 1398|      2|            .ok_or_else(|| McpError::missing_parameter("backup_dir"))?;
+                                         ^1                                        ^1
+ 1399|       |
+ 1400|      1|        let backup_path = std::path::Path::new(backup_dir);
+ 1401|      1|        let backups = self
+ 1402|      1|            .backup_manager
+ 1403|      1|            .lock()
+ 1404|      1|            .await
+ 1405|      1|            .list_backups(backup_path)
+ 1406|      1|            .map_err(|e| {
+                                       ^0
+ 1407|      0|                McpError::backup_operation_failed(
+ 1408|       |                    "list_backups",
+ 1409|      0|                    things3_core::ThingsError::unknown(e.to_string()),
+ 1410|       |                )
+ 1411|      0|            })?;
+ 1412|       |
+ 1413|      1|        let response = serde_json::json!({
+ 1414|      1|            "backups": backups,
+ 1415|      1|            "count": backups.len()
+ 1416|       |        });
+ 1417|       |
+ 1418|       |        Ok(CallToolResult {
+ 1419|      1|            content: vec![Content::Text {
+ 1420|      1|                text: serde_json::to_string_pretty(&response)
+ 1421|      1|                    .map_err(|e| McpError::serialization_failed("list_backups response", e))?,
+                                               ^0                                                      ^0 ^0
+ 1422|       |            }],
+ 1423|       |            is_error: false,
+ 1424|       |        })
+ 1425|      2|    }
+ 1426|       |
+ 1427|      1|    async fn handle_get_performance_stats(&self, _args: Value) -> McpResult<CallToolResult> {
+ 1428|      1|        let monitor = self.performance_monitor.lock().await;
+ 1429|      1|        let stats = monitor.get_all_stats();
+ 1430|      1|        let summary = monitor.get_summary();
+ 1431|      1|        drop(monitor);
+ 1432|       |
+ 1433|      1|        let response = serde_json::json!({
+ 1434|      1|            "summary": summary,
+ 1435|      1|            "operation_stats": stats
+ 1436|       |        });
+ 1437|       |
+ 1438|       |        Ok(CallToolResult {
+ 1439|      1|            content: vec![Content::Text {
+ 1440|      1|                text: serde_json::to_string_pretty(&response)
+ 1441|      1|                    .map_err(|e| McpError::serialization_failed("performance_stats response", e))?,
+                                               ^0                                                           ^0 ^0
+ 1442|       |            }],
+ 1443|       |            is_error: false,
+ 1444|       |        })
+ 1445|      1|    }
+ 1446|       |
+ 1447|      1|    async fn handle_get_system_metrics(&self, _args: Value) -> McpResult<CallToolResult> {
+ 1448|      1|        let metrics = self
+ 1449|      1|            .performance_monitor
+ 1450|      1|            .lock()
+ 1451|      1|            .await
+ 1452|      1|            .get_system_metrics()
+ 1453|      1|            .map_err(|e| {
+                                       ^0
+ 1454|      0|                McpError::performance_monitoring_failed(
+ 1455|       |                    "get_system_metrics",
+ 1456|      0|                    things3_core::ThingsError::unknown(e.to_string()),
+ 1457|       |                )
+ 1458|      0|            })?;
+ 1459|       |
+ 1460|       |        Ok(CallToolResult {
+ 1461|      1|            content: vec![Content::Text {
+ 1462|      1|                text: serde_json::to_string_pretty(&metrics)
+ 1463|      1|                    .map_err(|e| McpError::serialization_failed("system_metrics response", e))?,
+                                               ^0                                                        ^0 ^0
+ 1464|       |            }],
+ 1465|       |            is_error: false,
+ 1466|       |        })
+ 1467|      1|    }
+ 1468|       |
+ 1469|      1|    async fn handle_get_cache_stats(&self, _args: Value) -> McpResult<CallToolResult> {
+ 1470|      1|        let stats = self.cache.lock().await.get_stats();
+ 1471|       |
+ 1472|       |        Ok(CallToolResult {
+ 1473|      1|            content: vec![Content::Text {
+ 1474|      1|                text: serde_json::to_string_pretty(&stats)
+ 1475|      1|                    .map_err(|e| McpError::serialization_failed("cache_stats response", e))?,
+                                               ^0                                                     ^0 ^0
+ 1476|       |            }],
+ 1477|       |            is_error: false,
+ 1478|       |        })
+ 1479|      1|    }
+ 1480|       |
+ 1481|       |    /// Get available MCP prompts
+ 1482|      3|    fn get_available_prompts() -> Vec<Prompt> {
+ 1483|      3|        vec![
+ 1484|      3|            Self::create_task_review_prompt(),
+ 1485|      3|            Self::create_project_planning_prompt(),
+ 1486|      3|            Self::create_productivity_analysis_prompt(),
+ 1487|      3|            Self::create_backup_strategy_prompt(),
+ 1488|       |        ]
+ 1489|      3|    }
+ 1490|       |
+ 1491|       |    /// Create task review prompt
+ 1492|      3|    fn create_task_review_prompt() -> Prompt {
+ 1493|      3|        Prompt {
+ 1494|      3|            name: "task_review".to_string(),
+ 1495|      3|            description: "Review task for completeness and clarity".to_string(),
+ 1496|      3|            arguments: serde_json::json!({
+ 1497|      3|                "type": "object",
+ 1498|      3|                "properties": {
+ 1499|      3|                    "task_title": {
+ 1500|      3|                        "type": "string",
+ 1501|      3|                        "description": "The title of the task to review"
+ 1502|      3|                    },
+ 1503|      3|                    "task_notes": {
+ 1504|      3|                        "type": "string",
+ 1505|      3|                        "description": "Optional notes or description of the task"
+ 1506|      3|                    },
+ 1507|      3|                    "context": {
+ 1508|      3|                        "type": "string",
+ 1509|      3|                        "description": "Optional context about the task or project"
+ 1510|      3|                    }
+ 1511|      3|                },
+ 1512|      3|                "required": ["task_title"]
+ 1513|      3|            }),
+ 1514|      3|        }
+ 1515|      3|    }
+ 1516|       |
+ 1517|       |    /// Create project planning prompt
+ 1518|      3|    fn create_project_planning_prompt() -> Prompt {
+ 1519|      3|        Prompt {
+ 1520|      3|            name: "project_planning".to_string(),
+ 1521|      3|            description: "Help plan projects with tasks and deadlines".to_string(),
+ 1522|      3|            arguments: serde_json::json!({
+ 1523|      3|                "type": "object",
+ 1524|      3|                "properties": {
+ 1525|      3|                    "project_title": {
+ 1526|      3|                        "type": "string",
+ 1527|      3|                        "description": "The title of the project to plan"
+ 1528|      3|                    },
+ 1529|      3|                    "project_description": {
+ 1530|      3|                        "type": "string",
+ 1531|      3|                        "description": "Description of what the project aims to achieve"
+ 1532|      3|                    },
+ 1533|      3|                    "deadline": {
+ 1534|      3|                        "type": "string",
+ 1535|      3|                        "description": "Optional deadline for the project"
+ 1536|      3|                    },
+ 1537|      3|                    "complexity": {
+ 1538|      3|                        "type": "string",
+ 1539|      3|                        "description": "Project complexity level",
+ 1540|      3|                        "enum": ["simple", "medium", "complex"]
+ 1541|      3|                    }
+ 1542|      3|                },
+ 1543|      3|                "required": ["project_title"]
+ 1544|      3|            }),
+ 1545|      3|        }
+ 1546|      3|    }
+ 1547|       |
+ 1548|       |    /// Create productivity analysis prompt
+ 1549|      3|    fn create_productivity_analysis_prompt() -> Prompt {
+ 1550|      3|        Prompt {
+ 1551|      3|            name: "productivity_analysis".to_string(),
+ 1552|      3|            description: "Analyze productivity patterns".to_string(),
+ 1553|      3|            arguments: serde_json::json!({
+ 1554|      3|                "type": "object",
+ 1555|      3|                "properties": {
+ 1556|      3|                    "time_period": {
+ 1557|      3|                        "type": "string",
+ 1558|      3|                        "description": "Time period to analyze",
+ 1559|      3|                        "enum": ["week", "month", "quarter", "year"]
+ 1560|      3|                    },
+ 1561|      3|                    "focus_area": {
+ 1562|      3|                        "type": "string",
+ 1563|      3|                        "description": "Specific area to focus analysis on",
+ 1564|      3|                        "enum": ["completion_rate", "time_management", "task_distribution", "all"]
+ 1565|      3|                    },
+ 1566|      3|                    "include_recommendations": {
+ 1567|      3|                        "type": "boolean",
+ 1568|      3|                        "description": "Whether to include improvement recommendations"
+ 1569|      3|                    }
+ 1570|      3|                },
+ 1571|      3|                "required": ["time_period"]
+ 1572|      3|            }),
+ 1573|      3|        }
+ 1574|      3|    }
+ 1575|       |
+ 1576|       |    /// Create backup strategy prompt
+ 1577|      3|    fn create_backup_strategy_prompt() -> Prompt {
+ 1578|      3|        Prompt {
+ 1579|      3|            name: "backup_strategy".to_string(),
+ 1580|      3|            description: "Suggest backup strategies".to_string(),
+ 1581|      3|            arguments: serde_json::json!({
+ 1582|      3|                "type": "object",
+ 1583|      3|                "properties": {
+ 1584|      3|                    "data_volume": {
+ 1585|      3|                        "type": "string",
+ 1586|      3|                        "description": "Estimated data volume",
+ 1587|      3|                        "enum": ["small", "medium", "large"]
+ 1588|      3|                    },
+ 1589|      3|                    "frequency": {
+ 1590|      3|                        "type": "string",
+ 1591|      3|                        "description": "Desired backup frequency",
+ 1592|      3|                        "enum": ["daily", "weekly", "monthly"]
+ 1593|      3|                    },
+ 1594|      3|                    "retention_period": {
+ 1595|      3|                        "type": "string",
+ 1596|      3|                        "description": "How long to keep backups",
+ 1597|      3|                        "enum": ["1_month", "3_months", "6_months", "1_year", "indefinite"]
+ 1598|      3|                    },
+ 1599|      3|                    "storage_preference": {
+ 1600|      3|                        "type": "string",
+ 1601|      3|                        "description": "Preferred storage type",
+ 1602|      3|                        "enum": ["local", "cloud", "hybrid"]
+ 1603|      3|                    }
+ 1604|      3|                },
+ 1605|      3|                "required": ["data_volume", "frequency"]
+ 1606|      3|            }),
+ 1607|      3|        }
+ 1608|      3|    }
+ 1609|       |
+ 1610|       |    /// Handle prompt request
+ 1611|     17|    async fn handle_prompt_request(&self, request: GetPromptRequest) -> McpResult<GetPromptResult> {
+ 1612|     17|        let prompt_name = &request.name;
+ 1613|     17|        let arguments = request.arguments.unwrap_or_default();
+ 1614|       |
+ 1615|     17|        match prompt_name.as_str() {
+ 1616|     17|            "task_review" => self.handle_task_review_prompt(arguments).await,
+                                           ^6   ^6
+ 1617|     11|            "project_planning" => self.handle_project_planning_prompt(arguments).await,
+                                                ^2   ^2
+ 1618|      9|            "productivity_analysis" => self.handle_productivity_analysis_prompt(arguments).await,
+                                                     ^3   ^3
+ 1619|      6|            "backup_strategy" => self.handle_backup_strategy_prompt(arguments).await,
+                                               ^3   ^3
+ 1620|      3|            _ => Err(McpError::prompt_not_found(prompt_name)),
+ 1621|       |        }
+ 1622|     17|    }
+ 1623|       |
+ 1624|       |    /// Handle task review prompt
+ 1625|      6|    async fn handle_task_review_prompt(&self, args: Value) -> McpResult<GetPromptResult> {
+ 1626|      6|        let task_title = args
+                          ^3
+ 1627|      6|            .get("task_title")
+ 1628|      6|            .and_then(|v| v.as_str())
+                                        ^4^4
+ 1629|      6|            .ok_or_else(|| McpError::missing_parameter("task_title"))?;
+                                         ^3                                        ^3
+ 1630|      3|        let task_notes = args.get("task_notes").and_then(|v| v.as_str());
+                                                                           ^1^1
+ 1631|      3|        let context = args.get("context").and_then(|v| v.as_str());
+                                                                     ^1^1
+ 1632|       |
+ 1633|       |        // Get current data for context
+ 1634|      3|        let db = self.db.lock().await;
+ 1635|      3|        let inbox_tasks = db
+ 1636|      3|            .get_inbox(Some(5))
+ 1637|      3|            .map_err(|e| McpError::database_operation_failed("get_inbox for task_review", e))?;
+                                       ^0                                                               ^0 ^0
+ 1638|      3|        let today_tasks = db
+ 1639|      3|            .get_today(Some(5))
+ 1640|      3|            .map_err(|e| McpError::database_operation_failed("get_today for task_review", e))?;
+                                       ^0                                                               ^0 ^0
+ 1641|      3|        drop(db);
+ 1642|       |
+ 1643|      3|        let prompt_text = format!(
+ 1644|      3|            "# Task Review: {}\n\n\
+ 1645|      3|            ## Current Task Details\n\
+ 1646|      3|            - **Title**: {}\n\
+ 1647|      3|            - **Notes**: {}\n\
+ 1648|      3|            - **Context**: {}\n\n\
+ 1649|      3|            ## Review Checklist\n\
+ 1650|      3|            Please review this task for:\n\
+ 1651|      3|            1. **Clarity**: Is the task title clear and actionable?\n\
+ 1652|      3|            2. **Completeness**: Does it have all necessary details?\n\
+ 1653|      3|            3. **Priority**: How urgent/important is this task?\n\
+ 1654|      3|            4. **Dependencies**: Are there any prerequisites?\n\
+ 1655|      3|            5. **Time Estimate**: How long should this take?\n\n\
+ 1656|      3|            ## Current Context\n\
+ 1657|      3|            - **Inbox Tasks**: {} tasks\n\
+ 1658|      3|            - **Today's Tasks**: {} tasks\n\n\
+ 1659|      3|            ## Recommendations\n\
+ 1660|      3|            Based on the current workload and task details, provide specific recommendations for:\n\
+ 1661|      3|            - Improving task clarity\n\
+ 1662|      3|            - Breaking down complex tasks\n\
+ 1663|      3|            - Setting appropriate deadlines\n\
+ 1664|      3|            - Managing dependencies\n\n\
+ 1665|      3|            ## Next Steps\n\
+ 1666|      3|            Suggest concrete next steps to move this task forward effectively.",
+ 1667|       |            task_title,
+ 1668|       |            task_title,
+ 1669|      3|            task_notes.unwrap_or("No notes provided"),
+ 1670|      3|            context.unwrap_or("No additional context"),
+ 1671|      3|            inbox_tasks.len(),
+ 1672|      3|            today_tasks.len()
+ 1673|       |        );
+ 1674|       |
+ 1675|      3|        Ok(GetPromptResult {
+ 1676|      3|            content: vec![Content::Text { text: prompt_text }],
+ 1677|      3|            is_error: false,
+ 1678|      3|        })
+ 1679|      6|    }
+ 1680|       |
+ 1681|       |    /// Handle project planning prompt
+ 1682|      2|    async fn handle_project_planning_prompt(&self, args: Value) -> McpResult<GetPromptResult> {
+ 1683|      2|        let project_title = args
+ 1684|      2|            .get("project_title")
+ 1685|      2|            .and_then(|v| v.as_str())
+ 1686|      2|            .ok_or_else(|| McpError::missing_parameter("project_title"))?;
+                                         ^0                                           ^0
+ 1687|      2|        let project_description = args.get("project_description").and_then(|v| v.as_str());
+                                                                                             ^1^1
+ 1688|      2|        let deadline = args.get("deadline").and_then(|v| v.as_str());
+                                                                       ^1^1
+ 1689|      2|        let complexity = args
+ 1690|      2|            .get("complexity")
+ 1691|      2|            .and_then(|v| v.as_str())
+                                        ^1^1
+ 1692|      2|            .unwrap_or("medium");
+ 1693|       |
+ 1694|       |        // Get current data for context
+ 1695|      2|        let db = self.db.lock().await;
+ 1696|      2|        let projects = db.get_projects(None).map_err(|e| {
+                                                                       ^0
+ 1697|      0|            McpError::database_operation_failed("get_projects for project_planning", e)
+ 1698|      0|        })?;
+ 1699|      2|        let areas = db.get_areas().map_err(|e| {
+                                                             ^0
+ 1700|      0|            McpError::database_operation_failed("get_areas for project_planning", e)
+ 1701|      0|        })?;
+ 1702|      2|        drop(db);
+ 1703|       |
+ 1704|      2|        let prompt_text = format!(
+ 1705|      2|            "# Project Planning: {}\n\n\
+ 1706|      2|            ## Project Overview\n\
+ 1707|      2|            - **Title**: {}\n\
+ 1708|      2|            - **Description**: {}\n\
+ 1709|      2|            - **Deadline**: {}\n\
+ 1710|      2|            - **Complexity**: {}\n\n\
+ 1711|      2|            ## Planning Framework\n\
+ 1712|      2|            Please help plan this project by:\n\
+ 1713|      2|            1. **Breaking down** the project into manageable tasks\n\
+ 1714|      2|            2. **Estimating** time requirements for each task\n\
+ 1715|      2|            3. **Identifying** dependencies between tasks\n\
+ 1716|      2|            4. **Suggesting** milestones and checkpoints\n\
+ 1717|      2|            5. **Recommending** project organization (areas, tags, etc.)\n\n\
+ 1718|      2|            ## Current Context\n\
+ 1719|      2|            - **Existing Projects**: {} projects\n\
+ 1720|      2|            - **Available Areas**: {} areas\n\n\
+ 1721|      2|            ## Task Breakdown\n\
+ 1722|      2|            Create a detailed task list with:\n\
+ 1723|      2|            - Clear, actionable task titles\n\
+ 1724|      2|            - Estimated time for each task\n\
+ 1725|      2|            - Priority levels\n\
+ 1726|      2|            - Dependencies\n\
+ 1727|      2|            - Suggested deadlines\n\n\
+ 1728|      2|            ## Project Organization\n\
+ 1729|      2|            Suggest:\n\
+ 1730|      2|            - Appropriate area for this project\n\
+ 1731|      2|            - Useful tags for organization\n\
+ 1732|      2|            - Project structure and hierarchy\n\n\
+ 1733|      2|            ## Risk Assessment\n\
+ 1734|      2|            Identify potential challenges and mitigation strategies.\n\n\
+ 1735|      2|            ## Success Metrics\n\
+ 1736|      2|            Define how to measure project success and completion.",
+ 1737|       |            project_title,
+ 1738|       |            project_title,
+ 1739|      2|            project_description.unwrap_or("No description provided"),
+ 1740|      2|            deadline.unwrap_or("No deadline specified"),
+ 1741|       |            complexity,
+ 1742|      2|            projects.len(),
+ 1743|      2|            areas.len()
+ 1744|       |        );
+ 1745|       |
+ 1746|      2|        Ok(GetPromptResult {
+ 1747|      2|            content: vec![Content::Text { text: prompt_text }],
+ 1748|      2|            is_error: false,
+ 1749|      2|        })
+ 1750|      2|    }
+ 1751|       |
+ 1752|       |    /// Handle productivity analysis prompt
+ 1753|      3|    async fn handle_productivity_analysis_prompt(&self, args: Value) -> McpResult<GetPromptResult> {
+ 1754|      3|        let time_period = args
+ 1755|      3|            .get("time_period")
+ 1756|      3|            .and_then(|v| v.as_str())
+ 1757|      3|            .ok_or_else(|| McpError::missing_parameter("time_period"))?;
+                                         ^0                                         ^0
+ 1758|      3|        let focus_area = args
+ 1759|      3|            .get("focus_area")
+ 1760|      3|            .and_then(|v| v.as_str())
+                                        ^2^2
+ 1761|      3|            .unwrap_or("all");
+ 1762|      3|        let include_recommendations = args
+ 1763|      3|            .get("include_recommendations")
+ 1764|      3|            .and_then(serde_json::Value::as_bool)
+ 1765|      3|            .unwrap_or(true);
+ 1766|       |
+ 1767|       |        // Get current data for analysis
+ 1768|      3|        let db = self.db.lock().await;
+ 1769|      3|        let inbox_tasks = db.get_inbox(None).map_err(|e| {
+                                                                       ^0
+ 1770|      0|            McpError::database_operation_failed("get_inbox for productivity_analysis", e)
+ 1771|      0|        })?;
+ 1772|      3|        let today_tasks = db.get_today(None).map_err(|e| {
+                                                                       ^0
+ 1773|      0|            McpError::database_operation_failed("get_today for productivity_analysis", e)
+ 1774|      0|        })?;
+ 1775|      3|        let projects = db.get_projects(None).map_err(|e| {
+                                                                       ^0
+ 1776|      0|            McpError::database_operation_failed("get_projects for productivity_analysis", e)
+ 1777|      0|        })?;
+ 1778|      3|        let areas = db.get_areas().map_err(|e| {
+                                                             ^0
+ 1779|      0|            McpError::database_operation_failed("get_areas for productivity_analysis", e)
+ 1780|      0|        })?;
+ 1781|      3|        drop(db);
+ 1782|       |
+ 1783|      3|        let completed_tasks = projects
+ 1784|      3|            .iter()
+ 1785|      3|            .filter(|p| p.status == things3_core::TaskStatus::Completed)
+                                      ^0          ^0
+ 1786|      3|            .count();
+ 1787|      3|        let incomplete_tasks = projects
+ 1788|      3|            .iter()
+ 1789|      3|            .filter(|p| p.status == things3_core::TaskStatus::Incomplete)
+                                      ^0          ^0
+ 1790|      3|            .count();
+ 1791|       |
+ 1792|      3|        let prompt_text = format!(
+ 1793|      3|            "# Productivity Analysis - {}\n\n\
+ 1794|      3|            ## Analysis Period: {}\n\
+ 1795|      3|            ## Focus Area: {}\n\n\
+ 1796|      3|            ## Current Data Overview\n\
+ 1797|      3|            - **Inbox Tasks**: {} tasks\n\
+ 1798|      3|            - **Today's Tasks**: {} tasks\n\
+ 1799|      3|            - **Total Projects**: {} projects\n\
+ 1800|      3|            - **Areas**: {} areas\n\
+ 1801|      3|            - **Completed Tasks**: {} tasks\n\
+ 1802|      3|            - **Incomplete Tasks**: {} tasks\n\n\
+ 1803|      3|            ## Analysis Framework\n\
+ 1804|      3|            Please analyze productivity patterns focusing on:\n\n\
+ 1805|      3|            ### 1. Task Completion Patterns\n\
+ 1806|      3|            - Completion rates over the period\n\
+ 1807|      3|            - Task types that are completed vs. delayed\n\
+ 1808|      3|            - Time patterns in task completion\n\n\
+ 1809|      3|            ### 2. Workload Distribution\n\
+ 1810|      3|            - Balance between different areas/projects\n\
+ 1811|      3|            - Task complexity distribution\n\
+ 1812|      3|            - Deadline adherence patterns\n\n\
+ 1813|      3|            ### 3. Time Management\n\
+ 1814|      3|            - Task scheduling effectiveness\n\
+ 1815|      3|            - Inbox vs. scheduled task completion\n\
+ 1816|      3|            - Overdue task patterns\n\n\
+ 1817|      3|            ### 4. Project Progress\n\
+ 1818|      3|            - Project completion rates\n\
+ 1819|      3|            - Project complexity vs. completion time\n\
+ 1820|      3|            - Area-based productivity differences\n\n\
+ 1821|      3|            ## Key Insights\n\
+ 1822|      3|            Identify:\n\
+ 1823|      3|            - Peak productivity times\n\
+ 1824|      3|            - Most/least productive areas\n\
+ 1825|      3|            - Common bottlenecks\n\
+ 1826|      3|            - Success patterns\n\n\
+ 1827|      3|            ## Recommendations\n\
+ 1828|      3|            {}",
+ 1829|       |            time_period,
+ 1830|       |            time_period,
+ 1831|       |            focus_area,
+ 1832|      3|            inbox_tasks.len(),
+ 1833|      3|            today_tasks.len(),
+ 1834|      3|            projects.len(),
+ 1835|      3|            areas.len(),
+ 1836|       |            completed_tasks,
+ 1837|       |            incomplete_tasks,
+ 1838|      3|            if include_recommendations {
+ 1839|      2|                "Provide specific, actionable recommendations for:\n\
+ 1840|      2|                - Improving task completion rates\n\
+ 1841|      2|                - Better time management\n\
+ 1842|      2|                - Workload balancing\n\
+ 1843|      2|                - Process optimization\n\
+ 1844|      2|                - Goal setting and tracking"
+ 1845|       |            } else {
+ 1846|      1|                "Focus on analysis without recommendations"
+ 1847|       |            }
+ 1848|       |        );
+ 1849|       |
+ 1850|      3|        Ok(GetPromptResult {
+ 1851|      3|            content: vec![Content::Text { text: prompt_text }],
+ 1852|      3|            is_error: false,
+ 1853|      3|        })
+ 1854|      3|    }
+ 1855|       |
+ 1856|       |    /// Handle backup strategy prompt
+ 1857|      3|    async fn handle_backup_strategy_prompt(&self, args: Value) -> McpResult<GetPromptResult> {
+ 1858|      3|        let data_volume = args
+ 1859|      3|            .get("data_volume")
+ 1860|      3|            .and_then(|v| v.as_str())
+ 1861|      3|            .ok_or_else(|| McpError::missing_parameter("data_volume"))?;
+                                         ^0                                         ^0
+ 1862|      3|        let frequency = args
+                          ^2
+ 1863|      3|            .get("frequency")
+ 1864|      3|            .and_then(|v| v.as_str())
+                                        ^2^2
+ 1865|      3|            .ok_or_else(|| McpError::missing_parameter("frequency"))?;
+                                         ^1                                       ^1
+ 1866|      2|        let retention_period = args
+ 1867|      2|            .get("retention_period")
+ 1868|      2|            .and_then(|v| v.as_str())
+                                        ^1^1
+ 1869|      2|            .unwrap_or("3_months");
+ 1870|      2|        let storage_preference = args
+ 1871|      2|            .get("storage_preference")
+ 1872|      2|            .and_then(|v| v.as_str())
+                                        ^1^1
+ 1873|      2|            .unwrap_or("hybrid");
+ 1874|       |
+ 1875|       |        // Get current data for context
+ 1876|      2|        let db = self.db.lock().await;
+ 1877|      2|        let projects = db.get_projects(None).map_err(|e| {
+                                                                       ^0
+ 1878|      0|            McpError::database_operation_failed("get_projects for backup_strategy", e)
+ 1879|      0|        })?;
+ 1880|      2|        let areas = db
+ 1881|      2|            .get_areas()
+ 1882|      2|            .map_err(|e| McpError::database_operation_failed("get_areas for backup_strategy", e))?;
+                                       ^0                                                                   ^0 ^0
+ 1883|      2|        drop(db);
+ 1884|       |
+ 1885|      2|        let prompt_text = format!(
+ 1886|      2|            "# Backup Strategy Recommendation\n\n\
+ 1887|      2|            ## Requirements\n\
+ 1888|      2|            - **Data Volume**: {}\n\
+ 1889|      2|            - **Backup Frequency**: {}\n\
+ 1890|      2|            - **Retention Period**: {}\n\
+ 1891|      2|            - **Storage Preference**: {}\n\n\
+ 1892|      2|            ## Current Data Context\n\
+ 1893|      2|            - **Projects**: {} projects\n\
+ 1894|      2|            - **Areas**: {} areas\n\
+ 1895|      2|            - **Database Type**: SQLite (Things 3)\n\n\
+ 1896|      2|            ## Backup Strategy Analysis\n\n\
+ 1897|      2|            ### 1. Data Assessment\n\
+ 1898|      2|            Analyze the current data volume and growth patterns:\n\
+ 1899|      2|            - Database size estimation\n\
+ 1900|      2|            - Growth rate projections\n\
+ 1901|      2|            - Critical data identification\n\n\
+ 1902|      2|            ### 2. Backup Frequency Optimization\n\
+ 1903|      2|            For {} frequency backups:\n\
+ 1904|      2|            - Optimal timing considerations\n\
+ 1905|      2|            - Incremental vs. full backup strategy\n\
+ 1906|      2|            - Performance impact analysis\n\n\
+ 1907|      2|            ### 3. Storage Strategy\n\
+ 1908|      2|            For {} storage preference:\n\
+ 1909|      2|            - Local storage recommendations\n\
+ 1910|      2|            - Cloud storage options\n\
+ 1911|      2|            - Hybrid approach benefits\n\
+ 1912|      2|            - Cost considerations\n\n\
+ 1913|      2|            ### 4. Retention Policy\n\
+ 1914|      2|            For {} retention period:\n\
+ 1915|      2|            - Data lifecycle management\n\
+ 1916|      2|            - Compliance considerations\n\
+ 1917|      2|            - Storage optimization\n\n\
+ 1918|      2|            ## Recommended Implementation\n\
+ 1919|      2|            Provide specific recommendations for:\n\
+ 1920|      2|            - Backup tools and software\n\
+ 1921|      2|            - Storage locations and providers\n\
+ 1922|      2|            - Automation setup\n\
+ 1923|      2|            - Monitoring and alerting\n\
+ 1924|      2|            - Recovery procedures\n\n\
+ 1925|      2|            ## Risk Mitigation\n\
+ 1926|      2|            Address:\n\
+ 1927|      2|            - Data loss prevention\n\
+ 1928|      2|            - Backup verification\n\
+ 1929|      2|            - Disaster recovery planning\n\
+ 1930|      2|            - Security considerations\n\n\
+ 1931|      2|            ## Cost Analysis\n\
+ 1932|      2|            Estimate costs for:\n\
+ 1933|      2|            - Storage requirements\n\
+ 1934|      2|            - Backup software/tools\n\
+ 1935|      2|            - Cloud services\n\
+ 1936|      2|            - Maintenance overhead",
+ 1937|       |            data_volume,
+ 1938|       |            frequency,
+ 1939|       |            retention_period,
+ 1940|       |            storage_preference,
+ 1941|      2|            projects.len(),
+ 1942|      2|            areas.len(),
+ 1943|       |            frequency,
+ 1944|       |            storage_preference,
+ 1945|       |            retention_period
+ 1946|       |        );
+ 1947|       |
+ 1948|      2|        Ok(GetPromptResult {
+ 1949|      2|            content: vec![Content::Text { text: prompt_text }],
+ 1950|      2|            is_error: false,
+ 1951|      2|        })
+ 1952|      3|    }
+ 1953|       |
+ 1954|       |    /// Get available MCP resources
+ 1955|      1|    fn get_available_resources() -> Vec<Resource> {
+ 1956|      1|        vec![
+ 1957|      1|            Resource {
+ 1958|      1|                uri: "things://inbox".to_string(),
+ 1959|      1|                name: "Inbox Tasks".to_string(),
+ 1960|      1|                description: "Current inbox tasks from Things 3".to_string(),
+ 1961|      1|                mime_type: Some("application/json".to_string()),
+ 1962|      1|            },
+ 1963|      1|            Resource {
+ 1964|      1|                uri: "things://projects".to_string(),
+ 1965|      1|                name: "All Projects".to_string(),
+ 1966|      1|                description: "All projects in Things 3".to_string(),
+ 1967|      1|                mime_type: Some("application/json".to_string()),
+ 1968|      1|            },
+ 1969|      1|            Resource {
+ 1970|      1|                uri: "things://areas".to_string(),
+ 1971|      1|                name: "All Areas".to_string(),
+ 1972|      1|                description: "All areas in Things 3".to_string(),
+ 1973|      1|                mime_type: Some("application/json".to_string()),
+ 1974|      1|            },
+ 1975|      1|            Resource {
+ 1976|      1|                uri: "things://today".to_string(),
+ 1977|      1|                name: "Today's Tasks".to_string(),
+ 1978|      1|                description: "Tasks scheduled for today".to_string(),
+ 1979|      1|                mime_type: Some("application/json".to_string()),
+ 1980|      1|            },
+ 1981|       |        ]
+ 1982|      1|    }
+ 1983|       |
+ 1984|       |    /// Handle resource read request
+ 1985|      7|    async fn handle_resource_read(
+ 1986|      7|        &self,
+ 1987|      7|        request: ReadResourceRequest,
+ 1988|      7|    ) -> McpResult<ReadResourceResult> {
+ 1989|      7|        let uri = &request.uri;
+ 1990|       |
+ 1991|      7|        let db = self.db.lock().await;
+ 1992|      7|        let data = match uri.as_str() {
+                          ^4
+ 1993|      7|            "things://inbox" => {
+ 1994|      1|                let tasks = db.get_inbox(None).map_err(|e| {
+                                                                         ^0
+ 1995|      0|                    McpError::database_operation_failed("get_inbox for resource", e)
+ 1996|      0|                })?;
+ 1997|      1|                serde_json::to_string_pretty(&tasks).map_err(|e| {
+                                                                               ^0
+ 1998|      0|                    McpError::serialization_failed("inbox resource serialization", e)
+ 1999|      0|                })?
+ 2000|       |            }
+ 2001|      6|            "things://projects" => {
+ 2002|      1|                let projects = db.get_projects(None).map_err(|e| {
+                                                                               ^0
+ 2003|      0|                    McpError::database_operation_failed("get_projects for resource", e)
+ 2004|      0|                })?;
+ 2005|      1|                serde_json::to_string_pretty(&projects).map_err(|e| {
+                                                                                  ^0
+ 2006|      0|                    McpError::serialization_failed("projects resource serialization", e)
+ 2007|      0|                })?
+ 2008|       |            }
+ 2009|      5|            "things://areas" => {
+ 2010|      1|                let areas = db.get_areas().map_err(|e| {
+                                                                     ^0
+ 2011|      0|                    McpError::database_operation_failed("get_areas for resource", e)
+ 2012|      0|                })?;
+ 2013|      1|                serde_json::to_string_pretty(&areas).map_err(|e| {
+                                                                               ^0
+ 2014|      0|                    McpError::serialization_failed("areas resource serialization", e)
+ 2015|      0|                })?
+ 2016|       |            }
+ 2017|      4|            "things://today" => {
+ 2018|      1|                let tasks = db.get_today(None).map_err(|e| {
+                                                                         ^0
+ 2019|      0|                    McpError::database_operation_failed("get_today for resource", e)
+ 2020|      0|                })?;
+ 2021|      1|                drop(db);
+ 2022|      1|                serde_json::to_string_pretty(&tasks).map_err(|e| {
+                                                                               ^0
+ 2023|      0|                    McpError::serialization_failed("today resource serialization", e)
+ 2024|      0|                })?
+ 2025|       |            }
+ 2026|       |            _ => {
+ 2027|      3|                return Err(McpError::resource_not_found(uri));
+ 2028|       |            }
+ 2029|       |        };
+ 2030|       |
+ 2031|      4|        Ok(ReadResourceResult {
+ 2032|      4|            contents: vec![Content::Text { text: data }],
+ 2033|      4|        })
+ 2034|      7|    }
+ 2035|       |}
+
+/Users/garthdb/Projects/rust-things/apps/things3-cli/src/mcp/middleware.rs:
+    1|       |//! MCP Middleware system for cross-cutting concerns
+    2|       |
+    3|       |use crate::mcp::{CallToolRequest, CallToolResult, McpError, McpResult};
+    4|       |use serde::{Deserialize, Serialize};
+    5|       |use serde_json::Value;
+    6|       |use std::sync::Arc;
+    7|       |use std::time::{Duration, Instant};
+    8|       |use thiserror::Error;
+    9|       |
+   10|       |/// Middleware execution context
+   11|       |#[derive(Debug, Clone)]
+   12|       |pub struct MiddlewareContext {
+   13|       |    /// Request ID for tracking
+   14|       |    pub request_id: String,
+   15|       |    /// Start time of the request
+   16|       |    pub start_time: Instant,
+   17|       |    /// Additional metadata
+   18|       |    pub metadata: std::collections::HashMap<String, Value>,
+   19|       |}
+   20|       |
+   21|       |impl MiddlewareContext {
+   22|       |    /// Create a new middleware context
+   23|     54|    pub fn new(request_id: String) -> Self {
+   24|     54|        Self {
+   25|     54|            request_id,
+   26|     54|            start_time: Instant::now(),
+   27|     54|            metadata: std::collections::HashMap::new(),
+   28|     54|        }
+   29|     54|    }
+   30|       |
+   31|       |    /// Get the elapsed time since request start
+   32|     51|    pub fn elapsed(&self) -> Duration {
+   33|     51|        self.start_time.elapsed()
+   34|     51|    }
+   35|       |
+   36|       |    /// Set metadata value
+   37|     96|    pub fn set_metadata(&mut self, key: String, value: Value) {
+   38|     96|        self.metadata.insert(key, value);
+   39|     96|    }
+   40|       |
+   41|       |    /// Get metadata value
+   42|      5|    pub fn get_metadata(&self, key: &str) -> Option<&Value> {
+   43|      5|        self.metadata.get(key)
+   44|      5|    }
+   45|       |}
+   46|       |
+   47|       |/// Middleware execution result
+   48|       |#[derive(Debug)]
+   49|       |pub enum MiddlewareResult {
+   50|       |    /// Continue to next middleware or handler
+   51|       |    Continue,
+   52|       |    /// Stop execution and return this result
+   53|       |    Stop(CallToolResult),
+   54|       |    /// Stop execution with error
+   55|       |    Error(McpError),
+   56|       |}
+   57|       |
+   58|       |/// MCP Middleware trait for intercepting and controlling server operations
+   59|       |#[async_trait::async_trait]
+   60|       |pub trait McpMiddleware: Send + Sync {
+   61|       |    /// Name of the middleware for identification
+   62|       |    fn name(&self) -> &str;
+   63|       |
+   64|       |    /// Priority/order of execution (lower numbers execute first)
+   65|      0|    fn priority(&self) -> i32 {
+   66|      0|        0
+   67|      0|    }
+   68|       |
+   69|       |    /// Called before the request is processed
+   70|       |    async fn before_request(
+   71|       |        &self,
+   72|       |        request: &CallToolRequest,
+   73|       |        context: &mut MiddlewareContext,
+   74|     42|    ) -> McpResult<MiddlewareResult> {
+   75|       |        let _ = (request, context);
+   76|       |        Ok(MiddlewareResult::Continue)
+   77|     42|    }
+   78|       |
+   79|       |    /// Called after the request is processed but before response is returned
+   80|       |    async fn after_request(
+   81|       |        &self,
+   82|       |        request: &CallToolRequest,
+   83|       |        response: &mut CallToolResult,
+   84|       |        context: &mut MiddlewareContext,
+   85|     25|    ) -> McpResult<MiddlewareResult> {
+   86|       |        let _ = (request, response, context);
+   87|       |        Ok(MiddlewareResult::Continue)
+   88|     25|    }
+   89|       |
+   90|       |    /// Called when an error occurs during request processing
+   91|       |    async fn on_error(
+   92|       |        &self,
+   93|       |        request: &CallToolRequest,
+   94|       |        error: &McpError,
+   95|       |        context: &mut MiddlewareContext,
+   96|     32|    ) -> McpResult<MiddlewareResult> {
+   97|       |        let _ = (request, error, context);
+   98|       |        Ok(MiddlewareResult::Continue)
+   99|     32|    }
+  100|       |}
+  101|       |
+  102|       |/// Middleware chain for executing multiple middleware in order
+  103|       |pub struct MiddlewareChain {
+  104|       |    middlewares: Vec<Arc<dyn McpMiddleware>>,
+  105|       |}
+  106|       |
+  107|       |impl MiddlewareChain {
+  108|       |    /// Create a new middleware chain
+  109|     89|    pub fn new() -> Self {
+  110|     89|        Self {
+  111|     89|            middlewares: Vec::new(),
+  112|     89|        }
+  113|     89|    }
+  114|       |
+  115|       |    /// Add middleware to the chain
+  116|    252|    pub fn add<M: McpMiddleware + 'static>(mut self, middleware: M) -> Self {
+  117|    252|        self.middlewares.push(Arc::new(middleware));
+  118|    252|        self.sort_by_priority();
+  119|    252|        self
+  120|    252|    }
+  121|       |
+  122|       |    /// Add middleware from Arc
+  123|      0|    pub fn add_arc(mut self, middleware: Arc<dyn McpMiddleware>) -> Self {
+  124|      0|        self.middlewares.push(middleware);
+  125|      0|        self.sort_by_priority();
+  126|      0|        self
+  127|      0|    }
+  128|       |
+  129|       |    /// Sort middlewares by priority (lower numbers first)
+  130|    252|    fn sort_by_priority(&mut self) {
+  131|    252|        self.middlewares
+  132|    484|            .sort_by_key(|m| m.priority());
+                           ^252
+  133|    252|    }
+  134|       |
+  135|       |    /// Execute the middleware chain for a request
+  136|     51|    pub async fn execute<F, Fut>(
+  137|     51|        &self,
+  138|     51|        request: CallToolRequest,
+  139|     51|        handler: F,
+  140|     51|    ) -> McpResult<CallToolResult>
+  141|     51|    where
+  142|     51|        F: FnOnce(CallToolRequest) -> Fut,
+  143|     51|        Fut: std::future::Future<Output = McpResult<CallToolResult>> + Send,
+  144|     51|    {
+  145|     51|        let request_id = uuid::Uuid::new_v4().to_string();
+  146|     51|        let mut context = MiddlewareContext::new(request_id);
+  147|       |
+  148|       |        // Execute before_request hooks
+  149|    186|        for middleware in &self.middlewares {
+                          ^137
+  150|    137|            match middleware.before_request(&request, &mut context).await? {
+                                                                                       ^0
+  151|    135|                MiddlewareResult::Continue => continue,
+  152|      1|                MiddlewareResult::Stop(result) => return Ok(result),
+  153|      1|                MiddlewareResult::Error(error) => return Err(error),
+  154|       |            }
+  155|       |        }
+  156|       |
+  157|       |        // Clone request for use in after_request hooks
+  158|     49|        let request_clone = request.clone();
+  159|       |        
+  160|       |        // Execute the main handler
+  161|     49|        let mut result = match handler(request).await {
+                          ^32
+  162|     32|            Ok(response) => response,
+  163|     17|            Err(error) => {
+  164|       |                // Execute on_error hooks
+  165|     66|                for middleware in &self.middlewares {
+                                  ^49
+  166|     49|                    match middleware.on_error(&request_clone, &error, &mut context).await? {
+                                                                                                       ^0
+  167|     49|                        MiddlewareResult::Continue => continue,
+  168|      0|                        MiddlewareResult::Stop(result) => return Ok(result),
+  169|      0|                        MiddlewareResult::Error(middleware_error) => return Err(middleware_error),
+  170|       |                    }
+  171|       |                }
+  172|     17|                return Err(error);
+  173|       |            }
+  174|       |        };
+  175|       |
+  176|       |        // Execute after_request hooks
+  177|    118|        for middleware in &self.middlewares {
+                          ^86
+  178|     86|            match middleware.after_request(&request_clone, &mut result, &mut context).await? {
+                                                                                                         ^0
+  179|     86|                MiddlewareResult::Continue => continue,
+  180|      0|                MiddlewareResult::Stop(new_result) => return Ok(new_result),
+  181|      0|                MiddlewareResult::Error(error) => return Err(error),
+  182|       |            }
+  183|       |        }
+  184|       |
+  185|     32|        Ok(result)
+  186|     51|    }
+  187|       |
+  188|       |    /// Get the number of middlewares in the chain
+  189|      5|    pub fn len(&self) -> usize {
+  190|      5|        self.middlewares.len()
+  191|      5|    }
+  192|       |
+  193|       |    /// Check if the chain is empty
+  194|      5|    pub fn is_empty(&self) -> bool {
+  195|      5|        self.middlewares.is_empty()
+  196|      5|    }
+  197|       |}
+  198|       |
+  199|       |impl Default for MiddlewareChain {
+  200|      0|    fn default() -> Self {
+  201|      0|        Self::new()
+  202|      0|    }
+  203|       |}
+  204|       |
+  205|       |/// Built-in logging middleware
+  206|       |pub struct LoggingMiddleware {
+  207|       |    level: LogLevel,
+  208|       |}
+  209|       |
+  210|       |#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+  211|       |pub enum LogLevel {
+  212|       |    Debug,
+  213|       |    Info,
+  214|       |    Warn,
+  215|       |    Error,
+  216|       |}
+  217|       |
+  218|       |impl LoggingMiddleware {
+  219|       |    /// Create a new logging middleware
+  220|     78|    pub fn new(level: LogLevel) -> Self {
+  221|     78|        Self { level }
+  222|     78|    }
+  223|       |
+  224|       |    /// Create with debug level
+  225|      0|    pub fn debug() -> Self {
+  226|      0|        Self::new(LogLevel::Debug)
+  227|      0|    }
+  228|       |
+  229|       |    /// Create with info level
+  230|      2|    pub fn info() -> Self {
+  231|      2|        Self::new(LogLevel::Info)
+  232|      2|    }
+  233|       |
+  234|       |    /// Create with warn level
+  235|      0|    pub fn warn() -> Self {
+  236|      0|        Self::new(LogLevel::Warn)
+  237|      0|    }
+  238|       |
+  239|       |    /// Create with error level
+  240|      0|    pub fn error() -> Self {
+  241|      0|        Self::new(LogLevel::Error)
+  242|      0|    }
+  243|       |
+  244|     82|    fn should_log(&self, level: LogLevel) -> bool {
+  245|     82|        match (self.level, level) {
+  246|      0|            (LogLevel::Debug, _) => true,
+  247|     82|            (LogLevel::Info, LogLevel::Info | LogLevel::Warn | LogLevel::Error) => true,
+  248|      0|            (LogLevel::Warn, LogLevel::Warn | LogLevel::Error) => true,
+  249|      0|            (LogLevel::Error, LogLevel::Error) => true,
+  250|      0|            _ => false,
+  251|       |        }
+  252|     82|    }
+  253|       |
+  254|     82|    fn log(&self, level: LogLevel, message: &str) {
+  255|     82|        if self.should_log(level) {
+  256|     82|            match level {
+  257|      0|                LogLevel::Debug => println!("[DEBUG] {}", message),
+  258|     66|                LogLevel::Info => println!("[INFO] {}", message),
+  259|      0|                LogLevel::Warn => println!("[WARN] {}", message),
+  260|     16|                LogLevel::Error => println!("[ERROR] {}", message),
+  261|       |            }
+  262|      0|        }
+  263|     82|    }
+  264|       |}
+  265|       |
+  266|       |#[async_trait::async_trait]
+  267|       |impl McpMiddleware for LoggingMiddleware {
+  268|      0|    fn name(&self) -> &str {
+  269|      0|        "logging"
+  270|      0|    }
+  271|       |
+  272|    230|    fn priority(&self) -> i32 {
+  273|    230|        100 // Low priority to run early
+  274|    230|    }
+  275|       |
+  276|       |    async fn before_request(
+  277|       |        &self,
+  278|       |        request: &CallToolRequest,
+  279|       |        context: &mut MiddlewareContext,
+  280|     41|    ) -> McpResult<MiddlewareResult> {
+  281|       |        self.log(
+  282|       |            LogLevel::Info,
+  283|       |            &format!(
+  284|       |                "Request started: {} (ID: {})",
+  285|       |                request.name, context.request_id
+  286|       |            ),
+  287|       |        );
+  288|       |        Ok(MiddlewareResult::Continue)
+  289|     41|    }
+  290|       |
+  291|       |    async fn after_request(
+  292|       |        &self,
+  293|       |        request: &CallToolRequest,
+  294|       |        response: &mut CallToolResult,
+  295|       |        context: &mut MiddlewareContext,
+  296|     25|    ) -> McpResult<MiddlewareResult> {
+  297|       |        let elapsed = context.elapsed();
+  298|       |        let status = if response.is_error { "ERROR" } else { "SUCCESS" };
+  299|       |        
+  300|       |        self.log(
+  301|       |            LogLevel::Info,
+  302|       |            &format!(
+  303|       |                "Request completed: {} (ID: {}) - {} in {:?}",
+  304|       |                request.name, context.request_id, status, elapsed
+  305|       |            ),
+  306|       |        );
+  307|       |        Ok(MiddlewareResult::Continue)
+  308|     25|    }
+  309|       |
+  310|       |    async fn on_error(
+  311|       |        &self,
+  312|       |        request: &CallToolRequest,
+  313|       |        error: &McpError,
+  314|       |        context: &mut MiddlewareContext,
+  315|     16|    ) -> McpResult<MiddlewareResult> {
+  316|       |        self.log(
+  317|       |            LogLevel::Error,
+  318|       |            &format!(
+  319|       |                "Request failed: {} (ID: {}) - {}",
+  320|       |                request.name, context.request_id, error
+  321|       |            ),
+  322|       |        );
+  323|       |        Ok(MiddlewareResult::Continue)
+  324|     16|    }
+  325|       |}
+  326|       |
+  327|       |/// Built-in validation middleware
+  328|       |pub struct ValidationMiddleware {
+  329|       |    strict_mode: bool,
+  330|       |}
+  331|       |
+  332|       |impl ValidationMiddleware {
+  333|       |    /// Create a new validation middleware
+  334|     79|    pub fn new(strict_mode: bool) -> Self {
+  335|     79|        Self { strict_mode }
+  336|     79|    }
+  337|       |
+  338|       |    /// Create with strict mode enabled
+  339|      2|    pub fn strict() -> Self {
+  340|      2|        Self::new(true)
+  341|      2|    }
+  342|       |
+  343|       |    /// Create with strict mode disabled
+  344|      1|    pub fn lenient() -> Self {
+  345|      1|        Self::new(false)
+  346|      1|    }
+  347|       |
+  348|     44|    fn validate_request(&self, request: &CallToolRequest) -> McpResult<()> {
+  349|       |        // Basic validation
+  350|     44|        if request.name.is_empty() {
+  351|      2|            return Err(McpError::validation_error("Tool name cannot be empty"));
+  352|     42|        }
+  353|       |
+  354|       |        // Validate tool name format (alphanumeric and underscores only)
+  355|    544|        if !request.name.chars().all(|c| c.is_alphanumeric() || c == '_') {
+                          ^42                  ^42                            ^51
+  356|      0|            return Err(McpError::validation_error(
+  357|      0|                "Tool name must contain only alphanumeric characters and underscores",
+  358|      0|            ));
+  359|     42|        }
+  360|       |
+  361|       |        // In strict mode, validate arguments structure
+  362|     42|        if self.strict_mode {
+  363|      2|            if let Some(args) = &request.arguments {
+  364|      2|                if !args.is_object() {
+  365|      0|                    return Err(McpError::validation_error(
+  366|      0|                        "Arguments must be a JSON object",
+  367|      0|                    ));
+  368|      2|                }
+  369|      0|            }
+  370|     40|        }
+  371|       |
+  372|     42|        Ok(())
+  373|     44|    }
+  374|       |}
+  375|       |
+  376|       |#[async_trait::async_trait]
+  377|       |impl McpMiddleware for ValidationMiddleware {
+  378|      0|    fn name(&self) -> &str {
+  379|      0|        "validation"
+  380|      0|    }
+  381|       |
+  382|    154|    fn priority(&self) -> i32 {
+  383|    154|        50 // Medium priority
+  384|    154|    }
+  385|       |
+  386|       |    async fn before_request(
+  387|       |        &self,
+  388|       |        request: &CallToolRequest,
+  389|       |        context: &mut MiddlewareContext,
+  390|     44|    ) -> McpResult<MiddlewareResult> {
+  391|       |        if let Err(error) = self.validate_request(request) {
+  392|       |            context.set_metadata("validation_error".to_string(), serde_json::Value::String(error.to_string()));
+  393|       |            return Ok(MiddlewareResult::Error(error));
+  394|       |        }
+  395|       |
+  396|       |        context.set_metadata("validated".to_string(), serde_json::Value::Bool(true));
+  397|       |        Ok(MiddlewareResult::Continue)
+  398|     44|    }
+  399|       |}
+  400|       |
+  401|       |/// Built-in performance monitoring middleware
+  402|       |pub struct PerformanceMiddleware {
+  403|       |    slow_request_threshold: Duration,
+  404|       |}
+  405|       |
+  406|       |impl PerformanceMiddleware {
+  407|       |    /// Create a new performance middleware
+  408|     78|    pub fn new(slow_request_threshold: Duration) -> Self {
+  409|     78|        Self {
+  410|     78|            slow_request_threshold,
+  411|     78|        }
+  412|     78|    }
+  413|       |
+  414|       |    /// Create with default threshold (1 second)
+  415|      0|    pub fn default() -> Self {
+  416|      0|        Self::new(Duration::from_secs(1))
+  417|      0|    }
+  418|       |
+  419|       |    /// Create with custom threshold
+  420|     78|    pub fn with_threshold(threshold: Duration) -> Self {
+  421|     78|        Self::new(threshold)
+  422|     78|    }
+  423|       |}
+  424|       |
+  425|       |#[async_trait::async_trait]
+  426|       |impl McpMiddleware for PerformanceMiddleware {
+  427|      0|    fn name(&self) -> &str {
+  428|      0|        "performance"
+  429|      0|    }
+  430|       |
+  431|     77|    fn priority(&self) -> i32 {
+  432|     77|        200 // High priority to run late
+  433|     77|    }
+  434|       |
+  435|       |    async fn after_request(
+  436|       |        &self,
+  437|       |        request: &CallToolRequest,
+  438|       |        _response: &mut CallToolResult,
+  439|       |        context: &mut MiddlewareContext,
+  440|     25|    ) -> McpResult<MiddlewareResult> {
+  441|       |        let elapsed = context.elapsed();
+  442|       |        
+  443|       |        // Record performance metrics
+  444|       |        context.set_metadata("duration_ms".to_string(), serde_json::Value::Number(
+  445|       |            serde_json::Number::from(elapsed.as_millis() as u64)
+  446|       |        ));
+  447|       |        
+  448|       |        context.set_metadata("is_slow".to_string(), serde_json::Value::Bool(
+  449|       |            elapsed > self.slow_request_threshold
+  450|       |        ));
+  451|       |
+  452|       |        // Log slow requests
+  453|       |        if elapsed > self.slow_request_threshold {
+  454|       |            println!(
+  455|       |                "[PERF] Slow request detected: {} took {:?} (threshold: {:?})",
+  456|       |                request.name, elapsed, self.slow_request_threshold
+  457|       |            );
+  458|       |        }
+  459|       |
+  460|       |        Ok(MiddlewareResult::Continue)
+  461|     25|    }
+  462|       |}
+  463|       |
+  464|       |/// Middleware configuration
+  465|       |#[derive(Debug, Clone, Serialize, Deserialize)]
+  466|       |pub struct MiddlewareConfig {
+  467|       |    /// Enable logging middleware
+  468|       |    pub enable_logging: bool,
+  469|       |    /// Log level for logging middleware
+  470|       |    pub log_level: String,
+  471|       |    /// Enable validation middleware
+  472|       |    pub enable_validation: bool,
+  473|       |    /// Use strict validation mode
+  474|       |    pub strict_validation: bool,
+  475|       |    /// Enable performance monitoring
+  476|       |    pub enable_performance: bool,
+  477|       |    /// Slow request threshold in milliseconds
+  478|       |    pub slow_request_threshold_ms: u64,
+  479|       |}
+  480|       |
+  481|       |impl Default for MiddlewareConfig {
+  482|     76|    fn default() -> Self {
+  483|     76|        Self {
+  484|     76|            enable_logging: true,
+  485|     76|            log_level: "info".to_string(),
+  486|     76|            enable_validation: true,
+  487|     76|            strict_validation: false,
+  488|     76|            enable_performance: true,
+  489|     76|            slow_request_threshold_ms: 1000,
+  490|     76|        }
+  491|     76|    }
+  492|       |}
+  493|       |
+  494|       |impl MiddlewareConfig {
+  495|       |    /// Create a new middleware configuration
+  496|      0|    pub fn new() -> Self {
+  497|      0|        Self::default()
+  498|      0|    }
+  499|       |
+  500|       |    /// Build a middleware chain from this configuration
+  501|     76|    pub fn build_chain(self) -> MiddlewareChain {
+  502|     76|        let mut chain = MiddlewareChain::new();
+  503|       |
+  504|     76|        if self.enable_logging {
+  505|     76|            let log_level = match self.log_level.to_lowercase().as_str() {
+  506|     76|                "debug" => LogLevel::Debug,
+                                         ^2
+  507|     74|                "info" => LogLevel::Info,
+  508|      0|                "warn" => LogLevel::Warn,
+  509|      0|                "error" => LogLevel::Error,
+  510|      0|                _ => LogLevel::Info,
+  511|       |            };
+  512|     76|            chain = chain.add(LoggingMiddleware::new(log_level));
+  513|      0|        }
+  514|       |
+  515|     76|        if self.enable_validation {
+  516|     76|            chain = chain.add(ValidationMiddleware::new(self.strict_validation));
+  517|     76|        }
+                      ^0
+  518|       |
+  519|     76|        if self.enable_performance {
+  520|     76|            let threshold = Duration::from_millis(self.slow_request_threshold_ms);
+  521|     76|            chain = chain.add(PerformanceMiddleware::with_threshold(threshold));
+  522|     76|        }
+                      ^0
+  523|       |
+  524|     76|        chain
+  525|     76|    }
+  526|       |}
+  527|       |
+  528|       |/// Middleware-specific errors
+  529|       |#[derive(Error, Debug)]
+  530|       |pub enum MiddlewareError {
+  531|       |    #[error("Middleware execution failed: {message}")]
+  532|       |    ExecutionFailed { message: String },
+  533|       |
+  534|       |    #[error("Middleware configuration error: {message}")]
+  535|       |    ConfigurationError { message: String },
+  536|       |
+  537|       |    #[error("Middleware chain error: {message}")]
+  538|       |    ChainError { message: String },
+  539|       |}
+  540|       |
+  541|       |impl From<MiddlewareError> for McpError {
+  542|      0|    fn from(error: MiddlewareError) -> Self {
+  543|      0|        McpError::internal_error(error.to_string())
+  544|      0|    }
+  545|       |}
+  546|       |
+  547|       |#[cfg(test)]
+  548|       |mod tests {
+  549|       |    use super::*;
+  550|       |    use crate::mcp::Content;
+  551|       |
+  552|       |    struct TestMiddleware {
+  553|       |        name: String,
+  554|       |        priority: i32,
+  555|       |    }
+  556|       |
+  557|       |    #[async_trait::async_trait]
+  558|       |    impl McpMiddleware for TestMiddleware {
+  559|      0|        fn name(&self) -> &str {
+  560|      0|            &self.name
+  561|      0|        }
+  562|       |
+  563|      4|        fn priority(&self) -> i32 {
+  564|      4|            self.priority
+  565|      4|        }
+  566|       |    }
+  567|       |
+  568|       |    #[tokio::test]
+  569|      1|    async fn test_middleware_chain_creation() {
+  570|      1|        let chain = MiddlewareChain::new()
+  571|      1|            .add(TestMiddleware {
+  572|      1|                name: "test1".to_string(),
+  573|      1|                priority: 100,
+  574|      1|            })
+  575|      1|            .add(TestMiddleware {
+  576|      1|                name: "test2".to_string(),
+  577|      1|                priority: 50,
+  578|      1|            });
+  579|       |
+  580|      1|        assert_eq!(chain.len(), 2);
+  581|      1|        assert!(!chain.is_empty());
+  582|      1|    }
+  583|       |
+  584|       |    #[tokio::test]
+  585|      1|    async fn test_middleware_priority_ordering() {
+  586|      1|        let chain = MiddlewareChain::new()
+  587|      1|            .add(TestMiddleware {
+  588|      1|                name: "high_priority".to_string(),
+  589|      1|                priority: 10,
+  590|      1|            })
+  591|      1|            .add(TestMiddleware {
+  592|      1|                name: "low_priority".to_string(),
+  593|      1|                priority: 100,
+  594|      1|            });
+  595|       |
+  596|       |        // The chain should be sorted by priority
+  597|      1|        assert_eq!(chain.len(), 2);
+  598|      1|    }
+  599|       |
+  600|       |    #[tokio::test]
+  601|      1|    async fn test_middleware_execution() {
+  602|      1|        let chain = MiddlewareChain::new()
+  603|      1|            .add(LoggingMiddleware::info())
+  604|      1|            .add(ValidationMiddleware::lenient());
+  605|       |
+  606|      1|        let request = CallToolRequest {
+  607|      1|            name: "test_tool".to_string(),
+  608|      1|            arguments: Some(serde_json::json!({"param": "value"})),
+  609|      1|        };
+  610|       |
+  611|      1|        let handler = |_req: CallToolRequest| {
+  612|      1|            Box::pin(async move {
+  613|      1|                Ok(CallToolResult {
+  614|      1|                    content: vec![Content::Text {
+  615|      1|                        text: "Test response".to_string(),
+  616|      1|                    }],
+  617|      1|                    is_error: false,
+  618|      1|                })
+  619|      1|            })
+  620|      1|        };
+  621|       |
+  622|      1|        let result = chain.execute(request, handler).await;
+  623|      1|        assert!(result.is_ok());
+  624|      1|    }
+  625|       |
+  626|       |    #[tokio::test]
+  627|      1|    async fn test_validation_middleware() {
+  628|      1|        let middleware = ValidationMiddleware::strict();
+  629|      1|        let mut context = MiddlewareContext::new("test".to_string());
+  630|       |
+  631|       |        // Valid request
+  632|      1|        let valid_request = CallToolRequest {
+  633|      1|            name: "valid_tool".to_string(),
+  634|      1|            arguments: Some(serde_json::json!({"param": "value"})),
+  635|      1|        };
+  636|       |
+  637|      1|        let result = middleware.before_request(&valid_request, &mut context).await;
+  638|      1|        assert!(matches!(result, Ok(MiddlewareResult::Continue)));
+                              ^0
+  639|       |
+  640|       |        // Invalid request (empty name)
+  641|      1|        let invalid_request = CallToolRequest {
+  642|      1|            name: "".to_string(),
+  643|      1|            arguments: None,
+  644|      1|        };
+  645|       |
+  646|      1|        let result = middleware.before_request(&invalid_request, &mut context).await;
+  647|      1|        assert!(matches!(result, Ok(MiddlewareResult::Error(_))));
+                              ^0
+  648|      1|    }
+  649|       |
+  650|       |    #[tokio::test]
+  651|      1|    async fn test_performance_middleware() {
+  652|      1|        let middleware = PerformanceMiddleware::with_threshold(Duration::from_millis(100));
+  653|      1|        let mut context = MiddlewareContext::new("test".to_string());
+  654|       |
+  655|       |        // Simulate a slow request
+  656|      1|        tokio::time::sleep(Duration::from_millis(150)).await;
+  657|       |
+  658|      1|        let mut response = CallToolResult {
+  659|      1|            content: vec![Content::Text {
+  660|      1|                text: "Test".to_string(),
+  661|      1|            }],
+  662|      1|            is_error: false,
+  663|      1|        };
+  664|       |
+  665|      1|        let request = CallToolRequest {
+  666|      1|            name: "test".to_string(),
+  667|      1|            arguments: None,
+  668|      1|        };
+  669|       |
+  670|      1|        let result = middleware.after_request(&request, &mut response, &mut context).await;
+  671|      1|        assert!(matches!(result, Ok(MiddlewareResult::Continue)));
+                              ^0
+  672|       |
+  673|       |        // Check that performance metadata was set
+  674|      1|        assert!(context.get_metadata("duration_ms").is_some());
+  675|      1|        assert!(context.get_metadata("is_slow").is_some());
+  676|      1|    }
+  677|       |
+  678|       |    #[tokio::test]
+  679|      1|    async fn test_middleware_config() {
+  680|      1|        let config = MiddlewareConfig {
+  681|      1|            enable_logging: true,
+  682|      1|            log_level: "debug".to_string(),
+  683|      1|            enable_validation: true,
+  684|      1|            strict_validation: true,
+  685|      1|            enable_performance: true,
+  686|      1|            slow_request_threshold_ms: 500,
+  687|      1|            ..Default::default()
+  688|      1|        };
+  689|       |
+  690|      1|        let chain = config.build_chain();
+  691|      1|        assert!(!chain.is_empty());
+  692|      1|        assert!(chain.len() >= 3); // Should have logging, validation, and performance
+  693|      1|    }
+  694|       |}
