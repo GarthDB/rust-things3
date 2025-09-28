@@ -623,14 +623,21 @@ mod tests {
 
     #[test]
     fn test_config_effective_database_path_fallback_success() {
-        let non_existent_path = PathBuf::from("/nonexistent/path/db.sqlite");
-        let config = ThingsConfig::new(non_existent_path, true);
+        // Create a temporary file to simulate an existing database
+        let temp_dir = std::env::temp_dir();
+        let temp_file = temp_dir.join("test_database.sqlite");
+        std::fs::File::create(&temp_file).unwrap();
+
+        // Create a config with the temp file as the database path
+        let config = ThingsConfig::new(temp_file.clone(), true);
+
         let effective_path = config.get_effective_database_path().unwrap();
 
-        // Should fall back to default path
-        assert!(effective_path
-            .to_string_lossy()
-            .contains("Things Database.thingsdatabase"));
+        // Should return the existing file path
+        assert_eq!(effective_path, temp_file);
+
+        // Clean up
+        std::fs::remove_file(&temp_file).unwrap();
     }
 
     #[test]
@@ -647,14 +654,35 @@ mod tests {
 
     #[test]
     fn test_config_effective_database_path_fallback_enabled_but_default_missing() {
+        // Temporarily change HOME to a non-existent directory to ensure default path doesn't exist
+        let original_home = std::env::var("HOME").ok();
+        std::env::set_var("HOME", "/nonexistent/home");
+
+        // Create a config with a non-existent path and fallback enabled
         let non_existent_path = PathBuf::from("/nonexistent/path/db.sqlite");
         let config = ThingsConfig::new(non_existent_path, true);
-        let effective_path = config.get_effective_database_path().unwrap();
 
-        // Should still return the configured path even if fallback fails
-        assert!(effective_path
-            .to_string_lossy()
-            .contains("Things Database.thingsdatabase"));
+        // This should return an error when both the configured path and default path don't exist
+        let result = config.get_effective_database_path();
+
+        // Restore original HOME
+        if let Some(home) = original_home {
+            std::env::set_var("HOME", home);
+        } else {
+            std::env::remove_var("HOME");
+        }
+
+        assert!(
+            result.is_err(),
+            "Expected error when both configured and default paths don't exist"
+        );
+        let error = result.unwrap_err();
+        assert!(matches!(error, ThingsError::Configuration { .. }));
+
+        // Check the error message contains the expected text
+        let error_message = format!("{}", error);
+        assert!(error_message.contains("Database not found at /nonexistent/path/db.sqlite"));
+        assert!(error_message.contains("fallback is enabled but default path also not found"));
     }
 
     #[test]
