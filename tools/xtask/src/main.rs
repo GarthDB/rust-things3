@@ -499,7 +499,10 @@ mod tests {
                 "setup_git_hooks failed (expected in test environment): {:?}",
                 result
             );
+            // Skip directory verification if the function failed
+            println!("Skipping hooks directory verification due to function failure");
         } else {
+            // Only verify directory creation if the function succeeded
             // Verify hooks directory was created (if we're in a git repository)
             if std::path::Path::new(".git").exists() {
                 assert!(std::path::Path::new(".git/hooks").exists());
