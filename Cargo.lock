@@ -2187,6 +2187,7 @@ dependencies = [
  "csv",
  "dashmap",
  "env_logger",
+ "futures",
  "governor",
  "hmac",
  "jsonwebtoken",

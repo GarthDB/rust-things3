@@ -11,6 +11,9 @@ use thiserror::Error;
 use tokio::sync::Mutex;
 
 pub mod middleware;
+pub mod performance_tests;
+pub mod test_harness;
+
 use middleware::{MiddlewareChain, MiddlewareConfig};
 
 /// MCP-specific error types for better error handling and user experience
