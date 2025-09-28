@@ -11,6 +11,7 @@ Cargo.lock
 *.profraw
 *.profdata
 coverage-reports/
+coverage/
 lcov.info
 coverage.json
 cobertura.xml
