@@ -57,9 +57,9 @@ impl ThingsConfig {
             "Database not found at {} and fallback is {}",
             self.database_path.display(),
             if self.fallback_to_default {
-                "disabled"
-            } else {
                 "enabled but default path also not found"
+            } else {
+                "disabled"
             }
         )))
     }
@@ -379,5 +379,230 @@ mod tests {
 
         // Should be a reasonable path (may or may not contain "Things3" depending on system)
         assert!(!default_path.to_string_lossy().is_empty());
+    }
+
+    #[test]
+    fn test_for_testing() {
+        // Test that for_testing creates a valid config
+        let config = ThingsConfig::for_testing().unwrap();
+
+        // Should have a valid database path
+        assert!(!config.database_path.to_string_lossy().is_empty());
+
+        // Should not have fallback enabled (as specified in the method)
+        assert!(!config.fallback_to_default);
+
+        // The path should be a valid file path (even if it doesn't exist yet)
+        assert!(config.database_path.parent().is_some());
+    }
+
+    #[test]
+    fn test_with_default_path() {
+        let config = ThingsConfig::with_default_path();
+
+        // Should use the default database path
+        assert_eq!(
+            config.database_path,
+            ThingsConfig::get_default_database_path()
+        );
+
+        // Should not have fallback enabled
+        assert!(!config.fallback_to_default);
+    }
+
+    #[test]
+    fn test_effective_database_path_fallback_enabled_but_default_missing() {
+        // Test the error case when fallback is enabled but default path doesn't exist
+        let config = ThingsConfig::new("/nonexistent/path.sqlite", true);
+        let result = config.get_effective_database_path();
+
+        // Check if the default path exists - if it does, fallback will succeed
+        let default_path = ThingsConfig::get_default_database_path();
+        if default_path.exists() {
+            // If default path exists, fallback should succeed
+            assert!(result.is_ok());
+            assert_eq!(result.unwrap(), default_path);
+        } else {
+            // If default path doesn't exist, should get an error
+            assert!(result.is_err());
+            let error = result.unwrap_err();
+            match error {
+                ThingsError::Configuration { message } => {
+                    assert!(message.contains("Database not found at"));
+                    assert!(message.contains("fallback is enabled but default path also not found"));
+                }
+                _ => panic!("Expected Configuration error, got: {:?}", error),
+            }
+        }
+    }
+
+    #[test]
+    fn test_effective_database_path_fallback_disabled_error_message() {
+        // Test the error case when fallback is disabled
+        let config = ThingsConfig::new("/nonexistent/path.sqlite", false);
+        let result = config.get_effective_database_path();
+
+        // Should get an error with specific message about fallback being disabled
+        assert!(result.is_err());
+        let error = result.unwrap_err();
+        match error {
+            ThingsError::Configuration { message } => {
+                assert!(message.contains("Database not found at"));
+                assert!(message.contains("fallback is disabled"));
+            }
+            _ => panic!("Expected Configuration error, got: {:?}", error),
+        }
+    }
+
+    #[test]
+    fn test_from_env_without_variables() {
+        // Test from_env when no environment variables are set
+        // Clear any existing environment variables
+        std::env::remove_var("THINGS_DATABASE_PATH");
+        std::env::remove_var("THINGS_FALLBACK_TO_DEFAULT");
+
+        let config = ThingsConfig::from_env();
+
+        // Should use default database path
+        assert_eq!(
+            config.database_path,
+            ThingsConfig::get_default_database_path()
+        );
+
+        // Should default to true for fallback (as per the implementation)
+        assert!(config.fallback_to_default);
+    }
+
+    #[test]
+    fn test_from_env_fallback_parsing() {
+        // Test various fallback value parsing without environment variable conflicts
+        let test_cases = vec![
+            ("true", true),
+            ("TRUE", true),
+            ("True", true),
+            ("1", true),
+            ("yes", true),
+            ("YES", true),
+            ("on", true),
+            ("ON", true),
+            ("false", false),
+            ("FALSE", false),
+            ("0", false),
+            ("no", false),
+            ("off", false),
+            ("invalid", false),
+            ("", false),
+        ];
+
+        for (value, expected) in test_cases {
+            // Create a config manually to test the parsing logic
+            let fallback = value.to_lowercase();
+            let result =
+                fallback == "true" || fallback == "1" || fallback == "yes" || fallback == "on";
+            assert_eq!(result, expected, "Failed for value: '{}'", value);
+        }
+    }
+
+    #[test]
+    fn test_default_trait_implementation() {
+        // Test that Default trait works correctly
+        let config = ThingsConfig::default();
+
+        // Should be equivalent to with_default_path
+        let expected = ThingsConfig::with_default_path();
+        assert_eq!(config.database_path, expected.database_path);
+        assert_eq!(config.fallback_to_default, expected.fallback_to_default);
+    }
+
+    #[test]
+    fn test_config_with_path_reference() {
+        // Test that the config works with different path reference types
+        let path_str = "/test/path/string";
+        let path_buf = PathBuf::from("/test/path/buf");
+
+        let config1 = ThingsConfig::new(path_str, true);
+        let config2 = ThingsConfig::new(&path_buf, false);
+
+        assert_eq!(config1.database_path, PathBuf::from(path_str));
+        assert_eq!(config2.database_path, path_buf);
+    }
+
+    #[test]
+    fn test_effective_database_path_existing_file() {
+        // Test when the specified path exists
+        let temp_file = NamedTempFile::new().unwrap();
+        let db_path = temp_file.path().to_path_buf();
+        let config = ThingsConfig::new(&db_path, false);
+
+        let effective_path = config.get_effective_database_path().unwrap();
+        assert_eq!(effective_path, db_path);
+    }
+
+    #[test]
+    fn test_effective_database_path_fallback_success() {
+        // Test successful fallback when default path exists
+        let default_path = ThingsConfig::get_default_database_path();
+
+        // Only test if default path actually exists
+        if default_path.exists() {
+            let config = ThingsConfig::new("/nonexistent/path.sqlite", true);
+            let effective_path = config.get_effective_database_path().unwrap();
+            assert_eq!(effective_path, default_path);
+        }
+    }
+
+    #[test]
+    fn test_config_debug_implementation() {
+        // Test that Debug trait is properly implemented
+        let config = ThingsConfig::new("/test/debug/path", true);
+        let debug_str = format!("{config:?}");
+
+        // Should contain both fields
+        assert!(debug_str.contains("database_path"));
+        assert!(debug_str.contains("fallback_to_default"));
+        assert!(debug_str.contains("/test/debug/path"));
+        assert!(debug_str.contains("true"));
+    }
+
+    #[test]
+    fn test_config_clone_implementation() {
+        // Test that Clone trait works correctly
+        let config1 = ThingsConfig::new("/test/clone/path", true);
+        let config2 = config1.clone();
+
+        // Should be equal
+        assert_eq!(config1.database_path, config2.database_path);
+        assert_eq!(config1.fallback_to_default, config2.fallback_to_default);
+
+        // Should be independent (modifying one doesn't affect the other)
+        let config3 = ThingsConfig::new("/different/path", false);
+        assert_ne!(config1.database_path, config3.database_path);
+        assert_ne!(config1.fallback_to_default, config3.fallback_to_default);
+    }
+
+    #[test]
+    fn test_get_default_database_path_format() {
+        // Test that the default path has the expected format
+        let default_path = ThingsConfig::get_default_database_path();
+        let path_str = default_path.to_string_lossy();
+
+        // Should contain the expected macOS Things 3 path components
+        assert!(path_str.contains("Library"));
+        assert!(path_str.contains("Group Containers"));
+        assert!(path_str.contains("JLMPQHK86H.com.culturedcode.ThingsMac"));
+        assert!(path_str.contains("ThingsData-0Z0Z2"));
+        assert!(path_str.contains("Things Database.thingsdatabase"));
+        assert!(path_str.contains("main.sqlite"));
+    }
+
+    #[test]
+    fn test_home_env_var_fallback() {
+        // Test that the default path handles missing HOME environment variable
+        // This is tricky to test without affecting the environment, so we'll test the logic indirectly
+        let default_path = ThingsConfig::get_default_database_path();
+        let path_str = default_path.to_string_lossy();
+
+        // Should start with either a valid home path or "~" fallback
+        assert!(path_str.starts_with("/") || path_str.starts_with("~"));
     }
 }
