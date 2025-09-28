@@ -87,7 +87,7 @@ impl ThingsConfig {
                 let result = match lower.as_str() {
                     "true" | "1" | "yes" | "on" => true,
                     "false" | "0" | "no" | "off" => false,
-                    _ => true, // Default to true for invalid values (changed from false)
+                    _ => false, // Default to false for invalid values
                 };
                 println!(
                     "DEBUG: from_env() parsing '{}' -> '{}' -> {}",
