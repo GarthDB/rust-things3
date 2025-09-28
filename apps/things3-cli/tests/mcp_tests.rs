@@ -1109,3 +1109,518 @@ async fn test_read_unknown_resource() {
     assert!(result.is_err());
     assert!(result.unwrap_err().to_string().contains("Unknown resource"));
 }
+
+// ===== Prompt Tests =====
+
+#[tokio::test]
+async fn test_list_prompts() {
+    let server = create_test_mcp_server();
+    let result = server.list_prompts().unwrap();
+
+    // Should have 4 prompts
+    assert_eq!(result.prompts.len(), 4);
+
+    // Check that all expected prompts are present
+    let prompt_names: Vec<&String> = result.prompts.iter().map(|p| &p.name).collect();
+    assert!(prompt_names.contains(&&"task_review".to_string()));
+    assert!(prompt_names.contains(&&"project_planning".to_string()));
+    assert!(prompt_names.contains(&&"productivity_analysis".to_string()));
+    assert!(prompt_names.contains(&&"backup_strategy".to_string()));
+
+    // Check prompt properties
+    for prompt in &result.prompts {
+        assert!(!prompt.name.is_empty());
+        assert!(!prompt.description.is_empty());
+        assert!(prompt.arguments.is_object());
+    }
+}
+
+#[tokio::test]
+async fn test_prompt_schemas_validation() {
+    let server = create_test_mcp_server();
+    let result = server.list_prompts().unwrap();
+
+    // Check that each prompt has proper schema
+    for prompt in &result.prompts {
+        match prompt.name.as_str() {
+            "task_review" => {
+                let schema = &prompt.arguments;
+                assert!(schema["required"]
+                    .as_array()
+                    .unwrap()
+                    .contains(&json!("task_title")));
+            }
+            "project_planning" => {
+                let schema = &prompt.arguments;
+                assert!(schema["required"]
+                    .as_array()
+                    .unwrap()
+                    .contains(&json!("project_title")));
+            }
+            "productivity_analysis" => {
+                let schema = &prompt.arguments;
+                assert!(schema["required"]
+                    .as_array()
+                    .unwrap()
+                    .contains(&json!("time_period")));
+            }
+            "backup_strategy" => {
+                let schema = &prompt.arguments;
+                let required = schema["required"].as_array().unwrap();
+                assert!(required.contains(&json!("data_volume")));
+                assert!(required.contains(&json!("frequency")));
+            }
+            _ => {
+                // Unknown prompt
+                panic!("Unknown prompt: {}", prompt.name);
+            }
+        }
+    }
+}
+
+#[tokio::test]
+async fn test_task_review_prompt() {
+    let server = create_test_mcp_server();
+    let request = things3_cli::mcp::GetPromptRequest {
+        name: "task_review".to_string(),
+        arguments: Some(json!({
+            "task_title": "Review quarterly reports",
+            "task_notes": "Need to review Q3 reports",
+            "context": "This is for the quarterly review meeting"
+        })),
+    };
+
+    let result = server.get_prompt(request).await.unwrap();
+    assert!(!result.is_error);
+    assert_eq!(result.content.len(), 1);
+
+    match &result.content[0] {
+        Content::Text { text } => {
+            // Should contain the task title and context
+            assert!(text.contains("Review quarterly reports"));
+            assert!(text.contains("Need to review Q3 reports"));
+            assert!(text.contains("This is for the quarterly review meeting"));
+            assert!(text.contains("Task Review"));
+            assert!(text.contains("Review Checklist"));
+            assert!(text.contains("Current Context"));
+            assert!(text.contains("Recommendations"));
+            assert!(text.contains("Next Steps"));
+        }
+    }
+}
+
+#[tokio::test]
+async fn test_task_review_prompt_minimal_args() {
+    let server = create_test_mcp_server();
+    let request = things3_cli::mcp::GetPromptRequest {
+        name: "task_review".to_string(),
+        arguments: Some(json!({
+            "task_title": "Simple task"
+        })),
+    };
+
+    let result = server.get_prompt(request).await.unwrap();
+    assert!(!result.is_error);
+    assert_eq!(result.content.len(), 1);
+
+    match &result.content[0] {
+        Content::Text { text } => {
+            assert!(text.contains("Simple task"));
+            assert!(text.contains("No notes provided"));
+            assert!(text.contains("No additional context"));
+        }
+    }
+}
+
+#[tokio::test]
+async fn test_task_review_prompt_missing_required() {
+    let server = create_test_mcp_server();
+    let request = things3_cli::mcp::GetPromptRequest {
+        name: "task_review".to_string(),
+        arguments: Some(json!({
+            "task_notes": "Some notes"
+        })),
+    };
+
+    let result = server.get_prompt(request).await.unwrap();
+    assert!(result.is_error);
+    assert_eq!(result.content.len(), 1);
+
+    match &result.content[0] {
+        Content::Text { text } => {
+            assert!(text.contains("Missing required parameter"));
+        }
+    }
+}
+
+#[tokio::test]
+async fn test_project_planning_prompt() {
+    let server = create_test_mcp_server();
+    let request = things3_cli::mcp::GetPromptRequest {
+        name: "project_planning".to_string(),
+        arguments: Some(json!({
+            "project_title": "Website Redesign",
+            "project_description": "Complete redesign of company website",
+            "deadline": "2024-03-31",
+            "complexity": "complex"
+        })),
+    };
+
+    let result = server.get_prompt(request).await.unwrap();
+    assert!(!result.is_error);
+    assert_eq!(result.content.len(), 1);
+
+    match &result.content[0] {
+        Content::Text { text } => {
+            assert!(text.contains("Website Redesign"));
+            assert!(text.contains("Complete redesign of company website"));
+            assert!(text.contains("2024-03-31"));
+            assert!(text.contains("complex"));
+            assert!(text.contains("Project Planning"));
+            assert!(text.contains("Planning Framework"));
+            assert!(text.contains("Task Breakdown"));
+            assert!(text.contains("Project Organization"));
+            assert!(text.contains("Risk Assessment"));
+            assert!(text.contains("Success Metrics"));
+        }
+    }
+}
+
+#[tokio::test]
+async fn test_project_planning_prompt_minimal_args() {
+    let server = create_test_mcp_server();
+    let request = things3_cli::mcp::GetPromptRequest {
+        name: "project_planning".to_string(),
+        arguments: Some(json!({
+            "project_title": "Simple Project"
+        })),
+    };
+
+    let result = server.get_prompt(request).await.unwrap();
+    assert!(!result.is_error);
+    assert_eq!(result.content.len(), 1);
+
+    match &result.content[0] {
+        Content::Text { text } => {
+            assert!(text.contains("Simple Project"));
+            assert!(text.contains("No description provided"));
+            assert!(text.contains("No deadline specified"));
+            assert!(text.contains("medium")); // Default complexity
+        }
+    }
+}
+
+#[tokio::test]
+async fn test_productivity_analysis_prompt() {
+    let server = create_test_mcp_server();
+    let request = things3_cli::mcp::GetPromptRequest {
+        name: "productivity_analysis".to_string(),
+        arguments: Some(json!({
+            "time_period": "month",
+            "focus_area": "completion_rate",
+            "include_recommendations": true
+        })),
+    };
+
+    let result = server.get_prompt(request).await.unwrap();
+    assert!(!result.is_error);
+    assert_eq!(result.content.len(), 1);
+
+    match &result.content[0] {
+        Content::Text { text } => {
+            assert!(text.contains("month"));
+            assert!(text.contains("completion_rate"));
+            assert!(text.contains("Productivity Analysis"));
+            assert!(text.contains("Analysis Framework"));
+            assert!(text.contains("Task Completion Patterns"));
+            assert!(text.contains("Workload Distribution"));
+            assert!(text.contains("Time Management"));
+            assert!(text.contains("Project Progress"));
+            assert!(text.contains("Key Insights"));
+            assert!(text.contains("Recommendations"));
+            assert!(text.contains("Improving task completion rates"));
+        }
+    }
+}
+
+#[tokio::test]
+async fn test_productivity_analysis_prompt_no_recommendations() {
+    let server = create_test_mcp_server();
+    let request = things3_cli::mcp::GetPromptRequest {
+        name: "productivity_analysis".to_string(),
+        arguments: Some(json!({
+            "time_period": "week",
+            "focus_area": "time_management",
+            "include_recommendations": false
+        })),
+    };
+
+    let result = server.get_prompt(request).await.unwrap();
+    assert!(!result.is_error);
+    assert_eq!(result.content.len(), 1);
+
+    match &result.content[0] {
+        Content::Text { text } => {
+            assert!(text.contains("week"));
+            assert!(text.contains("time_management"));
+            assert!(text.contains("Focus on analysis without recommendations"));
+        }
+    }
+}
+
+#[tokio::test]
+async fn test_productivity_analysis_prompt_minimal_args() {
+    let server = create_test_mcp_server();
+    let request = things3_cli::mcp::GetPromptRequest {
+        name: "productivity_analysis".to_string(),
+        arguments: Some(json!({
+            "time_period": "quarter"
+        })),
+    };
+
+    let result = server.get_prompt(request).await.unwrap();
+    assert!(!result.is_error);
+    assert_eq!(result.content.len(), 1);
+
+    match &result.content[0] {
+        Content::Text { text } => {
+            assert!(text.contains("quarter"));
+            assert!(text.contains("all")); // Default focus area
+            assert!(text.contains("Improving task completion rates")); // Default recommendations
+        }
+    }
+}
+
+#[tokio::test]
+async fn test_backup_strategy_prompt() {
+    let server = create_test_mcp_server();
+    let request = things3_cli::mcp::GetPromptRequest {
+        name: "backup_strategy".to_string(),
+        arguments: Some(json!({
+            "data_volume": "large",
+            "frequency": "daily",
+            "retention_period": "1_year",
+            "storage_preference": "cloud"
+        })),
+    };
+
+    let result = server.get_prompt(request).await.unwrap();
+    assert!(!result.is_error);
+    assert_eq!(result.content.len(), 1);
+
+    match &result.content[0] {
+        Content::Text { text } => {
+            assert!(text.contains("large"));
+            assert!(text.contains("daily"));
+            assert!(text.contains("1_year"));
+            assert!(text.contains("cloud"));
+            assert!(text.contains("Backup Strategy Recommendation"));
+            assert!(text.contains("Data Assessment"));
+            assert!(text.contains("Backup Frequency Optimization"));
+            assert!(text.contains("Storage Strategy"));
+            assert!(text.contains("Retention Policy"));
+            assert!(text.contains("Recommended Implementation"));
+            assert!(text.contains("Risk Mitigation"));
+            assert!(text.contains("Cost Analysis"));
+        }
+    }
+}
+
+#[tokio::test]
+async fn test_backup_strategy_prompt_minimal_args() {
+    let server = create_test_mcp_server();
+    let request = things3_cli::mcp::GetPromptRequest {
+        name: "backup_strategy".to_string(),
+        arguments: Some(json!({
+            "data_volume": "small",
+            "frequency": "weekly"
+        })),
+    };
+
+    let result = server.get_prompt(request).await.unwrap();
+    assert!(!result.is_error);
+    assert_eq!(result.content.len(), 1);
+
+    match &result.content[0] {
+        Content::Text { text } => {
+            assert!(text.contains("small"));
+            assert!(text.contains("weekly"));
+            assert!(text.contains("3_months")); // Default retention
+            assert!(text.contains("hybrid")); // Default storage preference
+        }
+    }
+}
+
+#[tokio::test]
+async fn test_backup_strategy_prompt_missing_required() {
+    let server = create_test_mcp_server();
+    let request = things3_cli::mcp::GetPromptRequest {
+        name: "backup_strategy".to_string(),
+        arguments: Some(json!({
+            "data_volume": "medium"
+        })),
+    };
+
+    let result = server.get_prompt(request).await.unwrap();
+    assert!(result.is_error);
+    assert_eq!(result.content.len(), 1);
+
+    match &result.content[0] {
+        Content::Text { text } => {
+            assert!(text.contains("Missing required parameter"));
+        }
+    }
+}
+
+#[tokio::test]
+async fn test_unknown_prompt() {
+    let server = create_test_mcp_server();
+    let request = things3_cli::mcp::GetPromptRequest {
+        name: "unknown_prompt".to_string(),
+        arguments: None,
+    };
+
+    let result = server.get_prompt(request).await.unwrap();
+    assert!(result.is_error);
+    assert_eq!(result.content.len(), 1);
+
+    match &result.content[0] {
+        Content::Text { text } => {
+            assert!(text.contains("Unknown prompt"));
+        }
+    }
+}
+
+#[tokio::test]
+async fn test_prompt_with_no_arguments() {
+    let server = create_test_mcp_server();
+    let request = things3_cli::mcp::GetPromptRequest {
+        name: "task_review".to_string(),
+        arguments: None,
+    };
+
+    let result = server.get_prompt(request).await.unwrap();
+    assert!(result.is_error);
+    assert_eq!(result.content.len(), 1);
+
+    match &result.content[0] {
+        Content::Text { text } => {
+            assert!(text.contains("Missing required parameter"));
+        }
+    }
+}
+
+#[tokio::test]
+async fn test_prompt_context_awareness() {
+    let server = create_test_mcp_server();
+
+    // Test that prompts include current data context
+    let request = things3_cli::mcp::GetPromptRequest {
+        name: "task_review".to_string(),
+        arguments: Some(json!({
+            "task_title": "Test task"
+        })),
+    };
+
+    let result = server.get_prompt(request).await.unwrap();
+    assert!(!result.is_error);
+
+    match &result.content[0] {
+        Content::Text { text } => {
+            // Should contain current context data
+            assert!(text.contains("Inbox Tasks"));
+            assert!(text.contains("Today's Tasks"));
+            // Should contain actual numbers (not just placeholders)
+            assert!(text.contains("tasks"));
+        }
+    }
+}
+
+#[tokio::test]
+async fn test_prompt_error_handling() {
+    let server = create_test_mcp_server();
+
+    // Test with invalid JSON in arguments
+    let request = things3_cli::mcp::GetPromptRequest {
+        name: "task_review".to_string(),
+        arguments: Some(json!({ "task_title": 123 })), // Should be string
+    };
+
+    let result = server.get_prompt(request).await.unwrap();
+    // Should error due to type mismatch
+    assert!(result.is_error);
+    assert_eq!(result.content.len(), 1);
+
+    match &result.content[0] {
+        Content::Text { text } => {
+            assert!(text.contains("Missing required parameter"));
+        }
+    }
+}
+
+#[tokio::test]
+async fn test_prompt_schema_enum_validation() {
+    let server = create_test_mcp_server();
+    let result = server.list_prompts().unwrap();
+
+    // Check that enum values are properly defined in schemas
+    for prompt in &result.prompts {
+        match prompt.name.as_str() {
+            "project_planning" => {
+                let schema = &prompt.arguments;
+                let complexity_enum = &schema["properties"]["complexity"]["enum"];
+                assert!(complexity_enum
+                    .as_array()
+                    .unwrap()
+                    .contains(&json!("simple")));
+                assert!(complexity_enum
+                    .as_array()
+                    .unwrap()
+                    .contains(&json!("medium")));
+                assert!(complexity_enum
+                    .as_array()
+                    .unwrap()
+                    .contains(&json!("complex")));
+            }
+            "productivity_analysis" => {
+                let schema = &prompt.arguments;
+                let time_period_enum = &schema["properties"]["time_period"]["enum"];
+                assert!(time_period_enum
+                    .as_array()
+                    .unwrap()
+                    .contains(&json!("week")));
+                assert!(time_period_enum
+                    .as_array()
+                    .unwrap()
+                    .contains(&json!("month")));
+                assert!(time_period_enum
+                    .as_array()
+                    .unwrap()
+                    .contains(&json!("quarter")));
+                assert!(time_period_enum
+                    .as_array()
+                    .unwrap()
+                    .contains(&json!("year")));
+            }
+            "backup_strategy" => {
+                let schema = &prompt.arguments;
+                let data_volume_enum = &schema["properties"]["data_volume"]["enum"];
+                assert!(data_volume_enum
+                    .as_array()
+                    .unwrap()
+                    .contains(&json!("small")));
+                assert!(data_volume_enum
+                    .as_array()
+                    .unwrap()
+                    .contains(&json!("medium")));
+                assert!(data_volume_enum
+                    .as_array()
+                    .unwrap()
+                    .contains(&json!("large")));
+            }
+            _ => {
+                // Other prompts may not have enums
+            }
+        }
+    }
+}
