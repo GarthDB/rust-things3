@@ -5,7 +5,7 @@ use things3_cli::mcp::{
     middleware::{
         LoggingConfig, LoggingMiddleware, McpMiddleware, MiddlewareChain, MiddlewareConfig,
         MiddlewareContext, MiddlewareResult, PerformanceConfig, PerformanceMiddleware,
-        ValidationConfig, ValidationMiddleware,
+        SecurityConfig, ValidationConfig, ValidationMiddleware,
     },
     CallToolRequest, CallToolResult, Content, McpError, McpResult,
 };
@@ -419,6 +419,7 @@ async fn test_middleware_config_build_chain() {
             enabled: true,
             slow_request_threshold_ms: 500,
         },
+        security: SecurityConfig::default(),
     };
 
     let chain = config.build_chain();
@@ -465,6 +466,7 @@ async fn test_middleware_chain_with_mcp_server() {
             enabled: true,
             slow_request_threshold_ms: 1000,
         },
+        security: SecurityConfig::default(),
     };
 
     // Test that we can create a middleware chain

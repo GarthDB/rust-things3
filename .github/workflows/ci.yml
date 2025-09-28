@@ -127,20 +127,37 @@ jobs:
     
     - name: Run coverage analysis
       run: |
+        # Debug information
+        echo "Rust version: $(rustc --version)"
+        echo "Cargo version: $(cargo --version)"
+        echo "cargo-llvm-cov version: $(cargo llvm-cov --version)"
+        echo "LLVM tools available:"
+        rustup component list --installed | grep llvm || echo "No LLVM tools found"
+        
+        # Clean previous coverage data
+        cargo llvm-cov clean
+        
         # Generate LCOV report
+        echo "Generating LCOV report..."
         cargo llvm-cov --workspace --all-features --lcov --output-path lcov.info
         
         # Generate HTML report
+        echo "Generating HTML report..."
         cargo llvm-cov --workspace --all-features --html --output-dir target/llvm-cov/html
         
         # Generate JSON report
+        echo "Generating JSON report..."
         cargo llvm-cov --workspace --all-features --json --output-path coverage.json
         
         # Generate Cobertura report
+        echo "Generating Cobertura report..."
         cargo llvm-cov --workspace --all-features --cobertura --output-path cobertura.xml
         
         # Generate text report
+        echo "Generating text report..."
         cargo llvm-cov --workspace --all-features --text --output-path coverage.txt
+        
+        echo "Coverage analysis completed successfully!"
     
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v4
