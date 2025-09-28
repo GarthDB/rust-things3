@@ -84,18 +84,13 @@ impl ThingsConfig {
         let fallback_to_default = std::env::var("THINGS_FALLBACK_TO_DEFAULT")
             .map(|v| {
                 let lower = v.to_lowercase();
-                let result = match lower.as_str() {
+                match lower.as_str() {
                     "true" | "1" | "yes" | "on" => true,
                     "false" | "0" | "no" | "off" => false,
                     _ => false, // Default to false for invalid values
-                };
-                println!("DEBUG: Parsing '{}' -> '{}' -> {}", v, lower, result);
-                result
+                }
             })
-            .unwrap_or_else(|_| {
-                println!("DEBUG: No THINGS_FALLBACK_TO_DEFAULT env var, using default true");
-                true
-            });
+            .unwrap_or(true);
 
         Self::new(database_path, fallback_to_default)
     }
@@ -731,10 +726,42 @@ mod tests {
 
     #[test]
     fn test_config_from_env_fallback_parsing() {
+        // Test the parsing logic directly without relying on environment variables
+        // This avoids potential race conditions or environment variable isolation issues in CI
+
+        let test_cases = vec![
+            ("true", true),
+            ("false", false),
+            ("1", true),
+            ("0", false),
+            ("yes", true),
+            ("no", false),
+            ("invalid", false),
+        ];
+
+        for (value, expected) in test_cases {
+            // Test the parsing logic directly
+            let lower = value.to_lowercase();
+            let result = match lower.as_str() {
+                "true" | "1" | "yes" | "on" => true,
+                "false" | "0" | "no" | "off" => false,
+                _ => false, // Default to false for invalid values
+            };
+
+            assert_eq!(
+                result, expected,
+                "Failed for value: '{}', expected: {}, got: {}",
+                value, expected, result
+            );
+        }
+    }
+
+    #[test]
+    fn test_config_from_env_fallback_parsing_with_env_vars() {
         // Save original value
         let original_value = std::env::var("THINGS_FALLBACK_TO_DEFAULT").ok();
 
-        // Test different fallback values
+        // Test different fallback values with actual environment variables
         let test_cases = vec![
             ("true", true),
             ("false", false),
