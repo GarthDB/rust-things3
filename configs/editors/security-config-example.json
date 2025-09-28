@@ -1,0 +1,54 @@
+{
+  "middleware": {
+    "logging": {
+      "enabled": true,
+      "level": "info"
+    },
+    "validation": {
+      "enabled": true,
+      "strict_mode": false
+    },
+    "performance": {
+      "enabled": true,
+      "slow_request_threshold_ms": 1000
+    },
+    "security": {
+      "authentication": {
+        "enabled": true,
+        "require_auth": true,
+        "jwt_secret": "your-super-secret-jwt-key-change-this-in-production",
+        "api_keys": [
+          {
+            "key": "sk-1234567890abcdef",
+            "key_id": "admin-key",
+            "permissions": ["read", "write", "admin"],
+            "expires_at": null
+          },
+          {
+            "key": "sk-abcdef1234567890",
+            "key_id": "readonly-key",
+            "permissions": ["read"],
+            "expires_at": "2024-12-31T23:59:59Z"
+          }
+        ],
+        "oauth": {
+          "client_id": "your-oauth-client-id",
+          "client_secret": "your-oauth-client-secret",
+          "token_endpoint": "https://your-oauth-provider.com/oauth/token",
+          "scopes": ["read", "write"]
+        }
+      },
+      "rate_limiting": {
+        "enabled": true,
+        "requests_per_minute": 60,
+        "burst_limit": 10,
+        "custom_limits": {
+          "admin": 120,
+          "readonly": 30,
+          "api_key": 60,
+          "jwt": 90
+        }
+      }
+    }
+  }
+}

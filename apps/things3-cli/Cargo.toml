@@ -59,6 +59,19 @@ quick-xml.workspace = true
 # Performance monitoring
 sysinfo.workspace = true
 
+# Security and Authentication
+jsonwebtoken = "9.2"
+base64 = "0.21"
+sha2 = "0.10"
+hmac = "0.12"
+ring = "0.17"
+oauth2 = "4.4"
+url = "2.4"
+
+# Rate limiting
+governor = "0.6"
+nonzero_ext = "0.3"
+
 # Testing
 [dev-dependencies]
 tempfile = "3.8"
