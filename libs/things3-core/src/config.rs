@@ -132,7 +132,7 @@ mod tests {
     }
 
     #[test]
-    #[ignore] // Flaky test due to environment variable conflicts in parallel execution
+    #[ignore = "Flaky test due to environment variable conflicts in parallel execution"]
     fn test_config_from_env() {
         // Test the from_env function by temporarily setting environment variables
         // and ensuring they are properly cleaned up
@@ -208,7 +208,7 @@ mod tests {
     }
 
     #[test]
-    #[ignore] // Flaky test due to environment variable conflicts in parallel execution
+    #[ignore = "Flaky test due to environment variable conflicts in parallel execution"]
     fn test_config_from_env_with_custom_path() {
         let test_path = "/test/env/custom/path";
 
@@ -238,11 +238,11 @@ mod tests {
     }
 
     #[test]
-    #[ignore] // Flaky test due to environment variable conflicts in parallel execution
+    #[ignore = "Flaky test due to environment variable conflicts in parallel execution"]
     fn test_config_from_env_with_fallback() {
         // Use a unique test identifier to avoid conflicts
         let test_id = std::thread::current().id();
-        let test_path = format!("/test/env/path/fallback_{:?}", test_id);
+        let test_path = format!("/test/env/path/fallback_{test_id:?}");
 
         // Clear any existing environment variables first
         std::env::remove_var("THINGS_DATABASE_PATH");
@@ -283,11 +283,11 @@ mod tests {
     }
 
     #[test]
-    #[ignore] // Flaky test due to environment variable conflicts in parallel execution
+    #[ignore = "Flaky test due to environment variable conflicts in parallel execution"]
     fn test_config_from_env_with_invalid_fallback() {
         // Use a unique test identifier to avoid conflicts
         let test_id = std::thread::current().id();
-        let test_path = format!("/test/env/path/invalid_{:?}", test_id);
+        let test_path = format!("/test/env/path/invalid_{test_id:?}");
 
         // Clear any existing environment variables first
         std::env::remove_var("THINGS_DATABASE_PATH");
@@ -431,7 +431,7 @@ mod tests {
                     assert!(message.contains("Database not found at"));
                     assert!(message.contains("fallback is enabled but default path also not found"));
                 }
-                _ => panic!("Expected Configuration error, got: {:?}", error),
+                _ => panic!("Expected Configuration error, got: {error:?}"),
             }
         }
     }
@@ -450,7 +450,7 @@ mod tests {
                 assert!(message.contains("Database not found at"));
                 assert!(message.contains("fallback is disabled"));
             }
-            _ => panic!("Expected Configuration error, got: {:?}", error),
+            _ => panic!("Expected Configuration error, got: {error:?}"),
         }
     }
 
@@ -499,7 +499,7 @@ mod tests {
             let fallback = value.to_lowercase();
             let result =
                 fallback == "true" || fallback == "1" || fallback == "yes" || fallback == "on";
-            assert_eq!(result, expected, "Failed for value: '{}'", value);
+            assert_eq!(result, expected, "Failed for value: '{value}'");
         }
     }
 
@@ -603,6 +603,6 @@ mod tests {
         let path_str = default_path.to_string_lossy();
 
         // Should start with either a valid home path or "~" fallback
-        assert!(path_str.starts_with("/") || path_str.starts_with("~"));
+        assert!(path_str.starts_with('/') || path_str.starts_with('~'));
     }
 }

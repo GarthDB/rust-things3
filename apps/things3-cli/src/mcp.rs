@@ -10,6 +10,9 @@ use things3_core::{
 use thiserror::Error;
 use tokio::sync::Mutex;
 
+pub mod middleware;
+use middleware::{MiddlewareChain, MiddlewareConfig};
+
 /// MCP-specific error types for better error handling and user experience
 #[derive(Error, Debug)]
 pub enum McpError {
@@ -424,7 +427,7 @@ pub struct Tool {
     pub input_schema: Value,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CallToolRequest {
     pub name: String,
     pub arguments: Option<Value>,
@@ -507,6 +510,8 @@ pub struct ThingsMcpServer {
     exporter: DataExporter,
     #[allow(dead_code)]
     backup_manager: Arc<Mutex<BackupManager>>,
+    /// Middleware chain for cross-cutting concerns
+    middleware_chain: MiddlewareChain,
 }
 
 #[allow(dead_code)]
@@ -516,6 +521,7 @@ impl ThingsMcpServer {
         let performance_monitor = PerformanceMonitor::new_default();
         let exporter = DataExporter::new_default();
         let backup_manager = BackupManager::new(config);
+        let middleware_chain = MiddlewareConfig::default().build_chain();
 
         Self {
             db: Arc::new(Mutex::new(db)),
@@ -523,7 +529,36 @@ impl ThingsMcpServer {
             performance_monitor: Arc::new(Mutex::new(performance_monitor)),
             exporter,
             backup_manager: Arc::new(Mutex::new(backup_manager)),
+            middleware_chain,
         }
+    }
+
+    /// Create a new MCP server with custom middleware configuration
+    pub fn with_middleware_config(
+        db: ThingsDatabase,
+        config: ThingsConfig,
+        middleware_config: MiddlewareConfig,
+    ) -> Self {
+        let cache = ThingsCache::new_default();
+        let performance_monitor = PerformanceMonitor::new_default();
+        let exporter = DataExporter::new_default();
+        let backup_manager = BackupManager::new(config);
+        let middleware_chain = middleware_config.build_chain();
+
+        Self {
+            db: Arc::new(Mutex::new(db)),
+            cache: Arc::new(Mutex::new(cache)),
+            performance_monitor: Arc::new(Mutex::new(performance_monitor)),
+            exporter,
+            backup_manager: Arc::new(Mutex::new(backup_manager)),
+            middleware_chain,
+        }
+    }
+
+    /// Get the middleware chain for inspection or modification
+    #[must_use]
+    pub fn middleware_chain(&self) -> &MiddlewareChain {
+        &self.middleware_chain
     }
 
     /// List available MCP tools
@@ -541,7 +576,12 @@ impl ThingsMcpServer {
     /// # Errors
     /// Returns an error if tool execution fails or tool is not found
     pub async fn call_tool(&self, request: CallToolRequest) -> McpResult<CallToolResult> {
-        self.handle_tool_call(request).await
+        self.middleware_chain
+            .execute(
+                request,
+                |req| async move { self.handle_tool_call(req).await },
+            )
+            .await
     }
 
     /// Call a specific MCP tool with fallback error handling

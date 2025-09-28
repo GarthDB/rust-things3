@@ -2343,6 +2343,7 @@ async fn test_error_chain() {
 }
 
 #[tokio::test]
+#[allow(clippy::too_many_lines)]
 async fn test_all_error_variants_to_call_result() {
     // Test all error variants in to_call_result method
     let tool_error = McpError::tool_not_found("test_tool");
@@ -2496,6 +2497,7 @@ async fn test_all_error_variants_to_call_result() {
 }
 
 #[tokio::test]
+#[allow(clippy::too_many_lines)]
 async fn test_all_error_variants_to_prompt_result() {
     // Test all error variants in to_prompt_result method
     let prompt_error = McpError::prompt_not_found("test_prompt");
