@@ -84,13 +84,23 @@ impl ThingsConfig {
         let fallback_to_default = std::env::var("THINGS_FALLBACK_TO_DEFAULT")
             .map(|v| {
                 let lower = v.to_lowercase();
-                match lower.as_str() {
+                let result = match lower.as_str() {
                     "true" | "1" | "yes" | "on" => true,
                     "false" | "0" | "no" | "off" => false,
                     _ => false, // Default to false for invalid values
-                }
+                };
+                println!(
+                    "DEBUG: from_env() parsing '{}' -> '{}' -> {}",
+                    v, lower, result
+                );
+                result
             })
-            .unwrap_or(true);
+            .unwrap_or_else(|_| {
+                println!(
+                    "DEBUG: from_env() no THINGS_FALLBACK_TO_DEFAULT env var, using default true"
+                );
+                true
+            });
 
         Self::new(database_path, fallback_to_default)
     }
@@ -715,7 +725,20 @@ mod tests {
         std::env::remove_var("THINGS_DATABASE_PATH");
         std::env::remove_var("THINGS_FALLBACK_TO_DEFAULT");
 
+        // Debug: Check if environment variables are actually cleared
+        let db_path =
+            std::env::var("THINGS_DATABASE_PATH").unwrap_or_else(|_| "NOT_SET".to_string());
+        let fallback =
+            std::env::var("THINGS_FALLBACK_TO_DEFAULT").unwrap_or_else(|_| "NOT_SET".to_string());
+        println!("DEBUG: THINGS_DATABASE_PATH = '{}'", db_path);
+        println!("DEBUG: THINGS_FALLBACK_TO_DEFAULT = '{}'", fallback);
+
         let config = ThingsConfig::from_env();
+        println!(
+            "DEBUG: config.fallback_to_default = {}",
+            config.fallback_to_default
+        );
+
         assert!(config
             .database_path
             .to_string_lossy()
