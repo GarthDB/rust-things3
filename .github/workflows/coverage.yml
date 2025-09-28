@@ -30,6 +30,35 @@ jobs:
       with:
         components: llvm-tools-preview
     
+    - name: Set up LLVM tools environment
+      run: |
+        echo "Setting up LLVM tools environment..."
+        RUST_SYSROOT=$(rustc --print sysroot)
+        TARGET=$(rustc -vV | grep host | cut -d' ' -f2)
+        LLVM_COV_PATH="$RUST_SYSROOT/lib/rustlib/$TARGET/bin/llvm-cov"
+        LLVM_PROFDATA_PATH="$RUST_SYSROOT/lib/rustlib/$TARGET/bin/llvm-profdata"
+        
+        echo "LLVM_COV=$LLVM_COV_PATH" >> $GITHUB_ENV
+        echo "LLVM_PROFDATA=$LLVM_PROFDATA_PATH" >> $GITHUB_ENV
+        
+        echo "LLVM_COV=$LLVM_COV_PATH"
+        echo "LLVM_PROFDATA=$LLVM_PROFDATA_PATH"
+        
+        # Verify the tools exist
+        if [ -f "$LLVM_COV_PATH" ]; then
+          echo "✅ llvm-cov found at $LLVM_COV_PATH"
+        else
+          echo "❌ llvm-cov not found at $LLVM_COV_PATH"
+          find "$RUST_SYSROOT" -name "llvm-cov" -type f 2>/dev/null || echo "No llvm-cov found anywhere"
+        fi
+        
+        if [ -f "$LLVM_PROFDATA_PATH" ]; then
+          echo "✅ llvm-profdata found at $LLVM_PROFDATA_PATH"
+        else
+          echo "❌ llvm-profdata not found at $LLVM_PROFDATA_PATH"
+          find "$RUST_SYSROOT" -name "llvm-profdata" -type f 2>/dev/null || echo "No llvm-profdata found anywhere"
+        fi
+    
     - name: Cache cargo registry
       uses: actions/cache@v4
       with:
