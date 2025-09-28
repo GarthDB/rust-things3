@@ -84,13 +84,18 @@ impl ThingsConfig {
         let fallback_to_default = std::env::var("THINGS_FALLBACK_TO_DEFAULT")
             .map(|v| {
                 let lower = v.to_lowercase();
-                match lower.as_str() {
+                let result = match lower.as_str() {
                     "true" | "1" | "yes" | "on" => true,
                     "false" | "0" | "no" | "off" => false,
                     _ => false, // Default to false for invalid values
-                }
+                };
+                println!("DEBUG: Parsing '{}' -> '{}' -> {}", v, lower, result);
+                result
             })
-            .unwrap_or(true);
+            .unwrap_or_else(|_| {
+                println!("DEBUG: No THINGS_FALLBACK_TO_DEFAULT env var, using default true");
+                true
+            });
 
         Self::new(database_path, fallback_to_default)
     }
@@ -726,6 +731,9 @@ mod tests {
 
     #[test]
     fn test_config_from_env_fallback_parsing() {
+        // Save original value
+        let original_value = std::env::var("THINGS_FALLBACK_TO_DEFAULT").ok();
+
         // Test different fallback values
         let test_cases = vec![
             ("true", true),
@@ -738,17 +746,38 @@ mod tests {
         ];
 
         for (value, expected) in test_cases {
+            // Clear any existing value first
+            std::env::remove_var("THINGS_FALLBACK_TO_DEFAULT");
+
+            // Set the test value
             std::env::set_var("THINGS_FALLBACK_TO_DEFAULT", value);
+
+            // Verify the environment variable is set correctly
+            let env_value = std::env::var("THINGS_FALLBACK_TO_DEFAULT")
+                .unwrap_or_else(|_| "NOT_SET".to_string());
+            println!("Environment variable set to: '{}'", env_value);
+
             let config = ThingsConfig::from_env();
+
+            // Debug: print what we're testing
+            println!(
+                "Testing value: '{}', expected: {}, got: {}",
+                value, expected, config.fallback_to_default
+            );
+
             assert_eq!(
                 config.fallback_to_default, expected,
-                "Failed for value: {}",
-                value
+                "Failed for value: '{}', expected: {}, got: {}",
+                value, expected, config.fallback_to_default
             );
         }
 
-        // Clean up
-        std::env::remove_var("THINGS_FALLBACK_TO_DEFAULT");
+        // Restore original value
+        if let Some(original) = original_value {
+            std::env::set_var("THINGS_FALLBACK_TO_DEFAULT", original);
+        } else {
+            std::env::remove_var("THINGS_FALLBACK_TO_DEFAULT");
+        }
     }
 
     #[test]
