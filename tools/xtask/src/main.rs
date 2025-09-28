@@ -641,18 +641,25 @@ mod tests {
                 "setup_git_hooks failed (expected in test environment): {:?}",
                 result
             );
+            // Skip content verification if the function failed
+            println!("Skipping hook content verification due to function failure");
         } else {
+            // Only verify content if the function succeeded
             // Read and verify pre-commit hook content
             if let Ok(pre_commit_content) = std::fs::read_to_string(".git/hooks/pre-commit") {
                 assert!(pre_commit_content.contains("cargo fmt --all"));
                 assert!(pre_commit_content.contains("cargo clippy"));
                 assert!(pre_commit_content.contains("cargo test --all-features"));
+            } else {
+                println!("Warning: Could not read pre-commit hook content");
             }
 
             // Read and verify pre-push hook content
             if let Ok(pre_push_content) = std::fs::read_to_string(".git/hooks/pre-push") {
                 assert!(pre_push_content.contains("cargo clippy"));
                 assert!(pre_push_content.contains("cargo test --all-features"));
+            } else {
+                println!("Warning: Could not read pre-push hook content");
             }
         }
 
