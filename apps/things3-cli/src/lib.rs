@@ -316,7 +316,7 @@ mod tests {
         // Test that the function exists and can be referenced
         // We don't actually call it as it would hang
         let _function_ref = start_websocket_server;
-        assert!(true); // Just verify the function exists
+        // Function reference test passed if we get here
     }
 
     #[test]
