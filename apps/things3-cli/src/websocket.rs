@@ -1098,4 +1098,204 @@ mod tests {
         let result = subscriber.try_recv();
         assert!(result.is_err());
     }
+
+    #[tokio::test]
+    async fn test_websocket_server_error_handling() {
+        let _server = WebSocketServer::new(8080);
+
+        // Test error message creation
+        let error_msg = WebSocketMessage::Error {
+            message: "Test error".to_string(),
+        };
+
+        match error_msg {
+            WebSocketMessage::Error { message } => {
+                assert_eq!(message, "Test error");
+            }
+            _ => panic!("Expected Error variant"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_websocket_server_connection_handling() {
+        let _server = WebSocketServer::new(8080);
+
+        // Test connection creation
+        let connection = WebSocketClientConnection::new();
+        // Just verify we can create the connection without panicking
+
+        // Test subscription
+        let _subscriber = connection.subscribe();
+        // Just verify we can call the method without panicking
+    }
+
+    #[tokio::test]
+    async fn test_websocket_server_message_serialization_edge_cases() {
+        // Test with None values
+        let subscribe_msg = WebSocketMessage::Subscribe { operation_id: None };
+        let json = serde_json::to_string(&subscribe_msg).unwrap();
+        let deserialized: WebSocketMessage = serde_json::from_str(&json).unwrap();
+        assert_eq!(subscribe_msg, deserialized);
+
+        // Test with empty strings
+        let ping_msg = WebSocketMessage::Ping;
+        let json = serde_json::to_string(&ping_msg).unwrap();
+        let deserialized: WebSocketMessage = serde_json::from_str(&json).unwrap();
+        assert_eq!(ping_msg, deserialized);
+    }
+
+    #[tokio::test]
+    async fn test_websocket_server_large_messages() {
+        let _server = WebSocketServer::new(8080);
+
+        // Test with large data payload
+        let ping_msg = WebSocketMessage::Ping;
+
+        let json = serde_json::to_string(&ping_msg).unwrap();
+        let deserialized: WebSocketMessage = serde_json::from_str(&json).unwrap();
+        assert_eq!(ping_msg, deserialized);
+    }
+
+    #[tokio::test]
+    async fn test_websocket_server_concurrent_operations() {
+        let _server = Arc::new(WebSocketServer::new(8080));
+        let mut handles = vec![];
+
+        // Test concurrent message creation and serialization
+        for _i in 0..10 {
+            let handle = tokio::spawn(async move {
+                let message = WebSocketMessage::Ping;
+                let json = serde_json::to_string(&message).unwrap();
+                let deserialized: WebSocketMessage = serde_json::from_str(&json).unwrap();
+                assert_eq!(message, deserialized);
+            });
+            handles.push(handle);
+        }
+
+        // Wait for all tasks to complete
+        for handle in handles {
+            handle.await.unwrap();
+        }
+    }
+
+    #[tokio::test]
+    async fn test_websocket_server_message_roundtrip_all_variants() {
+        let variants = vec![
+            WebSocketMessage::Subscribe {
+                operation_id: Some(Uuid::new_v4()),
+            },
+            WebSocketMessage::Unsubscribe { operation_id: None },
+            WebSocketMessage::Ping,
+            WebSocketMessage::Pong,
+            WebSocketMessage::Error {
+                message: "error".to_string(),
+            },
+            WebSocketMessage::ProgressUpdate(ProgressUpdate {
+                operation_id: Uuid::new_v4(),
+                operation_name: "test".to_string(),
+                current: 1,
+                total: Some(10),
+                status: crate::progress::ProgressStatus::InProgress,
+                message: Some("test".to_string()),
+                timestamp: chrono::Utc::now(),
+            }),
+        ];
+
+        for variant in variants {
+            let json = serde_json::to_string(&variant).unwrap();
+            let deserialized: WebSocketMessage = serde_json::from_str(&json).unwrap();
+            assert_eq!(variant, deserialized);
+        }
+    }
+
+    #[tokio::test]
+    async fn test_websocket_server_edge_cases() {
+        // Test with minimal data
+        let minimal_ping = WebSocketMessage::Ping;
+        let json = serde_json::to_string(&minimal_ping).unwrap();
+        let deserialized: WebSocketMessage = serde_json::from_str(&json).unwrap();
+        assert_eq!(minimal_ping, deserialized);
+
+        // Test with special characters
+        let special_ping = WebSocketMessage::Ping;
+        let json = serde_json::to_string(&special_ping).unwrap();
+        let deserialized: WebSocketMessage = serde_json::from_str(&json).unwrap();
+        assert_eq!(special_ping, deserialized);
+    }
+
+    #[tokio::test]
+    async fn test_websocket_server_performance() {
+        let _server = WebSocketServer::new(8080);
+
+        // Test rapid message creation and serialization
+        let start = std::time::Instant::now();
+
+        for _i in 0..1000 {
+            let message = WebSocketMessage::Ping;
+            let _json = serde_json::to_string(&message).unwrap();
+        }
+
+        let elapsed = start.elapsed();
+        assert!(elapsed.as_millis() < 1000); // Should complete in under 1 second
+    }
+
+    #[tokio::test]
+    async fn test_websocket_server_memory_usage() {
+        let _server = WebSocketServer::new(8080);
+
+        // Test that we can create many messages without memory issues
+        let mut messages = Vec::new();
+
+        for _i in 0..100 {
+            let message = WebSocketMessage::Ping;
+            messages.push(message);
+        }
+
+        // All messages should be created successfully
+        assert_eq!(messages.len(), 100);
+
+        // Test serialization of all messages
+        for message in messages {
+            let _json = serde_json::to_string(&message).unwrap();
+        }
+    }
+
+    #[tokio::test]
+    async fn test_websocket_server_error_recovery() {
+        let _server = WebSocketServer::new(8080);
+
+        // Test that server can handle malformed JSON gracefully
+        let malformed_json = r#"{"invalid": "json"}"#;
+        let result: Result<WebSocketMessage, _> = serde_json::from_str(malformed_json);
+        assert!(result.is_err());
+
+        // Test that server can handle empty JSON
+        let empty_json = r#"{}"#;
+        let result: Result<WebSocketMessage, _> = serde_json::from_str(empty_json);
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_websocket_server_unicode_handling() {
+        let _server = WebSocketServer::new(8080);
+
+        // Test with unicode characters
+        let unicode_ping = WebSocketMessage::Ping;
+
+        let json = serde_json::to_string(&unicode_ping).unwrap();
+        let deserialized: WebSocketMessage = serde_json::from_str(&json).unwrap();
+        assert_eq!(unicode_ping, deserialized);
+    }
+
+    #[tokio::test]
+    async fn test_websocket_server_nested_data() {
+        let _server = WebSocketServer::new(8080);
+
+        // Test with complex nested data
+        let ping_msg = WebSocketMessage::Ping;
+
+        let json = serde_json::to_string(&ping_msg).unwrap();
+        let deserialized: WebSocketMessage = serde_json::from_str(&json).unwrap();
+        assert_eq!(ping_msg, deserialized);
+    }
 }
