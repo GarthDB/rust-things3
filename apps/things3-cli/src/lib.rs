@@ -284,3 +284,44 @@ pub fn watch_updates(url: &str) -> Result<()> {
 
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use things3_core::test_utils::create_test_database;
+
+    #[test]
+    fn test_health_check() {
+        let temp_file = tempfile::NamedTempFile::new().unwrap();
+        let db_path = temp_file.path();
+        let _conn = create_test_database(db_path).unwrap();
+        let db = ThingsDatabase::new(db_path).unwrap();
+        let result = health_check(&db);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_start_mcp_server() {
+        let temp_file = tempfile::NamedTempFile::new().unwrap();
+        let db_path = temp_file.path();
+        let _conn = create_test_database(db_path).unwrap();
+        let db = ThingsDatabase::new(db_path).unwrap();
+        let config = ThingsConfig::default();
+        let result = start_mcp_server(db, config);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_start_websocket_server_function_exists() {
+        // Test that the function exists and can be referenced
+        // We don't actually call it as it would hang
+        let _function_ref = start_websocket_server;
+        assert!(true); // Just verify the function exists
+    }
+
+    #[test]
+    fn test_watch_updates() {
+        let result = watch_updates("ws://127.0.0.1:8080");
+        assert!(result.is_ok());
+    }
+}

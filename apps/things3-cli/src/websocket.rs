@@ -733,4 +733,21 @@ mod tests {
             assert_eq!(message, deserialized);
         }
     }
+
+    #[tokio::test]
+    async fn test_websocket_server_client_count() {
+        let server = WebSocketServer::new(8080);
+        let count = server.client_count().await;
+        assert_eq!(count, 0); // No clients initially
+    }
+
+    #[tokio::test]
+    async fn test_websocket_server_broadcast_error_handling() {
+        let server = WebSocketServer::new(8080);
+        let message = WebSocketMessage::Ping;
+
+        // This should succeed even with no clients
+        let result = server.broadcast(message).await;
+        assert!(result.is_ok());
+    }
 }

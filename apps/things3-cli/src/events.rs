@@ -1304,4 +1304,40 @@ mod tests {
         assert!(filter.sources.is_some());
         assert!(filter.since.is_some());
     }
+
+    #[tokio::test]
+    async fn test_event_broadcaster_subscription_count() {
+        let broadcaster = EventBroadcaster::new();
+
+        // Initially no subscriptions
+        assert_eq!(broadcaster.subscription_count().await, 0);
+
+        // Add a subscription
+        let filter = EventFilter {
+            event_types: Some(vec![EventType::TaskCreated {
+                task_id: Uuid::new_v4(),
+            }]),
+            entity_ids: None,
+            sources: None,
+            since: None,
+        };
+        let _receiver = broadcaster.subscribe(filter).await;
+
+        // Should have one subscription now
+        assert_eq!(broadcaster.subscription_count().await, 1);
+
+        // Add another subscription
+        let filter2 = EventFilter {
+            event_types: Some(vec![EventType::ProjectCreated {
+                project_id: Uuid::new_v4(),
+            }]),
+            entity_ids: None,
+            sources: None,
+            since: None,
+        };
+        let _receiver2 = broadcaster.subscribe(filter2).await;
+
+        // Should have two subscriptions now
+        assert_eq!(broadcaster.subscription_count().await, 2);
+    }
 }

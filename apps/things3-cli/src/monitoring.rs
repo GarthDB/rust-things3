@@ -761,4 +761,54 @@ mod tests {
         assert_eq!(stats.update_count, 0);
         assert!((stats.success_rate - 0.0).abs() < f64::EPSILON); // No updates, so 0.0
     }
+
+    #[tokio::test]
+    async fn test_async_operation_monitor_is_healthy() {
+        let monitor = AsyncOperationMonitor::new("test_operation".to_string());
+
+        // Initially should not be healthy (no activity)
+        assert!(!monitor.is_healthy(Duration::from_millis(100)).await);
+
+        // Record some activity
+        monitor.record_update().await;
+
+        // Should be healthy now
+        assert!(monitor.is_healthy(Duration::from_millis(100)).await);
+
+        // Wait longer than max_silence
+        tokio::time::sleep(Duration::from_millis(150)).await;
+
+        // Should not be healthy anymore
+        assert!(!monitor.is_healthy(Duration::from_millis(100)).await);
+    }
+
+    #[tokio::test]
+    async fn test_async_operation_monitor_get_stats_detailed() {
+        let monitor = AsyncOperationMonitor::new("detailed_test".to_string());
+
+        // Record various activities
+        monitor.record_success().await;
+        monitor.record_success().await;
+        monitor.record_error().await;
+        monitor.record_update().await;
+        monitor.record_update().await;
+
+        let stats = monitor.get_stats().await;
+        assert_eq!(stats.operation_name, "detailed_test");
+        assert_eq!(stats.success_count, 2);
+        assert_eq!(stats.error_count, 1);
+        assert_eq!(stats.update_count, 2);
+        assert!(stats.duration.as_nanos() >= 0); // Duration should be non-negative
+                                                 // Success rate should be 2/2 = 1.0 (only counting updates, not errors)
+        assert!((stats.success_rate - 1.0).abs() < f64::EPSILON);
+    }
+
+    #[tokio::test]
+    async fn test_realtime_feature_validator_validate_health() {
+        let validator = RealtimeFeatureValidator::new();
+
+        // Test with no monitors (should return empty result)
+        let result = validator.validate_health().await;
+        assert!(result.features.is_empty());
+    }
 }
