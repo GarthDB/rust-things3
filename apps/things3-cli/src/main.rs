@@ -448,7 +448,7 @@ mod tests {
 
     #[test]
     fn test_main_server_command() {
-        let cli = Cli::parse_from(&["things3", "server", "--port", "8080"]);
+        let cli = Cli::parse_from(["things3", "server", "--port", "8080"]);
         match cli.command {
             Commands::Server { port } => assert_eq!(port, 8080),
             _ => panic!("Expected Server command"),
@@ -457,7 +457,7 @@ mod tests {
 
     #[test]
     fn test_main_server_command_default_port() {
-        let cli = Cli::parse_from(&["things3", "server"]);
+        let cli = Cli::parse_from(["things3", "server"]);
         match cli.command {
             Commands::Server { port } => assert_eq!(port, 8080),
             _ => panic!("Expected Server command"),
@@ -466,7 +466,7 @@ mod tests {
 
     #[test]
     fn test_main_watch_command() {
-        let cli = Cli::parse_from(&["things3", "watch", "--url", "ws://localhost:8080"]);
+        let cli = Cli::parse_from(["things3", "watch", "--url", "ws://localhost:8080"]);
         match cli.command {
             Commands::Watch { url } => assert_eq!(url, "ws://localhost:8080"),
             _ => panic!("Expected Watch command"),
@@ -475,16 +475,16 @@ mod tests {
 
     #[test]
     fn test_main_validate_command() {
-        let cli = Cli::parse_from(&["things3", "validate"]);
+        let cli = Cli::parse_from(["things3", "validate"]);
         match cli.command {
-            Commands::Validate => assert!(true),
+            Commands::Validate => {} // Placeholder for validate command
             _ => panic!("Expected Validate command"),
         }
     }
 
     #[test]
     fn test_main_bulk_export_command() {
-        let cli = Cli::parse_from(&["things3", "bulk", "export", "--format", "json"]);
+        let cli = Cli::parse_from(["things3", "bulk", "export", "--format", "json"]);
         match cli.command {
             Commands::Bulk { operation } => match operation {
                 BulkOperation::Export { format } => assert_eq!(format, "json"),
@@ -496,7 +496,7 @@ mod tests {
 
     #[test]
     fn test_main_bulk_export_command_default_format() {
-        let cli = Cli::parse_from(&["things3", "bulk", "export"]);
+        let cli = Cli::parse_from(["things3", "bulk", "export"]);
         match cli.command {
             Commands::Bulk { operation } => match operation {
                 BulkOperation::Export { format } => assert_eq!(format, "json"),
@@ -508,7 +508,7 @@ mod tests {
 
     #[test]
     fn test_main_bulk_update_status_command() {
-        let cli = Cli::parse_from(&["things3", "bulk", "update-status", "123,456", "completed"]);
+        let cli = Cli::parse_from(["things3", "bulk", "update-status", "123,456", "completed"]);
         match cli.command {
             Commands::Bulk { operation } => match operation {
                 BulkOperation::UpdateStatus { task_ids, status } => {
@@ -523,7 +523,7 @@ mod tests {
 
     #[test]
     fn test_main_bulk_search_and_process_command() {
-        let cli = Cli::parse_from(&["things3", "bulk", "search-and-process", "test"]);
+        let cli = Cli::parse_from(["things3", "bulk", "search-and-process", "test"]);
         match cli.command {
             Commands::Bulk { operation } => match operation {
                 BulkOperation::SearchAndProcess { query } => {
@@ -537,7 +537,7 @@ mod tests {
 
     #[test]
     fn test_main_bulk_search_and_process_command_default_limit() {
-        let cli = Cli::parse_from(&["things3", "bulk", "search-and-process", "test"]);
+        let cli = Cli::parse_from(["things3", "bulk", "search-and-process", "test"]);
         match cli.command {
             Commands::Bulk { operation } => match operation {
                 BulkOperation::SearchAndProcess { query } => {
@@ -551,7 +551,7 @@ mod tests {
 
     #[test]
     fn test_main_projects_command_with_area() {
-        let cli = Cli::parse_from(&[
+        let cli = Cli::parse_from([
             "things3",
             "projects",
             "--area",
@@ -570,7 +570,7 @@ mod tests {
 
     #[test]
     fn test_main_projects_command_with_limit() {
-        let cli = Cli::parse_from(&["things3", "projects", "--limit", "5"]);
+        let cli = Cli::parse_from(["things3", "projects", "--limit", "5"]);
         match cli.command {
             Commands::Projects { limit, .. } => {
                 assert_eq!(limit, Some(5));
@@ -581,7 +581,7 @@ mod tests {
 
     #[test]
     fn test_main_areas_command_with_limit() {
-        let cli = Cli::parse_from(&["things3", "areas", "--limit", "3"]);
+        let cli = Cli::parse_from(["things3", "areas", "--limit", "3"]);
         match cli.command {
             Commands::Areas { limit } => {
                 assert_eq!(limit, Some(3));
@@ -592,7 +592,7 @@ mod tests {
 
     #[test]
     fn test_main_search_command_with_limit() {
-        let cli = Cli::parse_from(&["things3", "search", "test query", "--limit", "10"]);
+        let cli = Cli::parse_from(["things3", "search", "test query", "--limit", "10"]);
         match cli.command {
             Commands::Search { query, limit } => {
                 assert_eq!(query, "test query");
@@ -604,7 +604,7 @@ mod tests {
 
     #[test]
     fn test_main_today_command_with_limit() {
-        let cli = Cli::parse_from(&["things3", "today", "--limit", "5"]);
+        let cli = Cli::parse_from(["things3", "today", "--limit", "5"]);
         match cli.command {
             Commands::Today { limit } => {
                 assert_eq!(limit, Some(5));
@@ -615,7 +615,7 @@ mod tests {
 
     #[test]
     fn test_main_inbox_command_with_limit() {
-        let cli = Cli::parse_from(&["things3", "inbox", "--limit", "7"]);
+        let cli = Cli::parse_from(["things3", "inbox", "--limit", "7"]);
         match cli.command {
             Commands::Inbox { limit } => {
                 assert_eq!(limit, Some(7));
@@ -626,21 +626,21 @@ mod tests {
 
     #[test]
     fn test_main_verbose_and_database_flags() {
-        let cli = Cli::parse_from(&["things3", "--verbose", "--database", "/path/to/db", "inbox"]);
+        let cli = Cli::parse_from(["things3", "--verbose", "--database", "/path/to/db", "inbox"]);
         assert!(cli.verbose);
         assert_eq!(cli.database, Some(std::path::PathBuf::from("/path/to/db")));
     }
 
     #[test]
     fn test_main_fallback_and_verbose_flags() {
-        let cli = Cli::parse_from(&["things3", "--fallback-to-default", "--verbose", "health"]);
+        let cli = Cli::parse_from(["things3", "--fallback-to-default", "--verbose", "health"]);
         assert!(cli.fallback_to_default);
         assert!(cli.verbose);
     }
 
     #[test]
     fn test_main_all_flags_combined() {
-        let cli = Cli::parse_from(&[
+        let cli = Cli::parse_from([
             "things3",
             "--verbose",
             "--database",
@@ -664,7 +664,7 @@ mod tests {
         let formats = vec!["json", "csv", "xml", "markdown", "opml"];
 
         for format in formats {
-            let cli = Cli::parse_from(&["things3", "bulk", "export", "--format", format]);
+            let cli = Cli::parse_from(["things3", "bulk", "export", "--format", format]);
             match cli.command {
                 Commands::Bulk { operation } => match operation {
                     BulkOperation::Export { format: f } => assert_eq!(f, format),
@@ -680,7 +680,7 @@ mod tests {
         let statuses = vec!["completed", "cancelled", "in_progress"];
 
         for status in statuses {
-            let cli = Cli::parse_from(&["things3", "bulk", "update-status", "123", status]);
+            let cli = Cli::parse_from(["things3", "bulk", "update-status", "123", status]);
             match cli.command {
                 Commands::Bulk { operation } => match operation {
                     BulkOperation::UpdateStatus { status: s, .. } => assert_eq!(s, status),
@@ -696,7 +696,7 @@ mod tests {
         let ports = vec![3000, 8080, 9000, 3001];
 
         for port in ports {
-            let cli = Cli::parse_from(&["things3", "server", "--port", &port.to_string()]);
+            let cli = Cli::parse_from(["things3", "server", "--port", &port.to_string()]);
             match cli.command {
                 Commands::Server { port: p } => assert_eq!(p, port),
                 _ => panic!("Expected Server command"),
@@ -714,7 +714,7 @@ mod tests {
         ];
 
         for url in urls {
-            let cli = Cli::parse_from(&["things3", "watch", "--url", url]);
+            let cli = Cli::parse_from(["things3", "watch", "--url", url]);
             match cli.command {
                 Commands::Watch { url: u } => assert_eq!(u, url),
                 _ => panic!("Expected Watch command"),

@@ -1498,22 +1498,22 @@ mod tests {
 
         for event_type in events {
             let extracted_id = match event_type {
-                EventType::TaskCreated { task_id } => Some(task_id),
-                EventType::TaskUpdated { task_id } => Some(task_id),
-                EventType::TaskDeleted { task_id } => Some(task_id),
-                EventType::TaskCompleted { task_id } => Some(task_id),
-                EventType::TaskCancelled { task_id } => Some(task_id),
-                EventType::ProjectCreated { project_id } => Some(project_id),
-                EventType::ProjectUpdated { project_id } => Some(project_id),
-                EventType::ProjectDeleted { project_id } => Some(project_id),
-                EventType::ProjectCompleted { project_id } => Some(project_id),
-                EventType::AreaCreated { area_id } => Some(area_id),
-                EventType::AreaUpdated { area_id } => Some(area_id),
-                EventType::AreaDeleted { area_id } => Some(area_id),
-                EventType::ProgressStarted { operation_id } => Some(operation_id),
-                EventType::ProgressUpdated { operation_id } => Some(operation_id),
-                EventType::ProgressCompleted { operation_id } => Some(operation_id),
-                EventType::ProgressFailed { operation_id } => Some(operation_id),
+                EventType::TaskCreated { task_id }
+                | EventType::TaskUpdated { task_id }
+                | EventType::TaskDeleted { task_id }
+                | EventType::TaskCompleted { task_id }
+                | EventType::TaskCancelled { task_id } => Some(task_id),
+                EventType::ProjectCreated { project_id }
+                | EventType::ProjectUpdated { project_id }
+                | EventType::ProjectDeleted { project_id }
+                | EventType::ProjectCompleted { project_id } => Some(project_id),
+                EventType::AreaCreated { area_id }
+                | EventType::AreaUpdated { area_id }
+                | EventType::AreaDeleted { area_id } => Some(area_id),
+                EventType::ProgressStarted { operation_id }
+                | EventType::ProgressUpdated { operation_id }
+                | EventType::ProgressCompleted { operation_id }
+                | EventType::ProgressFailed { operation_id } => Some(operation_id),
             };
             assert!(extracted_id.is_some());
         }

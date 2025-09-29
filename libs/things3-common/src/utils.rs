@@ -326,7 +326,7 @@ mod tests {
         std::env::remove_var("HOME");
 
         let path = get_default_database_path();
-        assert!(path.to_string_lossy().starts_with("~"));
+        assert!(path.to_string_lossy().starts_with('~'));
 
         // Restore original HOME if it existed
         if let Ok(home) = original_home {
