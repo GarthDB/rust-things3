@@ -334,7 +334,6 @@ mod tests {
         let server = WebSocketServer::new(8080);
         let _progress_manager = server.progress_manager();
         // Just verify we can get the progress manager without panicking
-        assert!(true);
     }
 
     #[tokio::test]
@@ -349,7 +348,6 @@ mod tests {
     async fn test_websocket_client_connection_default() {
         let _connection = WebSocketClientConnection::default();
         // Just verify we can create the connection without panicking
-        assert!(true);
     }
 
     #[tokio::test]
@@ -357,7 +355,6 @@ mod tests {
         let connection = WebSocketClientConnection::new();
         let _receiver = connection.subscribe();
         // Just verify we can subscribe without panicking
-        assert!(true);
     }
 
     #[tokio::test]
