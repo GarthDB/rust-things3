@@ -82,7 +82,7 @@ pub struct Event {
 }
 
 /// Event filter for subscriptions
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct EventFilter {
     pub event_types: Option<Vec<EventType>>,
     pub entity_ids: Option<Vec<Uuid>>,
@@ -1572,5 +1572,38 @@ mod tests {
         assert_eq!(original_filter.entity_ids, deserialized_filter.entity_ids);
         assert_eq!(original_filter.sources, deserialized_filter.sources);
         assert_eq!(original_filter.since, deserialized_filter.since);
+    }
+
+    #[tokio::test]
+    async fn test_event_broadcaster_multiple_subscribers() {
+        let broadcaster = EventBroadcaster::new();
+
+        // Create multiple subscribers with default filters
+        let filter = EventFilter::default();
+        let mut subscriber1 = broadcaster.subscribe(filter.clone()).await;
+        let mut subscriber2 = broadcaster.subscribe(filter.clone()).await;
+        let mut subscriber3 = broadcaster.subscribe(filter).await;
+
+        // Create and broadcast an event
+        let event = Event {
+            id: Uuid::new_v4(),
+            event_type: EventType::TaskCreated {
+                task_id: Uuid::new_v4(),
+            },
+            timestamp: Utc::now(),
+            source: "test".to_string(),
+            data: None,
+        };
+
+        broadcaster.broadcast(event.clone()).await.unwrap();
+
+        // All subscribers should receive the event
+        let received1 = subscriber1.try_recv().unwrap();
+        let received2 = subscriber2.try_recv().unwrap();
+        let received3 = subscriber3.try_recv().unwrap();
+
+        assert_eq!(received1.id, event.id);
+        assert_eq!(received2.id, event.id);
+        assert_eq!(received3.id, event.id);
     }
 }

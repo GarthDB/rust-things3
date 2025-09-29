@@ -1003,4 +1003,99 @@ mod tests {
         let debug_str = format!("{connection:?}");
         assert!(debug_str.contains("WebSocketClientConnection"));
     }
+
+    #[tokio::test]
+    async fn test_websocket_server_multiple_ports() {
+        let server1 = WebSocketServer::new(8080);
+        let server2 = WebSocketServer::new(8081);
+        let server3 = WebSocketServer::new(8082);
+
+        assert_eq!(server1.port, 8080);
+        assert_eq!(server2.port, 8081);
+        assert_eq!(server3.port, 8082);
+    }
+
+    #[tokio::test]
+    async fn test_websocket_server_port_edge_cases() {
+        let server_min = WebSocketServer::new(1);
+        let server_max = WebSocketServer::new(65535);
+
+        assert_eq!(server_min.port, 1);
+        assert_eq!(server_max.port, 65535);
+    }
+
+    #[tokio::test]
+    async fn test_websocket_message_all_variants() {
+        let _task_id = Uuid::new_v4();
+        let operation_id = Uuid::new_v4();
+
+        // Test all message variants
+        let messages = vec![
+            WebSocketMessage::Subscribe {
+                operation_id: Some(operation_id),
+            },
+            WebSocketMessage::Unsubscribe {
+                operation_id: Some(operation_id),
+            },
+            WebSocketMessage::Ping,
+            WebSocketMessage::Pong,
+            WebSocketMessage::ProgressUpdate(ProgressUpdate {
+                operation_id,
+                operation_name: "test".to_string(),
+                current: 50,
+                total: Some(100),
+                message: Some("Testing".to_string()),
+                timestamp: chrono::Utc::now(),
+                status: crate::progress::ProgressStatus::InProgress,
+            }),
+            WebSocketMessage::Error {
+                message: "Test error".to_string(),
+            },
+        ];
+
+        for message in messages {
+            let json = serde_json::to_string(&message).unwrap();
+            let deserialized: WebSocketMessage = serde_json::from_str(&json).unwrap();
+            assert_eq!(message, deserialized);
+        }
+    }
+
+    #[tokio::test]
+    async fn test_websocket_message_serialization_edge_cases() {
+        // Test with None values
+        let subscribe_none = WebSocketMessage::Subscribe { operation_id: None };
+        let json = serde_json::to_string(&subscribe_none).unwrap();
+        let deserialized: WebSocketMessage = serde_json::from_str(&json).unwrap();
+        assert_eq!(subscribe_none, deserialized);
+
+        // Test with empty strings
+        let error_empty = WebSocketMessage::Error {
+            message: "".to_string(),
+        };
+        let json = serde_json::to_string(&error_empty).unwrap();
+        let deserialized: WebSocketMessage = serde_json::from_str(&json).unwrap();
+        assert_eq!(error_empty, deserialized);
+    }
+
+    #[tokio::test]
+    async fn test_websocket_client_id_uniqueness() {
+        let (sender1, _receiver1) = crossbeam_channel::unbounded();
+        let (sender2, _receiver2) = crossbeam_channel::unbounded();
+
+        let client1 = WebSocketClient::new(sender1);
+        let client2 = WebSocketClient::new(sender2);
+
+        assert_ne!(client1.id, client2.id);
+    }
+
+    #[tokio::test]
+    async fn test_websocket_client_connection_subscription() {
+        let connection = WebSocketClientConnection::new();
+        let mut subscriber = connection.subscribe();
+
+        // Test that we can receive from the subscriber
+        // This will timeout since no messages are sent, but it shouldn't panic
+        let result = subscriber.try_recv();
+        assert!(result.is_err());
+    }
 }

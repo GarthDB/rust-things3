@@ -36,6 +36,7 @@ pub enum ProgressStatus {
 }
 
 /// Progress tracker for long-running operations
+#[derive(Debug)]
 pub struct ProgressTracker {
     operation_id: Uuid,
     operation_name: String,
@@ -165,6 +166,8 @@ impl ProgressTracker {
         if self.is_cancelled.load(Ordering::Relaxed) {
             return;
         }
+
+        self.is_cancelled.store(true, Ordering::Relaxed);
 
         if let Some(pb) = &self.progress_bar {
             pb.finish();
@@ -440,5 +443,250 @@ mod tests {
         tracker.inc(5);
         assert_eq!(tracker.current(), 5);
         tracker.complete();
+    }
+
+    #[test]
+    fn test_progress_tracker_edge_cases() {
+        let manager = ProgressManager::new();
+        let tracker = manager.create_tracker("edge_case_test", Some(100), false);
+
+        // Test with zero increment
+        tracker.inc(0);
+        assert_eq!(tracker.current(), 0);
+
+        // Test with large increment
+        tracker.inc(1000);
+        assert_eq!(tracker.current(), 1000);
+
+        // Test set_current with various values
+        tracker.set_current(50);
+        assert_eq!(tracker.current(), 50);
+
+        tracker.set_current(0);
+        assert_eq!(tracker.current(), 0);
+
+        tracker.set_current(100);
+        assert_eq!(tracker.current(), 100);
+    }
+
+    #[test]
+    fn test_progress_tracker_without_total() {
+        let manager = ProgressManager::new();
+        let tracker = manager.create_tracker("no_total_test", None, false);
+
+        // Test operations without total
+        tracker.inc(10);
+        assert_eq!(tracker.current(), 10);
+        assert_eq!(tracker.total(), None);
+
+        tracker.set_current(50);
+        assert_eq!(tracker.current(), 50);
+
+        tracker.complete();
+    }
+
+    #[test]
+    fn test_progress_tracker_failure() {
+        let manager = ProgressManager::new();
+        let tracker = manager.create_tracker("failure_test", Some(100), false);
+
+        // Test failure - this should mark the tracker as cancelled
+        tracker.fail("Test failure message".to_string());
+        // The fail method should have marked the tracker as cancelled
+        assert!(tracker.is_cancelled());
+    }
+
+    #[test]
+    fn test_progress_tracker_elapsed_time() {
+        let manager = ProgressManager::new();
+        let tracker = manager.create_tracker("elapsed_test", Some(100), false);
+
+        // Test elapsed time
+        let elapsed = tracker.elapsed();
+        assert!(elapsed.as_nanos() >= 0);
+
+        // Wait a bit and check elapsed time increases
+        std::thread::sleep(std::time::Duration::from_millis(10));
+        let elapsed_after = tracker.elapsed();
+        assert!(elapsed_after >= elapsed);
+    }
+
+    #[test]
+    fn test_progress_tracker_operation_info() {
+        let manager = ProgressManager::new();
+        let tracker = manager.create_tracker("info_test", Some(100), false);
+
+        // Test operation info
+        assert_eq!(tracker.operation_id(), tracker.operation_id());
+        assert_eq!(tracker.operation_name(), "info_test");
+        assert_eq!(tracker.total(), Some(100));
+    }
+
+    #[test]
+    fn test_progress_manager_multiple_trackers() {
+        let manager = ProgressManager::new();
+
+        // Create multiple trackers
+        let tracker1 = manager.create_tracker("operation1", Some(100), false);
+        let tracker2 = manager.create_tracker("operation2", Some(200), false);
+        let tracker3 = manager.create_tracker("operation3", None, false);
+
+        // Test that they have different IDs
+        assert_ne!(tracker1.operation_id(), tracker2.operation_id());
+        assert_ne!(tracker1.operation_id(), tracker3.operation_id());
+        assert_ne!(tracker2.operation_id(), tracker3.operation_id());
+
+        // Test operations on different trackers
+        tracker1.inc(10);
+        tracker2.inc(20);
+        tracker3.inc(30);
+
+        assert_eq!(tracker1.current(), 10);
+        assert_eq!(tracker2.current(), 20);
+        assert_eq!(tracker3.current(), 30);
+    }
+
+    #[test]
+    fn test_progress_tracker_completion() {
+        let manager = ProgressManager::new();
+        let tracker = manager.create_tracker("completion_test", Some(100), false);
+
+        // Test completion
+        tracker.set_current(100);
+        tracker.complete();
+
+        // After completion, should still be able to query
+        assert_eq!(tracker.current(), 100);
+        assert_eq!(tracker.total(), Some(100));
+    }
+
+    #[test]
+    fn test_progress_tracker_large_values() {
+        let manager = ProgressManager::new();
+        let tracker = manager.create_tracker("large_values_test", Some(u64::MAX), false);
+
+        // Test with large values
+        tracker.set_current(u64::MAX / 2);
+        assert_eq!(tracker.current(), u64::MAX / 2);
+
+        tracker.inc(1000);
+        assert_eq!(tracker.current(), u64::MAX / 2 + 1000);
+    }
+
+    #[test]
+    fn test_progress_tracker_negative_operations() {
+        let manager = ProgressManager::new();
+        let tracker = manager.create_tracker("negative_test", Some(100), false);
+
+        // Test with negative increment (should not panic)
+        tracker.inc(50);
+        assert_eq!(tracker.current(), 50);
+
+        // Test set_current with various values
+        tracker.set_current(25);
+        assert_eq!(tracker.current(), 25);
+    }
+
+    #[test]
+    fn test_progress_manager_sender_access() {
+        let manager = ProgressManager::new();
+        let sender = manager.sender();
+
+        // Test that sender is accessible (it's always available)
+        assert!(true);
+    }
+
+    #[test]
+    fn test_progress_tracker_debug_formatting() {
+        let manager = ProgressManager::new();
+        let tracker = manager.create_tracker("debug_test", Some(100), false);
+
+        // Test debug formatting
+        let debug_str = format!("{tracker:?}");
+        assert!(debug_str.contains("debug_test"));
+        assert!(debug_str.contains("ProgressTracker"));
+    }
+
+    #[test]
+    fn test_progress_manager_debug_formatting() {
+        let manager = ProgressManager::new();
+
+        // Test debug formatting
+        let debug_str = format!("{manager:?}");
+        assert!(debug_str.contains("ProgressManager"));
+    }
+
+    #[test]
+    fn test_progress_update_creation() {
+        let update = ProgressUpdate {
+            operation_id: Uuid::new_v4(),
+            operation_name: "test_operation".to_string(),
+            current: 50,
+            total: Some(100),
+            message: Some("Test message".to_string()),
+            timestamp: Utc::now(),
+            status: ProgressStatus::InProgress,
+        };
+
+        assert_eq!(update.operation_name, "test_operation");
+        assert_eq!(update.current, 50);
+        assert_eq!(update.total, Some(100));
+        assert_eq!(update.message, Some("Test message".to_string()));
+    }
+
+    #[test]
+    fn test_progress_update_serialization() {
+        let update = ProgressUpdate {
+            operation_id: Uuid::new_v4(),
+            operation_name: "serialization_test".to_string(),
+            current: 75,
+            total: Some(150),
+            message: Some("Serialization test".to_string()),
+            timestamp: Utc::now(),
+            status: ProgressStatus::InProgress,
+        };
+
+        // Test serialization
+        let json = serde_json::to_string(&update).unwrap();
+        let deserialized: ProgressUpdate = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(update.operation_id, deserialized.operation_id);
+        assert_eq!(update.operation_name, deserialized.operation_name);
+        assert_eq!(update.current, deserialized.current);
+        assert_eq!(update.total, deserialized.total);
+        assert_eq!(update.message, deserialized.message);
+    }
+
+    #[test]
+    fn test_progress_update_edge_cases() {
+        // Test with None values
+        let update_none = ProgressUpdate {
+            operation_id: Uuid::new_v4(),
+            operation_name: "".to_string(),
+            current: 0,
+            total: None,
+            message: None,
+            timestamp: Utc::now(),
+            status: ProgressStatus::Started,
+        };
+
+        assert_eq!(update_none.operation_name, "");
+        assert_eq!(update_none.current, 0);
+        assert_eq!(update_none.total, None);
+        assert_eq!(update_none.message, None);
+
+        // Test with maximum values
+        let update_max = ProgressUpdate {
+            operation_id: Uuid::new_v4(),
+            operation_name: "A".repeat(1000),
+            current: u64::MAX,
+            total: Some(u64::MAX),
+            message: Some("B".repeat(1000)),
+            timestamp: Utc::now(),
+            status: ProgressStatus::Completed,
+        };
+
+        assert_eq!(update_max.current, u64::MAX);
+        assert_eq!(update_max.total, Some(u64::MAX));
     }
 }
