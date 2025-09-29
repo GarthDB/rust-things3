@@ -9,6 +9,7 @@ use things3_cli::{
 use things3_core::{Result, ThingsConfig, ThingsDatabase};
 
 #[tokio::main]
+#[allow(clippy::too_many_lines)]
 async fn main() -> Result<()> {
     let cli = Cli::parse();
 

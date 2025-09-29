@@ -19,6 +19,7 @@ pub struct AsyncOperationMonitor {
 
 impl AsyncOperationMonitor {
     /// Create a new monitor
+    #[must_use]
     pub fn new(operation_name: String) -> Self {
         Self {
             operation_name,
@@ -80,7 +81,10 @@ impl AsyncOperationMonitor {
             success_count,
             error_count,
             success_rate: if update_count > 0 {
-                success_count as f64 / update_count as f64
+                #[allow(clippy::cast_precision_loss)]
+                {
+                    success_count as f64 / update_count as f64
+                }
             } else {
                 0.0
             },
@@ -101,18 +105,19 @@ pub struct OperationStats {
 
 /// Validator for real-time features
 pub struct RealtimeFeatureValidator {
-    progress_monitor: Arc<Mutex<Option<Arc<AsyncOperationMonitor>>>>,
-    event_monitor: Arc<Mutex<Option<Arc<AsyncOperationMonitor>>>>,
-    websocket_monitor: Arc<Mutex<Option<Arc<AsyncOperationMonitor>>>>,
+    progress: Arc<Mutex<Option<Arc<AsyncOperationMonitor>>>>,
+    event: Arc<Mutex<Option<Arc<AsyncOperationMonitor>>>>,
+    websocket: Arc<Mutex<Option<Arc<AsyncOperationMonitor>>>>,
 }
 
 impl RealtimeFeatureValidator {
     /// Create a new validator
+    #[must_use]
     pub fn new() -> Self {
         Self {
-            progress_monitor: Arc::new(Mutex::new(None)),
-            event_monitor: Arc::new(Mutex::new(None)),
-            websocket_monitor: Arc::new(Mutex::new(None)),
+            progress: Arc::new(Mutex::new(None)),
+            event: Arc::new(Mutex::new(None)),
+            websocket: Arc::new(Mutex::new(None)),
         }
     }
 }
@@ -131,7 +136,7 @@ impl RealtimeFeatureValidator {
 
         // Store the monitor
         {
-            let mut stored = self.progress_monitor.lock().await;
+            let mut stored = self.progress.lock().await;
             *stored = Some(monitor_arc.clone());
         }
 
@@ -165,7 +170,7 @@ impl RealtimeFeatureValidator {
 
         // Store the monitor
         {
-            let mut stored = self.event_monitor.lock().await;
+            let mut stored = self.event.lock().await;
             *stored = Some(monitor_arc.clone());
         }
 
@@ -185,7 +190,7 @@ impl RealtimeFeatureValidator {
         let mut results = Vec::new();
 
         // Check progress monitoring
-        if let Some(monitor) = self.progress_monitor.lock().await.as_ref() {
+        if let Some(monitor) = self.progress.lock().await.as_ref() {
             let is_healthy = monitor.is_healthy(Duration::from_secs(30)).await;
             let stats = monitor.get_stats().await;
             results.push(FeatureHealth {
@@ -196,7 +201,7 @@ impl RealtimeFeatureValidator {
         }
 
         // Check event monitoring
-        if let Some(monitor) = self.event_monitor.lock().await.as_ref() {
+        if let Some(monitor) = self.event.lock().await.as_ref() {
             let is_healthy = monitor.is_healthy(Duration::from_secs(30)).await;
             let stats = monitor.get_stats().await;
             results.push(FeatureHealth {
@@ -207,7 +212,7 @@ impl RealtimeFeatureValidator {
         }
 
         // Check WebSocket monitoring
-        if let Some(monitor) = self.websocket_monitor.lock().await.as_ref() {
+        if let Some(monitor) = self.websocket.lock().await.as_ref() {
             let is_healthy = monitor.is_healthy(Duration::from_secs(30)).await;
             let stats = monitor.get_stats().await;
             results.push(FeatureHealth {
@@ -237,11 +242,13 @@ pub struct ValidationResult {
 
 impl ValidationResult {
     /// Check if all features are healthy
+    #[must_use]
     pub fn all_healthy(&self) -> bool {
         self.features.iter().all(|f| f.is_healthy)
     }
 
     /// Get unhealthy features
+    #[must_use]
     pub fn unhealthy_features(&self) -> Vec<&FeatureHealth> {
         self.features.iter().filter(|f| !f.is_healthy).collect()
     }
@@ -305,7 +312,7 @@ mod tests {
         assert_eq!(stats.operation_name, "test_operation");
         assert_eq!(stats.success_count, 1);
         assert_eq!(stats.update_count, 1);
-        assert_eq!(stats.success_rate, 1.0);
+        assert!((stats.success_rate - 1.0).abs() < f64::EPSILON);
     }
 
     #[tokio::test]
@@ -343,7 +350,7 @@ mod tests {
         assert_eq!(stats.error_count, 2);
         assert_eq!(stats.success_count, 0);
         assert_eq!(stats.update_count, 0);
-        assert_eq!(stats.success_rate, 0.0);
+        assert!((stats.success_rate - 0.0).abs() < f64::EPSILON);
     }
 
     #[tokio::test]
@@ -363,7 +370,7 @@ mod tests {
         assert_eq!(stats.error_count, 1);
         assert_eq!(stats.update_count, 1);
         // Success rate is calculated as success_count / update_count, not total operations
-        assert_eq!(stats.success_rate, 2.0); // 2 successes out of 1 update
+        assert!((stats.success_rate - 2.0).abs() < f64::EPSILON); // 2 successes out of 1 update
     }
 
     #[tokio::test]
@@ -398,17 +405,17 @@ mod tests {
     #[tokio::test]
     async fn test_realtime_feature_validator_creation() {
         let validator = RealtimeFeatureValidator::new();
-        assert!(validator.progress_monitor.lock().await.is_none());
-        assert!(validator.event_monitor.lock().await.is_none());
-        assert!(validator.websocket_monitor.lock().await.is_none());
+        assert!(validator.progress.lock().await.is_none());
+        assert!(validator.event.lock().await.is_none());
+        assert!(validator.websocket.lock().await.is_none());
     }
 
     #[tokio::test]
     async fn test_realtime_feature_validator_default() {
         let validator = RealtimeFeatureValidator::default();
-        assert!(validator.progress_monitor.lock().await.is_none());
-        assert!(validator.event_monitor.lock().await.is_none());
-        assert!(validator.websocket_monitor.lock().await.is_none());
+        assert!(validator.progress.lock().await.is_none());
+        assert!(validator.event.lock().await.is_none());
+        assert!(validator.websocket.lock().await.is_none());
     }
 
     #[tokio::test]
@@ -479,7 +486,7 @@ mod tests {
         assert_eq!(stats.update_count, 100);
         assert_eq!(stats.success_count, 95);
         assert_eq!(stats.error_count, 5);
-        assert_eq!(stats.success_rate, 0.95);
+        assert!((stats.success_rate - 0.95).abs() < f64::EPSILON);
     }
 
     #[test]
@@ -533,7 +540,7 @@ mod tests {
         assert_eq!(stats.update_count, 0); // No direct updates
                                            // Success rate is calculated as success_count / update_count
                                            // Since update_count is 0, success_rate should be 0.0
-        assert_eq!(stats.success_rate, 0.0);
+        assert!((stats.success_rate - 0.0).abs() < f64::EPSILON);
     }
 
     #[tokio::test]
@@ -546,7 +553,7 @@ mod tests {
         assert_eq!(stats.success_count, 1);
         assert_eq!(stats.error_count, 0);
         assert_eq!(stats.update_count, 0);
-        assert_eq!(stats.success_rate, 0.0); // No updates, so 0.0
+        assert!((stats.success_rate - 0.0).abs() < f64::EPSILON); // No updates, so 0.0
     }
 
     #[tokio::test]
@@ -559,7 +566,7 @@ mod tests {
         assert_eq!(stats.success_count, 0);
         assert_eq!(stats.error_count, 1);
         assert_eq!(stats.update_count, 0);
-        assert_eq!(stats.success_rate, 0.0); // No updates, so 0.0
+        assert!((stats.success_rate - 0.0).abs() < f64::EPSILON); // No updates, so 0.0
     }
 
     #[tokio::test]
@@ -572,7 +579,7 @@ mod tests {
         assert_eq!(stats.success_count, 0);
         assert_eq!(stats.error_count, 0);
         assert_eq!(stats.update_count, 1);
-        assert_eq!(stats.success_rate, 0.0); // No successes, so 0.0
+        assert!((stats.success_rate - 0.0).abs() < f64::EPSILON); // No successes, so 0.0
     }
 
     #[tokio::test]
@@ -596,7 +603,7 @@ mod tests {
         validator.start_progress_monitoring(&progress_manager).await;
 
         // Verify the monitor was created
-        let progress_monitor = validator.progress_monitor.lock().await;
+        let progress_monitor = validator.progress.lock().await;
         assert!(progress_monitor.is_some());
     }
 
@@ -609,7 +616,7 @@ mod tests {
         validator.start_event_monitoring(&event_broadcaster).await;
 
         // Verify the monitor was created
-        let event_monitor = validator.event_monitor.lock().await;
+        let event_monitor = validator.event.lock().await;
         assert!(event_monitor.is_some());
     }
 
@@ -630,7 +637,7 @@ mod tests {
         assert_eq!(stats.update_count, cloned.update_count);
         assert_eq!(stats.success_count, cloned.success_count);
         assert_eq!(stats.error_count, cloned.error_count);
-        assert_eq!(stats.success_rate, cloned.success_rate);
+        assert!((stats.success_rate - cloned.success_rate).abs() < f64::EPSILON);
     }
 
     #[test]
@@ -644,7 +651,7 @@ mod tests {
             success_rate: 0.95,
         };
 
-        let debug_str = format!("{:?}", stats);
+        let debug_str = format!("{stats:?}");
         assert!(debug_str.contains("OperationStats"));
         assert!(debug_str.contains("test_operation"));
     }
@@ -680,7 +687,7 @@ mod tests {
             stats: None,
         };
 
-        let debug_str = format!("{:?}", health);
+        let debug_str = format!("{health:?}");
         assert!(debug_str.contains("FeatureHealth"));
         assert!(debug_str.contains("test_feature"));
     }
@@ -710,7 +717,7 @@ mod tests {
             }],
         };
 
-        let debug_str = format!("{:?}", result);
+        let debug_str = format!("{result:?}");
         assert!(debug_str.contains("ValidationResult"));
     }
 
@@ -722,7 +729,7 @@ mod tests {
         assert_eq!(stats.success_count, 0);
         assert_eq!(stats.error_count, 0);
         assert_eq!(stats.update_count, 0);
-        assert_eq!(stats.success_rate, 0.0);
+        assert!((stats.success_rate - 0.0).abs() < f64::EPSILON);
     }
 
     #[tokio::test]
@@ -737,7 +744,7 @@ mod tests {
         assert_eq!(stats.success_count, 5);
         assert_eq!(stats.error_count, 0);
         assert_eq!(stats.update_count, 0);
-        assert_eq!(stats.success_rate, 0.0); // No updates, so 0.0
+        assert!((stats.success_rate - 0.0).abs() < f64::EPSILON); // No updates, so 0.0
     }
 
     #[tokio::test]
@@ -752,6 +759,6 @@ mod tests {
         assert_eq!(stats.success_count, 0);
         assert_eq!(stats.error_count, 5);
         assert_eq!(stats.update_count, 0);
-        assert_eq!(stats.success_rate, 0.0); // No updates, so 0.0
+        assert!((stats.success_rate - 0.0).abs() < f64::EPSILON); // No updates, so 0.0
     }
 }

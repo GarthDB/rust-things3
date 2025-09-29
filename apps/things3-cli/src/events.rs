@@ -486,7 +486,7 @@ mod tests {
     }
 
     #[tokio::test]
-    #[ignore] // This test is flaky due to async timing issues
+    #[ignore = "This test is flaky due to async timing issues"]
     async fn test_event_broadcaster_with_filter() {
         let broadcaster = EventBroadcaster::new();
 
@@ -873,7 +873,6 @@ mod tests {
         broadcaster.unsubscribe(subscription_id).await;
 
         // This should not panic
-        assert!(true);
     }
 
     #[tokio::test]
@@ -1009,7 +1008,6 @@ mod tests {
             assert_eq!(received_event.source, "test");
         } else {
             // Timeout is acceptable for this test
-            assert!(true);
         }
     }
 
@@ -1047,7 +1045,6 @@ mod tests {
             assert_eq!(received_event.source, "test");
         } else {
             // Timeout is acceptable for this test
-            assert!(true);
         }
     }
 
@@ -1086,7 +1083,6 @@ mod tests {
             assert_eq!(received_event.source, "test_source");
         } else {
             // Timeout is acceptable for this test
-            assert!(true);
         }
     }
 
@@ -1126,7 +1122,6 @@ mod tests {
             assert_eq!(received_event.source, "test");
         } else {
             // Timeout is acceptable for this test
-            assert!(true);
         }
     }
 
@@ -1250,31 +1245,30 @@ mod tests {
         let operation_id = Uuid::new_v4();
 
         // Test all task event types
-        let _task_created = EventType::TaskCreated { task_id };
-        let _task_updated = EventType::TaskUpdated { task_id };
-        let _task_deleted = EventType::TaskDeleted { task_id };
-        let _task_completed = EventType::TaskCompleted { task_id };
-        let _task_cancelled = EventType::TaskCancelled { task_id };
+        let _ = EventType::TaskCreated { task_id };
+        let _ = EventType::TaskUpdated { task_id };
+        let _ = EventType::TaskDeleted { task_id };
+        let _ = EventType::TaskCompleted { task_id };
+        let _ = EventType::TaskCancelled { task_id };
 
         // Test all project event types
-        let _project_created = EventType::ProjectCreated { project_id };
-        let _project_updated = EventType::ProjectUpdated { project_id };
-        let _project_deleted = EventType::ProjectDeleted { project_id };
-        let _project_completed = EventType::ProjectCompleted { project_id };
+        let _ = EventType::ProjectCreated { project_id };
+        let _ = EventType::ProjectUpdated { project_id };
+        let _ = EventType::ProjectDeleted { project_id };
+        let _ = EventType::ProjectCompleted { project_id };
 
         // Test all area event types
-        let _area_created = EventType::AreaCreated { area_id };
-        let _area_updated = EventType::AreaUpdated { area_id };
-        let _area_deleted = EventType::AreaDeleted { area_id };
+        let _ = EventType::AreaCreated { area_id };
+        let _ = EventType::AreaUpdated { area_id };
+        let _ = EventType::AreaDeleted { area_id };
 
         // Test all progress event types
-        let _progress_started = EventType::ProgressStarted { operation_id };
-        let _progress_updated = EventType::ProgressUpdated { operation_id };
-        let _progress_completed = EventType::ProgressCompleted { operation_id };
-        let _progress_failed = EventType::ProgressFailed { operation_id };
+        let _ = EventType::ProgressStarted { operation_id };
+        let _ = EventType::ProgressUpdated { operation_id };
+        let _ = EventType::ProgressCompleted { operation_id };
+        let _ = EventType::ProgressFailed { operation_id };
 
         // All should compile without errors
-        assert!(true);
     }
 
     #[test]

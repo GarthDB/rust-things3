@@ -398,12 +398,13 @@ mod tests {
     }
 
     #[tokio::test]
+    #[allow(clippy::similar_names)]
     async fn test_websocket_message_ping_pong() {
-        let ping = WebSocketMessage::Ping;
-        let pong = WebSocketMessage::Pong;
+        let ping_message = WebSocketMessage::Ping;
+        let pong_message = WebSocketMessage::Pong;
 
-        let ping_json = serde_json::to_string(&ping).unwrap();
-        let pong_json = serde_json::to_string(&pong).unwrap();
+        let ping_json = serde_json::to_string(&ping_message).unwrap();
+        let pong_json = serde_json::to_string(&pong_message).unwrap();
 
         let ping_deserialized: WebSocketMessage = serde_json::from_str(&ping_json).unwrap();
         let pong_deserialized: WebSocketMessage = serde_json::from_str(&pong_json).unwrap();
@@ -485,10 +486,10 @@ mod tests {
         for i in 0..5 {
             let update = ProgressUpdate {
                 operation_id: Uuid::new_v4(),
-                operation_name: format!("test_{}", i),
+                operation_name: format!("test_{i}"),
                 current: i * 20,
                 total: Some(100),
-                message: Some(format!("Update {}", i)),
+                message: Some(format!("Update {i}")),
                 timestamp: chrono::Utc::now(),
                 status: crate::progress::ProgressStatus::InProgress,
             };
@@ -502,7 +503,7 @@ mod tests {
                 .await
                 .unwrap()
                 .unwrap();
-            assert_eq!(received_msg.operation_name, format!("test_{}", i));
+            assert_eq!(received_msg.operation_name, format!("test_{i}"));
         }
     }
 
@@ -527,17 +528,8 @@ mod tests {
         // The timeout should occur since start() runs indefinitely
         // If it doesn't timeout, that means start() completed successfully
         match result {
-            Ok(Ok(_)) => {
-                // If start() completed successfully, that's fine
-                assert!(true);
-            }
-            Ok(Err(_)) => {
-                // If start() completed with an error, that's also acceptable
-                assert!(true);
-            }
-            Err(_) => {
-                // If it timed out, that's expected behavior
-                assert!(true);
+            Ok(Ok(()) | Err(_)) | Err(_) => {
+                // All outcomes are acceptable for this test
             }
         }
     }
@@ -566,7 +558,7 @@ mod tests {
     #[test]
     fn test_websocket_message_debug() {
         let message = WebSocketMessage::Ping;
-        let debug_str = format!("{:?}", message);
+        let debug_str = format!("{message:?}");
         assert!(debug_str.contains("Ping"));
     }
 
@@ -591,21 +583,21 @@ mod tests {
     fn test_websocket_client_debug() {
         let (sender, _receiver) = crossbeam_channel::unbounded();
         let client = WebSocketClient::new(sender);
-        let debug_str = format!("{:?}", client);
+        let debug_str = format!("{client:?}");
         assert!(debug_str.contains("WebSocketClient"));
     }
 
     #[test]
     fn test_websocket_client_connection_debug() {
         let connection = WebSocketClientConnection::new();
-        let debug_str = format!("{:?}", connection);
+        let debug_str = format!("{connection:?}");
         assert!(debug_str.contains("WebSocketClientConnection"));
     }
 
     #[test]
     fn test_websocket_server_debug() {
         let server = WebSocketServer::new(8080);
-        let debug_str = format!("{:?}", server);
+        let debug_str = format!("{server:?}");
         assert!(debug_str.contains("WebSocketServer"));
     }
 
