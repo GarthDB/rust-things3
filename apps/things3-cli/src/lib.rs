@@ -1,4 +1,5 @@
 //! Things CLI library
+//! This module provides real-time updates and progress tracking capabilities
 
 pub mod bulk_operations;
 pub mod events;
