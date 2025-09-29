@@ -81,26 +81,17 @@ impl ThingsConfig {
         let database_path = std::env::var("THINGS_DATABASE_PATH")
             .map_or_else(|_| Self::get_default_database_path(), PathBuf::from);
 
-        let fallback_to_default = match std::env::var("THINGS_FALLBACK_TO_DEFAULT") {
-            Ok(v) => {
-                let lower = v.to_lowercase();
-                let result = match lower.as_str() {
-                    "true" | "1" | "yes" | "on" => true,
-                    "false" | "0" | "no" | "off" => false,
-                    _ => false, // Default to false for invalid values
-                };
-                println!(
-                    "DEBUG: from_env() parsing '{}' -> '{}' -> {}",
-                    v, lower, result
-                );
-                result
-            }
-            Err(_) => {
-                println!(
-                    "DEBUG: from_env() no THINGS_FALLBACK_TO_DEFAULT env var, using default true"
-                );
-                true
-            }
+        let fallback_to_default = if let Ok(v) = std::env::var("THINGS_FALLBACK_TO_DEFAULT") {
+            let lower = v.to_lowercase();
+            let result = match lower.as_str() {
+                "true" | "1" | "yes" | "on" => true,
+                _ => false, // Default to false for invalid values
+            };
+            println!("DEBUG: from_env() parsing '{v}' -> '{lower}' -> {result}");
+            result
+        } else {
+            println!("DEBUG: from_env() no THINGS_FALLBACK_TO_DEFAULT env var, using default true");
+            true
         };
 
         Self::new(database_path, fallback_to_default)
@@ -695,7 +686,7 @@ mod tests {
         assert!(matches!(error, ThingsError::Configuration { .. }));
 
         // Check the error message contains the expected text
-        let error_message = format!("{}", error);
+        let error_message = format!("{error}");
         assert!(error_message.contains("Database not found at /nonexistent/path/db.sqlite"));
         assert!(error_message.contains("fallback is enabled but default path also not found"));
     }
@@ -737,8 +728,8 @@ mod tests {
             std::env::var("THINGS_DATABASE_PATH").unwrap_or_else(|_| "NOT_SET".to_string());
         let fallback =
             std::env::var("THINGS_FALLBACK_TO_DEFAULT").unwrap_or_else(|_| "NOT_SET".to_string());
-        println!("DEBUG: THINGS_DATABASE_PATH = '{}'", db_path);
-        println!("DEBUG: THINGS_FALLBACK_TO_DEFAULT = '{}'", fallback);
+        println!("DEBUG: THINGS_DATABASE_PATH = '{db_path}'");
+        println!("DEBUG: THINGS_FALLBACK_TO_DEFAULT = '{fallback}'");
 
         let config = ThingsConfig::from_env();
         println!(
@@ -790,14 +781,12 @@ mod tests {
             let lower = value.to_lowercase();
             let result = match lower.as_str() {
                 "true" | "1" | "yes" | "on" => true,
-                "false" | "0" | "no" | "off" => false,
                 _ => false, // Default to false for invalid values
             };
 
             assert_eq!(
                 result, expected,
-                "Failed for value: '{}', expected: {}, got: {}",
-                value, expected, result
+                "Failed for value: '{value}', expected: {expected}, got: {result}"
             );
         }
     }
@@ -829,15 +818,12 @@ mod tests {
             // Verify the environment variable is set correctly
             let env_value = std::env::var("THINGS_FALLBACK_TO_DEFAULT")
                 .unwrap_or_else(|_| "NOT_SET".to_string());
-            println!("Environment variable set to: '{}'", env_value);
+            println!("Environment variable set to: '{env_value}'");
 
             // Double-check the environment variable is still set right before calling from_env
             let env_value_check = std::env::var("THINGS_FALLBACK_TO_DEFAULT")
                 .unwrap_or_else(|_| "NOT_SET".to_string());
-            println!(
-                "Environment variable check before from_env: '{}'",
-                env_value_check
-            );
+            println!("Environment variable check before from_env: '{env_value_check}'");
 
             let config = ThingsConfig::from_env();
 

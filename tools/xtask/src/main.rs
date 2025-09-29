@@ -485,7 +485,7 @@ mod tests {
             return;
         }
 
-        // Don't create .git/hooks directory - let the function create it
+        // Create .git directory first
         if let Err(e) = std::fs::create_dir_all(".git") {
             println!("Warning: Failed to create .git directory: {:?}", e);
             return;
@@ -493,52 +493,56 @@ mod tests {
 
         // Test the function
         let result = setup_git_hooks();
-        if result.is_err() {
-            // If it fails due to permission issues, that's okay for testing
-            println!(
-                "setup_git_hooks failed (expected in test environment): {:?}",
-                result
-            );
-            // Skip directory verification if the function failed
-            println!("Skipping hooks directory verification due to function failure");
-        } else {
-            // Only verify directory creation if the function succeeded
-            // Debug: Check current working directory and what exists
-            let current_dir =
-                std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
-            println!("Current working directory: {:?}", current_dir);
 
-            // Check if .git exists
-            let git_path = std::path::Path::new(".git");
-            println!(".git exists: {}", git_path.exists());
+        // Check the result and verify directory creation BEFORE changing back
+        match result {
+            Ok(_) => {
+                // Function succeeded, verify directory was created in temp directory
+                let current_dir =
+                    std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
+                let git_path = std::path::Path::new(".git");
+                let hooks_path = std::path::Path::new(".git/hooks");
+                let abs_hooks_path = current_dir.join(".git/hooks");
 
-            if git_path.exists() {
-                // List contents of .git directory
-                if let Ok(entries) = std::fs::read_dir(".git") {
-                    println!("Contents of .git directory:");
-                    for entry in entries.flatten() {
-                        println!("  {:?}", entry.path());
+                // Check if either relative or absolute path exists
+                let hooks_exists = hooks_path.exists() || abs_hooks_path.exists();
+
+                if !hooks_exists {
+                    // Debug information
+                    println!("Current working directory: {:?}", current_dir);
+                    println!(".git exists: {}", git_path.exists());
+                    println!("Checking if .git/hooks exists: {}", hooks_path.exists());
+                    println!(
+                        "Checking if absolute .git/hooks exists: {}",
+                        abs_hooks_path.exists()
+                    );
+
+                    if git_path.exists() {
+                        if let Ok(entries) = std::fs::read_dir(".git") {
+                            println!("Contents of .git directory:");
+                            for entry in entries.flatten() {
+                                println!("  {:?}", entry.path());
+                            }
+                        }
                     }
                 }
+
+                assert!(hooks_exists,
+                    "Expected .git/hooks directory to exist after setup_git_hooks succeeded. Current dir: {:?}, .git exists: {}, .git/hooks exists: {}",
+                    current_dir, git_path.exists(), hooks_path.exists());
             }
-
-            // Verify hooks directory was created
-            let hooks_path = std::path::Path::new(".git/hooks");
-            println!("Checking if .git/hooks exists: {}", hooks_path.exists());
-
-            // Also check with absolute path
-            let abs_hooks_path = current_dir.join(".git/hooks");
-            println!(
-                "Checking if absolute .git/hooks exists: {}",
-                abs_hooks_path.exists()
-            );
-
-            assert!(hooks_path.exists() || abs_hooks_path.exists(),
-                "Expected .git/hooks directory to exist after setup_git_hooks succeeded. Current dir: {:?}, .git exists: {}, .git/hooks exists: {}",
-                current_dir, git_path.exists(), hooks_path.exists());
+            Err(e) => {
+                // Function failed, which might be expected in CI environment
+                println!(
+                    "setup_git_hooks failed (expected in test environment): {:?}",
+                    e
+                );
+                // In CI environments, this might fail due to permissions or other issues
+                // We'll just log the error and continue
+            }
         }
 
-        // Restore original directory - handle potential errors gracefully
+        // Always restore original directory last
         if let Err(e) = std::env::set_current_dir(&original_dir) {
             println!("Warning: Failed to restore original directory: {:?}", e);
         }

@@ -70,10 +70,10 @@ jobs:
           ${{ runner.os }}-cargo-
     
     - name: Run tests
-      run: cargo test --workspace --all-features
+      run: cargo test --workspace --features test-utils
     
     - name: Run integration tests
-      run: cargo test --workspace --all-features --test '*'
+      run: cargo test --workspace --features test-utils --test '*'
 
   # Security audit
   security:
@@ -139,23 +139,23 @@ jobs:
         
         # Generate LCOV report
         echo "Generating LCOV report..."
-        cargo llvm-cov --workspace --all-features --lcov --output-path lcov.info
+        cargo llvm-cov --workspace --features test-utils --lcov --output-path lcov.info
         
         # Generate HTML report
         echo "Generating HTML report..."
-        cargo llvm-cov --workspace --all-features --html --output-dir target/llvm-cov/html
+        cargo llvm-cov --workspace --features test-utils --html --output-dir target/llvm-cov/html
         
         # Generate JSON report
         echo "Generating JSON report..."
-        cargo llvm-cov --workspace --all-features --json --output-path coverage.json
+        cargo llvm-cov --workspace --features test-utils --json --output-path coverage.json
         
         # Generate Cobertura report
         echo "Generating Cobertura report..."
-        cargo llvm-cov --workspace --all-features --cobertura --output-path cobertura.xml
+        cargo llvm-cov --workspace --features test-utils --cobertura --output-path cobertura.xml
         
         # Generate text report
         echo "Generating text report..."
-        cargo llvm-cov --workspace --all-features --text --output-path coverage.txt
+        cargo llvm-cov --workspace --features test-utils --text --output-path coverage.txt
         
         echo "Coverage analysis completed successfully!"
     

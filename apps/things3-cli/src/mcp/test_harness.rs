@@ -17,6 +17,10 @@ pub struct McpTestHarness {
 
 impl McpTestHarness {
     /// Create a new test harness with a fresh database
+    ///
+    /// # Panics
+    /// Panics if unable to create a temporary file or database
+    #[must_use]
     pub fn new() -> Self {
         let temp_file = NamedTempFile::new().unwrap();
         let db_path = temp_file.path();
@@ -30,6 +34,10 @@ impl McpTestHarness {
     }
 
     /// Create a test harness with custom middleware configuration
+    ///
+    /// # Panics
+    /// Panics if unable to create a temporary file or database
+    #[must_use]
     pub fn with_middleware_config(
         middleware_config: crate::mcp::middleware::MiddlewareConfig,
     ) -> Self {
@@ -45,16 +53,21 @@ impl McpTestHarness {
     }
 
     /// Get a reference to the MCP server
+    #[must_use]
     pub fn server(&self) -> &ThingsMcpServer {
         &self.server
     }
 
     /// Get the database path for additional testing
+    #[must_use]
     pub fn db_path(&self) -> &Path {
         self.temp_file.path()
     }
 
     /// Call a tool and return the result
+    ///
+    /// # Errors
+    /// Returns an error if the tool call fails
     pub async fn call_tool(
         &self,
         name: &str,
@@ -81,6 +94,9 @@ impl McpTestHarness {
     }
 
     /// Read a resource
+    ///
+    /// # Errors
+    /// Returns an error if the resource read fails
     pub async fn read_resource(&self, uri: &str) -> Result<ReadResourceResult, McpError> {
         let request = ReadResourceRequest {
             uri: uri.to_string(),
@@ -97,6 +113,9 @@ impl McpTestHarness {
     }
 
     /// Get a prompt
+    ///
+    /// # Errors
+    /// Returns an error if the prompt request fails
     pub async fn get_prompt(
         &self,
         name: &str,
@@ -123,23 +142,28 @@ impl McpTestHarness {
     }
 
     /// Assert that a tool call succeeds
+    ///
+    /// # Panics
+    /// Panics if the tool call fails
     pub async fn assert_tool_success(
         &self,
         name: &str,
         arguments: Option<Value>,
     ) -> CallToolResult {
         let result = self.call_tool(name, arguments).await;
-        assert!(result.is_ok(), "Tool call '{}' should succeed", name);
+        assert!(result.is_ok(), "Tool call '{name}' should succeed");
         let result = result.unwrap();
         assert!(
             !result.is_error,
-            "Tool call '{}' should not return an error",
-            name
+            "Tool call '{name}' should not return an error"
         );
         result
     }
 
     /// Assert that a tool call fails with a specific error
+    ///
+    /// # Panics
+    /// Panics if the tool call succeeds or fails with an unexpected error
     pub async fn assert_tool_error(
         &self,
         name: &str,
@@ -147,54 +171,61 @@ impl McpTestHarness {
         expected_error: fn(&McpError) -> bool,
     ) {
         let result = self.call_tool(name, arguments).await;
-        assert!(result.is_err(), "Tool call '{}' should fail", name);
+        assert!(result.is_err(), "Tool call '{name}' should fail");
         let error = result.unwrap_err();
         assert!(
             expected_error(&error),
-            "Tool call '{}' should fail with expected error: {:?}",
-            name,
-            error
+            "Tool call '{name}' should fail with expected error: {error:?}"
         );
     }
 
     /// Assert that a resource read succeeds
+    ///
+    /// # Panics
+    /// Panics if the resource read fails
     pub async fn assert_resource_success(&self, uri: &str) -> ReadResourceResult {
         let result = self.read_resource(uri).await;
-        assert!(result.is_ok(), "Resource read '{}' should succeed", uri);
+        assert!(result.is_ok(), "Resource read '{uri}' should succeed");
         result.unwrap()
     }
 
     /// Assert that a resource read fails with a specific error
+    ///
+    /// # Panics
+    /// Panics if the resource read succeeds or fails with an unexpected error
     pub async fn assert_resource_error(&self, uri: &str, expected_error: fn(&McpError) -> bool) {
         let result = self.read_resource(uri).await;
-        assert!(result.is_err(), "Resource read '{}' should fail", uri);
+        assert!(result.is_err(), "Resource read '{uri}' should fail");
         let error = result.unwrap_err();
         assert!(
             expected_error(&error),
-            "Resource read '{}' should fail with expected error: {:?}",
-            uri,
-            error
+            "Resource read '{uri}' should fail with expected error: {error:?}"
         );
     }
 
     /// Assert that a prompt succeeds
+    ///
+    /// # Panics
+    /// Panics if the prompt call fails
     pub async fn assert_prompt_success(
         &self,
         name: &str,
         arguments: Option<Value>,
     ) -> GetPromptResult {
         let result = self.get_prompt(name, arguments).await;
-        assert!(result.is_ok(), "Prompt '{}' should succeed", name);
+        assert!(result.is_ok(), "Prompt '{name}' should succeed");
         let result = result.unwrap();
         assert!(
             !result.is_error,
-            "Prompt '{}' should not return an error",
-            name
+            "Prompt '{name}' should not return an error"
         );
         result
     }
 
     /// Assert that a prompt fails with a specific error
+    ///
+    /// # Panics
+    /// Panics if the prompt call succeeds or fails with an unexpected error
     pub async fn assert_prompt_error(
         &self,
         name: &str,
@@ -202,17 +233,18 @@ impl McpTestHarness {
         expected_error: fn(&McpError) -> bool,
     ) {
         let result = self.get_prompt(name, arguments).await;
-        assert!(result.is_err(), "Prompt '{}' should fail", name);
+        assert!(result.is_err(), "Prompt '{name}' should fail");
         let error = result.unwrap_err();
         assert!(
             expected_error(&error),
-            "Prompt '{}' should fail with expected error: {:?}",
-            name,
-            error
+            "Prompt '{name}' should fail with expected error: {error:?}"
         );
     }
 
     /// Assert that a tool call returns valid JSON
+    ///
+    /// # Panics
+    /// Panics if the tool call fails or returns invalid JSON
     pub async fn assert_tool_returns_json(&self, name: &str, arguments: Option<Value>) -> Value {
         let result = self.assert_tool_success(name, arguments).await;
         assert_eq!(
@@ -229,6 +261,9 @@ impl McpTestHarness {
     }
 
     /// Assert that a resource read returns valid JSON
+    ///
+    /// # Panics
+    /// Panics if the resource read fails or returns invalid JSON
     pub async fn assert_resource_returns_json(&self, uri: &str) -> Value {
         let result = self.assert_resource_success(uri).await;
         assert_eq!(
@@ -245,6 +280,9 @@ impl McpTestHarness {
     }
 
     /// Assert that a prompt returns valid text
+    ///
+    /// # Panics
+    /// Panics if the prompt call fails or returns invalid text
     pub async fn assert_prompt_returns_text(&self, name: &str, arguments: Option<Value>) -> String {
         let result = self.assert_prompt_success(name, arguments).await;
         assert_eq!(
@@ -259,6 +297,7 @@ impl McpTestHarness {
     }
 
     /// Create a comprehensive test database with mock data
+    #[allow(clippy::too_many_lines)]
     fn create_test_database<P: AsRef<Path>>(db_path: P) -> rusqlite::Connection {
         let conn = rusqlite::Connection::open(db_path).unwrap();
 
@@ -509,6 +548,7 @@ pub struct MockArea {
 }
 
 impl MockDatabase {
+    #[must_use]
     pub fn new() -> Self {
         Self {
             tasks: vec![
@@ -562,22 +602,27 @@ impl MockDatabase {
         self.areas.push(area);
     }
 
+    #[must_use]
     pub fn get_task(&self, uuid: &str) -> Option<&MockTask> {
         self.tasks.iter().find(|t| t.uuid == uuid)
     }
 
+    #[must_use]
     pub fn get_project(&self, uuid: &str) -> Option<&MockProject> {
         self.projects.iter().find(|p| p.uuid == uuid)
     }
 
+    #[must_use]
     pub fn get_area(&self, uuid: &str) -> Option<&MockArea> {
         self.areas.iter().find(|a| a.uuid == uuid)
     }
 
+    #[must_use]
     pub fn get_tasks_by_status(&self, status: &str) -> Vec<&MockTask> {
         self.tasks.iter().filter(|t| t.status == status).collect()
     }
 
+    #[must_use]
     pub fn get_tasks_by_project(&self, project_uuid: &str) -> Vec<&MockTask> {
         self.tasks
             .iter()
@@ -585,6 +630,7 @@ impl MockDatabase {
             .collect()
     }
 
+    #[must_use]
     pub fn get_tasks_by_area(&self, area_uuid: &str) -> Vec<&MockTask> {
         self.tasks
             .iter()
@@ -604,6 +650,7 @@ pub struct McpTestUtils;
 
 impl McpTestUtils {
     /// Create a test tool request
+    #[must_use]
     pub fn create_tool_request(name: &str, arguments: Option<Value>) -> CallToolRequest {
         CallToolRequest {
             name: name.to_string(),
@@ -612,6 +659,7 @@ impl McpTestUtils {
     }
 
     /// Create a test resource request
+    #[must_use]
     pub fn create_resource_request(uri: &str) -> ReadResourceRequest {
         ReadResourceRequest {
             uri: uri.to_string(),
@@ -619,6 +667,7 @@ impl McpTestUtils {
     }
 
     /// Create a test prompt request
+    #[must_use]
     pub fn create_prompt_request(name: &str, arguments: Option<Value>) -> GetPromptRequest {
         GetPromptRequest {
             name: name.to_string(),
@@ -627,6 +676,9 @@ impl McpTestUtils {
     }
 
     /// Assert that a tool result contains expected content
+    ///
+    /// # Panics
+    /// Panics if the result is an error or doesn't contain the expected text
     pub fn assert_tool_result_contains(result: &CallToolResult, expected_text: &str) {
         assert!(!result.is_error, "Tool result should not be an error");
         assert!(
@@ -638,15 +690,16 @@ impl McpTestUtils {
             Content::Text { text } => {
                 assert!(
                     text.contains(expected_text),
-                    "Tool result should contain '{}', but got: {}",
-                    expected_text,
-                    text
+                    "Tool result should contain '{expected_text}', but got: {text}"
                 );
             }
         }
     }
 
     /// Assert that a resource result contains expected content
+    ///
+    /// # Panics
+    /// Panics if the result doesn't contain the expected text
     pub fn assert_resource_result_contains(result: &ReadResourceResult, expected_text: &str) {
         assert!(
             !result.contents.is_empty(),
@@ -657,15 +710,16 @@ impl McpTestUtils {
             Content::Text { text } => {
                 assert!(
                     text.contains(expected_text),
-                    "Resource result should contain '{}', but got: {}",
-                    expected_text,
-                    text
+                    "Resource result should contain '{expected_text}', but got: {text}"
                 );
             }
         }
     }
 
     /// Assert that a prompt result contains expected content
+    ///
+    /// # Panics
+    /// Panics if the result is an error or doesn't contain the expected text
     pub fn assert_prompt_result_contains(result: &GetPromptResult, expected_text: &str) {
         assert!(!result.is_error, "Prompt result should not be an error");
         assert!(
@@ -677,15 +731,17 @@ impl McpTestUtils {
             Content::Text { text } => {
                 assert!(
                     text.contains(expected_text),
-                    "Prompt result should contain '{}', but got: {}",
-                    expected_text,
-                    text
+                    "Prompt result should contain '{expected_text}', but got: {text}"
                 );
             }
         }
     }
 
     /// Assert that a tool result is valid JSON
+    ///
+    /// # Panics
+    /// Panics if the result is an error or contains invalid JSON
+    #[must_use]
     pub fn assert_tool_result_is_json(result: &CallToolResult) -> Value {
         assert!(!result.is_error, "Tool result should not be an error");
         assert!(
@@ -701,6 +757,10 @@ impl McpTestUtils {
     }
 
     /// Assert that a resource result is valid JSON
+    ///
+    /// # Panics
+    /// Panics if the result contains invalid JSON
+    #[must_use]
     pub fn assert_resource_result_is_json(result: &ReadResourceResult) -> Value {
         assert!(
             !result.contents.is_empty(),
@@ -715,11 +775,13 @@ impl McpTestUtils {
     }
 
     /// Create test data for various scenarios
+    #[must_use]
     pub fn create_test_data() -> MockDatabase {
         MockDatabase::new()
     }
 
     /// Create test data with specific scenarios
+    #[must_use]
     pub fn create_test_data_with_scenarios() -> MockDatabase {
         let mut db = MockDatabase::new();
 
@@ -765,23 +827,27 @@ pub struct McpPerformanceTest {
 }
 
 impl McpPerformanceTest {
+    #[must_use]
     pub fn new() -> Self {
         Self {
             start_time: std::time::Instant::now(),
         }
     }
 
+    #[must_use]
     pub fn elapsed(&self) -> std::time::Duration {
         self.start_time.elapsed()
     }
 
+    /// Assert that the elapsed time is under the threshold
+    ///
+    /// # Panics
+    /// Panics if the elapsed time exceeds the threshold
     pub fn assert_under_threshold(&self, threshold: std::time::Duration) {
         let elapsed = self.elapsed();
         assert!(
             elapsed < threshold,
-            "Operation took {:?}, which exceeds threshold of {:?}",
-            elapsed,
-            threshold
+            "Operation took {elapsed:?}, which exceeds threshold of {threshold:?}"
         );
     }
 
@@ -802,12 +868,14 @@ pub struct McpIntegrationTest {
 }
 
 impl McpIntegrationTest {
+    #[must_use]
     pub fn new() -> Self {
         Self {
             harness: McpTestHarness::new(),
         }
     }
 
+    #[must_use]
     pub fn with_middleware_config(
         middleware_config: crate::mcp::middleware::MiddlewareConfig,
     ) -> Self {
@@ -816,11 +884,15 @@ impl McpIntegrationTest {
         }
     }
 
+    #[must_use]
     pub fn harness(&self) -> &McpTestHarness {
         &self.harness
     }
 
     /// Test a complete workflow: list tools -> call tool -> verify result
+    ///
+    /// # Panics
+    /// Panics if the workflow fails
     pub async fn test_tool_workflow(
         &self,
         tool_name: &str,
@@ -831,8 +903,7 @@ impl McpIntegrationTest {
         let tool_exists = tools_result.tools.iter().any(|t| t.name == tool_name);
         assert!(
             tool_exists,
-            "Tool '{}' should exist in the tools list",
-            tool_name
+            "Tool '{tool_name}' should exist in the tools list"
         );
 
         // Call the tool
@@ -840,14 +911,16 @@ impl McpIntegrationTest {
     }
 
     /// Test a complete resource workflow: list resources -> read resource -> verify result
+    ///
+    /// # Panics
+    /// Panics if the workflow fails
     pub async fn test_resource_workflow(&self, uri: &str) -> ReadResourceResult {
         // First, verify the resource exists
         let resources_result = self.harness.server().list_resources().unwrap();
         let resource_exists = resources_result.resources.iter().any(|r| r.uri == uri);
         assert!(
             resource_exists,
-            "Resource '{}' should exist in the resources list",
-            uri
+            "Resource '{uri}' should exist in the resources list"
         );
 
         // Read the resource
@@ -855,6 +928,9 @@ impl McpIntegrationTest {
     }
 
     /// Test a complete prompt workflow: list prompts -> get prompt -> verify result
+    ///
+    /// # Panics
+    /// Panics if the workflow fails
     pub async fn test_prompt_workflow(
         &self,
         prompt_name: &str,
@@ -865,8 +941,7 @@ impl McpIntegrationTest {
         let prompt_exists = prompts_result.prompts.iter().any(|p| p.name == prompt_name);
         assert!(
             prompt_exists,
-            "Prompt '{}' should exist in the prompts list",
-            prompt_name
+            "Prompt '{prompt_name}' should exist in the prompts list"
         );
 
         // Get the prompt
@@ -877,6 +952,9 @@ impl McpIntegrationTest {
     }
 
     /// Test error handling workflow
+    ///
+    /// # Panics
+    /// Panics if the error handling test fails
     pub async fn test_error_handling_workflow(&self) {
         // Test unknown tool
         let result = self.harness.call_tool("unknown_tool", None).await;
@@ -901,6 +979,9 @@ impl McpIntegrationTest {
     }
 
     /// Test performance workflow
+    ///
+    /// # Panics
+    /// Panics if the performance test fails
     pub async fn test_performance_workflow(&self) {
         let perf_test = McpPerformanceTest::new();
 

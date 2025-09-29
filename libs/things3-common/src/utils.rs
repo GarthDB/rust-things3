@@ -318,4 +318,96 @@ mod tests {
         let parsed = parse_date(&formatted).unwrap();
         assert_eq!(date, parsed);
     }
+
+    #[test]
+    fn test_get_default_database_path_with_no_home() {
+        // Test behavior when HOME is not set
+        let original_home = std::env::var("HOME");
+        std::env::remove_var("HOME");
+
+        let path = get_default_database_path();
+        assert!(path.to_string_lossy().starts_with('~'));
+
+        // Restore original HOME if it existed
+        if let Ok(home) = original_home {
+            std::env::set_var("HOME", home);
+        }
+    }
+
+    #[test]
+    fn test_format_datetime_edge_cases() {
+        // Test with different timezones
+        let dt = DateTime::parse_from_rfc3339("2023-12-25T00:00:00Z")
+            .unwrap()
+            .with_timezone(&Utc);
+        let formatted = format_datetime(&dt);
+        assert_eq!(formatted, "2023-12-25 00:00:00 UTC");
+
+        // Test with different times
+        let dt = DateTime::parse_from_rfc3339("2023-12-25T23:59:59Z")
+            .unwrap()
+            .with_timezone(&Utc);
+        let formatted = format_datetime(&dt);
+        assert_eq!(formatted, "2023-12-25 23:59:59 UTC");
+    }
+
+    #[test]
+    fn test_parse_date_boundary_values() {
+        // Test year boundaries
+        assert!(parse_date("1900-01-01").is_ok());
+        assert!(parse_date("2099-12-31").is_ok());
+
+        // Test month boundaries
+        assert!(parse_date("2023-01-01").is_ok());
+        assert!(parse_date("2023-12-31").is_ok());
+
+        // Test day boundaries
+        assert!(parse_date("2023-01-01").is_ok());
+        assert!(parse_date("2023-01-31").is_ok());
+    }
+
+    #[test]
+    fn test_is_valid_uuid_edge_cases() {
+        // Test uppercase UUIDs
+        assert!(is_valid_uuid("550E8400-E29B-41D4-A716-446655440000"));
+
+        // Test lowercase UUIDs
+        assert!(is_valid_uuid("550e8400-e29b-41d4-a716-446655440000"));
+
+        // Test mixed case UUIDs
+        assert!(is_valid_uuid("550E8400-e29b-41D4-a716-446655440000"));
+    }
+
+    #[test]
+    fn test_truncate_string_boundary_conditions() {
+        // Test exactly at boundary
+        let result = truncate_string("hello", 5);
+        assert_eq!(result, "hello");
+
+        // Test just over boundary
+        let result = truncate_string("hello", 4);
+        assert_eq!(result, "h...");
+
+        // Test way over boundary
+        let result = truncate_string("hello", 1);
+        assert_eq!(result, "...");
+    }
+
+    #[test]
+    fn test_utils_error_handling() {
+        // Test parse_date with various error conditions
+        assert!(parse_date("invalid").is_err());
+        assert!(parse_date("2023-13-01").is_err());
+        assert!(parse_date("2023-02-30").is_err());
+        assert!(parse_date("2023-04-31").is_err());
+    }
+
+    #[test]
+    fn test_utils_performance() {
+        // Test with large strings
+        let large_string = "a".repeat(10000);
+        let result = truncate_string(&large_string, 100);
+        assert_eq!(result.len(), 100);
+        assert!(result.ends_with("..."));
+    }
 }
