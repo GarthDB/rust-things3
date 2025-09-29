@@ -1,24 +1,43 @@
 //! Things CLI - Command line interface for Things 3 with integrated MCP server
 
 use clap::Parser;
+use std::sync::Arc;
 use things3_cli::bulk_operations::BulkOperationsManager;
 use things3_cli::{
     health_check, print_areas, print_projects, print_tasks, start_mcp_server,
     start_websocket_server, watch_updates, BulkOperation, Cli, Commands,
 };
-use things3_core::{Result, ThingsConfig, ThingsDatabase};
+use things3_core::{
+    ObservabilityConfig, ObservabilityManager, Result, ThingsConfig, ThingsDatabase,
+};
+use tracing::{error, info};
 
 #[tokio::main]
 #[allow(clippy::too_many_lines)]
 async fn main() -> Result<()> {
     let cli = Cli::parse();
 
-    // Set up logging if verbose
-    if cli.verbose {
-        env_logger::Builder::from_default_env()
-            .filter_level(log::LevelFilter::Debug)
-            .init();
-    }
+    // Initialize observability
+    let obs_config = ObservabilityConfig {
+        log_level: if cli.verbose { "debug".to_string() } else { "info".to_string() },
+        json_logs: std::env::var("THINGS3_JSON_LOGS").unwrap_or_default() == "true",
+        enable_tracing: true,
+        jaeger_endpoint: std::env::var("JAEGER_ENDPOINT").ok(),
+        otlp_endpoint: std::env::var("OTLP_ENDPOINT").ok(),
+        enable_metrics: true,
+        metrics_port: 9090,
+        health_port: 8080,
+        service_name: "things3-cli".to_string(),
+        service_version: env!("CARGO_PKG_VERSION").to_string(),
+    };
+
+    let mut observability = ObservabilityManager::new(obs_config)
+        .map_err(|e| things3_core::ThingsError::unknown(e.to_string()))?;
+    observability.initialize()
+        .map_err(|e| things3_core::ThingsError::unknown(e.to_string()))?;
+    let observability = Arc::new(observability);
+
+    info!("Things 3 CLI starting up");
 
     // Create configuration
     let config = if let Some(db_path) = cli.database {
@@ -29,52 +48,83 @@ async fn main() -> Result<()> {
 
     // Create database connection
     let db = ThingsDatabase::with_config(&config)?;
+    let db = Arc::new(db);
 
     match cli.command {
         Commands::Inbox { limit } => {
-            let tasks = db.get_inbox(limit)?;
-            print_tasks(&db, &tasks, &mut std::io::stdout())?;
+            observability.record_db_operation("get_inbox", || {
+                let tasks = db.get_inbox(limit)?;
+                print_tasks(&db, &tasks, &mut std::io::stdout())?;
+                Ok(())
+            })?;
         }
         Commands::Today { limit } => {
-            let tasks = db.get_today(limit)?;
-            print_tasks(&db, &tasks, &mut std::io::stdout())?;
+            observability.record_db_operation("get_today", || {
+                let tasks = db.get_today(limit)?;
+                print_tasks(&db, &tasks, &mut std::io::stdout())?;
+                Ok(())
+            })?;
         }
         Commands::Projects { area, limit } => {
-            let area_uuid = area.and_then(|a| uuid::Uuid::parse_str(&a).ok());
-            let projects = db.get_projects(area_uuid)?;
-            let projects = if let Some(limit) = limit {
-                projects.into_iter().take(limit).collect::<Vec<_>>()
-            } else {
-                projects
-            };
-            print_projects(&db, &projects, &mut std::io::stdout())?;
+            observability.record_db_operation("get_projects", || {
+                let area_uuid = area.and_then(|a| uuid::Uuid::parse_str(&a).ok());
+                let projects = db.get_projects(area_uuid)?;
+                let projects = if let Some(limit) = limit {
+                    projects.into_iter().take(limit).collect::<Vec<_>>()
+                } else {
+                    projects
+                };
+                print_projects(&db, &projects, &mut std::io::stdout())?;
+                Ok(())
+            })?;
         }
         Commands::Areas { limit } => {
-            let areas = db.get_areas()?;
-            let areas = if let Some(limit) = limit {
-                areas.into_iter().take(limit).collect::<Vec<_>>()
-            } else {
-                areas
-            };
-            print_areas(&db, &areas, &mut std::io::stdout())?;
+            observability.record_db_operation("get_areas", || {
+                let areas = db.get_areas()?;
+                let areas = if let Some(limit) = limit {
+                    areas.into_iter().take(limit).collect::<Vec<_>>()
+                } else {
+                    areas
+                };
+                print_areas(&db, &areas, &mut std::io::stdout())?;
+                Ok(())
+            })?;
         }
         Commands::Search { query, limit } => {
-            let tasks = db.search_tasks(&query, limit)?;
-            print_tasks(&db, &tasks, &mut std::io::stdout())?;
+            observability.record_search_operation(&query, || {
+                let tasks = db.search_tasks(&query, limit)?;
+                print_tasks(&db, &tasks, &mut std::io::stdout())?;
+                Ok(())
+            })?;
         }
         Commands::Mcp => {
-            start_mcp_server(db, config)?;
+            info!("Starting MCP server");
+            start_mcp_server(Arc::clone(&db), config)?;
         }
         Commands::Health => {
+            info!("Performing health check");
             health_check(&db)?;
         }
+            Commands::HealthServer { port } => {
+                info!("Health check server functionality temporarily disabled due to thread safety issues");
+                println!("🚧 Health check server on port {} is temporarily disabled", port);
+                println!("   This feature requires thread-safe database access which needs to be implemented");
+            }
+            Commands::Dashboard { port } => {
+                info!("Dashboard functionality temporarily disabled due to thread safety issues");
+                println!("🚧 Monitoring dashboard on port {} is temporarily disabled", port);
+                println!("   This feature requires thread-safe database access which needs to be implemented");
+            }
         Commands::Server { port } => {
+            info!("Starting WebSocket server on port {}", port);
             start_websocket_server(port).await?;
         }
         Commands::Watch { url } => {
+            info!("Connecting to WebSocket server at {}", url);
             watch_updates(&url)?;
         }
         Commands::Validate => {
+            info!("Validating real-time features");
             println!("🔍 Validating real-time features...");
             // TODO: Implement validation logic
             println!("✅ Real-time features validation completed");
@@ -84,11 +134,14 @@ async fn main() -> Result<()> {
 
             match operation {
                 BulkOperation::Export { format } => {
+                    info!("Starting bulk export in {} format", format);
                     println!("🚀 Starting bulk export in {format} format...");
                     let tasks = bulk_manager.export_all_tasks(&db, &format).await?;
+                    observability.record_task_operation("exported", tasks.len() as u64);
                     println!("✅ Exported {} tasks successfully", tasks.len());
                 }
                 BulkOperation::UpdateStatus { task_ids, status } => {
+                    info!("Starting bulk status update for {} tasks", task_ids.split(',').count());
                     println!("🚀 Starting bulk status update...");
                     let ids: Vec<uuid::Uuid> = task_ids
                         .split(',')
@@ -101,6 +154,7 @@ async fn main() -> Result<()> {
                         "trashed" => things3_core::TaskStatus::Trashed,
                         "incomplete" => things3_core::TaskStatus::Incomplete,
                         _ => {
+                            error!("Invalid status: {}. Use: completed, cancelled, trashed, or incomplete", status);
                             eprintln!("❌ Invalid status: {status}. Use: completed, cancelled, trashed, or incomplete");
                             return Ok(());
                         }
@@ -109,9 +163,11 @@ async fn main() -> Result<()> {
                     let updated_count = bulk_manager
                         .bulk_update_task_status(&db, ids, task_status)
                         .await?;
+                    observability.record_task_operation("updated", updated_count as u64);
                     println!("✅ Updated {updated_count} tasks successfully");
                 }
                 BulkOperation::SearchAndProcess { query } => {
+                    info!("Starting search and process for: {}", query);
                     println!("🚀 Starting search and process for: {query}");
                     let tasks = bulk_manager
                         .search_and_process_tasks(&db, &query, |task| {
@@ -119,6 +175,7 @@ async fn main() -> Result<()> {
                             Ok(())
                         })
                         .await?;
+                    observability.record_task_operation("processed", tasks.len() as u64);
                     println!("✅ Processed {} tasks successfully", tasks.len());
                 }
             }

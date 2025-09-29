@@ -28,7 +28,7 @@ impl McpTestHarness {
 
         let db = ThingsDatabase::new(db_path).unwrap();
         let config = ThingsConfig::new(db_path, false);
-        let server = ThingsMcpServer::new(db, config);
+        let server = ThingsMcpServer::new(Arc::new(db), config);
 
         Self { server, temp_file }
     }

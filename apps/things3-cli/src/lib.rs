@@ -2,10 +2,15 @@
 //! This module provides real-time updates and progress tracking capabilities
 
 pub mod bulk_operations;
+pub mod dashboard;
 pub mod events;
+pub mod health;
+pub mod logging;
+pub mod metrics;
 pub mod mcp;
 pub mod monitoring;
 pub mod progress;
+pub mod thread_safe_db;
 pub mod websocket;
 
 use crate::events::EventBroadcaster;
@@ -78,6 +83,18 @@ pub enum Commands {
     Mcp,
     /// Health check
     Health,
+    /// Start health check server
+    HealthServer {
+        /// Port to listen on
+        #[arg(long, short, default_value = "8080")]
+        port: u16,
+    },
+    /// Start monitoring dashboard
+    Dashboard {
+        /// Port to listen on
+        #[arg(long, short, default_value = "3000")]
+        port: u16,
+    },
     /// Start WebSocket server for real-time updates
     Server {
         /// Port to listen on
@@ -239,10 +256,10 @@ pub fn health_check(db: &ThingsDatabase) -> Result<()> {
 ///
 /// # Errors
 /// Returns an error if the server fails to start
-pub fn start_mcp_server(db: ThingsDatabase, config: ThingsConfig) -> Result<()> {
+pub fn start_mcp_server(db: Arc<ThingsDatabase>, config: ThingsConfig) -> Result<()> {
     println!("🚀 Starting MCP server...");
 
-    let _server = mcp::ThingsMcpServer::new(db, config);
+    let _server = mcp::ThingsMcpServer::new(Arc::clone(&db), config);
 
     // In a real implementation, this would start the MCP server
     // For now, we'll just print that it would start

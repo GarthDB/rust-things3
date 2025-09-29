@@ -10,6 +10,7 @@ pub mod database;
 pub mod error;
 pub mod export;
 pub mod models;
+pub mod observability;
 pub mod performance;
 pub mod query;
 
@@ -23,6 +24,10 @@ pub use database::ThingsDatabase;
 pub use error::{Result, ThingsError};
 pub use export::{DataExporter, ExportConfig, ExportData, ExportFormat};
 pub use models::*;
+pub use observability::{
+    CheckResult, HealthStatus, ObservabilityConfig, ObservabilityError, ObservabilityManager,
+    ThingsMetrics,
+};
 pub use performance::{OperationMetrics, PerformanceMonitor, PerformanceStats, PerformanceSummary};
 
 /// Re-export commonly used types

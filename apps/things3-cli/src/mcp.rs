@@ -504,7 +504,7 @@ pub struct GetPromptResult {
 /// MCP server for Things 3 integration
 pub struct ThingsMcpServer {
     #[allow(dead_code)]
-    db: Arc<Mutex<ThingsDatabase>>,
+    db: Arc<ThingsDatabase>,
     #[allow(dead_code)]
     cache: Arc<Mutex<ThingsCache>>,
     #[allow(dead_code)]
@@ -519,7 +519,7 @@ pub struct ThingsMcpServer {
 
 #[allow(dead_code)]
 impl ThingsMcpServer {
-    pub fn new(db: ThingsDatabase, config: ThingsConfig) -> Self {
+    pub fn new(db: Arc<ThingsDatabase>, config: ThingsConfig) -> Self {
         let cache = ThingsCache::new_default();
         let performance_monitor = PerformanceMonitor::new_default();
         let exporter = DataExporter::new_default();
@@ -527,7 +527,7 @@ impl ThingsMcpServer {
         let middleware_chain = MiddlewareConfig::default().build_chain();
 
         Self {
-            db: Arc::new(Mutex::new(db)),
+            db,
             cache: Arc::new(Mutex::new(cache)),
             performance_monitor: Arc::new(Mutex::new(performance_monitor)),
             exporter,
@@ -549,7 +549,7 @@ impl ThingsMcpServer {
         let middleware_chain = middleware_config.build_chain();
 
         Self {
-            db: Arc::new(Mutex::new(db)),
+            db: db,
             cache: Arc::new(Mutex::new(cache)),
             performance_monitor: Arc::new(Mutex::new(performance_monitor)),
             exporter,
@@ -1341,7 +1341,6 @@ impl ThingsMcpServer {
             .lock()
             .await
             .create_backup(backup_path, description)
-            .await
             .map_err(|e| {
                 McpError::backup_operation_failed(
                     "create_backup",
@@ -1376,7 +1375,6 @@ impl ThingsMcpServer {
             .lock()
             .await
             .restore_backup(backup_file)
-            .await
             .map_err(|e| {
                 McpError::backup_operation_failed(
                     "restore_backup",
