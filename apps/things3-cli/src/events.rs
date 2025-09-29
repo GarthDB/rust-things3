@@ -546,4 +546,310 @@ mod tests {
         let received_event = receiver.recv().await.unwrap();
         assert_eq!(received_event.source, "test");
     }
+
+    #[test]
+    fn test_event_filter_entity_ids() {
+        let task_id = Uuid::new_v4();
+        let event = Event {
+            id: Uuid::new_v4(),
+            event_type: EventType::TaskCreated { task_id },
+            timestamp: Utc::now(),
+            data: None,
+            source: "test".to_string(),
+        };
+
+        let filter = EventFilter {
+            event_types: None,
+            entity_ids: Some(vec![task_id]),
+            sources: None,
+            since: None,
+        };
+
+        assert!(filter.matches(&event));
+
+        let filter_no_match = EventFilter {
+            event_types: None,
+            entity_ids: Some(vec![Uuid::new_v4()]),
+            sources: None,
+            since: None,
+        };
+
+        assert!(!filter_no_match.matches(&event));
+    }
+
+    #[test]
+    fn test_event_filter_sources() {
+        let event = Event {
+            id: Uuid::new_v4(),
+            event_type: EventType::TaskCreated {
+                task_id: Uuid::new_v4(),
+            },
+            timestamp: Utc::now(),
+            data: None,
+            source: "test_source".to_string(),
+        };
+
+        let filter = EventFilter {
+            event_types: None,
+            entity_ids: None,
+            sources: Some(vec!["test_source".to_string()]),
+            since: None,
+        };
+
+        assert!(filter.matches(&event));
+
+        let filter_no_match = EventFilter {
+            event_types: None,
+            entity_ids: None,
+            sources: Some(vec!["other_source".to_string()]),
+            since: None,
+        };
+
+        assert!(!filter_no_match.matches(&event));
+    }
+
+    #[test]
+    fn test_event_filter_timestamp() {
+        let now = Utc::now();
+        let past = now - chrono::Duration::hours(1);
+        let future = now + chrono::Duration::hours(1);
+
+        let event = Event {
+            id: Uuid::new_v4(),
+            event_type: EventType::TaskCreated {
+                task_id: Uuid::new_v4(),
+            },
+            timestamp: now,
+            data: None,
+            source: "test".to_string(),
+        };
+
+        let filter = EventFilter {
+            event_types: None,
+            entity_ids: None,
+            sources: None,
+            since: Some(past),
+        };
+
+        assert!(filter.matches(&event));
+
+        let filter_no_match = EventFilter {
+            event_types: None,
+            entity_ids: None,
+            sources: None,
+            since: Some(future),
+        };
+
+        assert!(!filter_no_match.matches(&event));
+    }
+
+    #[test]
+    fn test_event_filter_all_event_types() {
+        let task_id = Uuid::new_v4();
+        let project_id = Uuid::new_v4();
+        let area_id = Uuid::new_v4();
+        let operation_id = Uuid::new_v4();
+
+        let events = vec![
+            Event {
+                id: Uuid::new_v4(),
+                event_type: EventType::TaskCreated { task_id },
+                timestamp: Utc::now(),
+                data: None,
+                source: "test".to_string(),
+            },
+            Event {
+                id: Uuid::new_v4(),
+                event_type: EventType::ProjectCreated { project_id },
+                timestamp: Utc::now(),
+                data: None,
+                source: "test".to_string(),
+            },
+            Event {
+                id: Uuid::new_v4(),
+                event_type: EventType::AreaCreated { area_id },
+                timestamp: Utc::now(),
+                data: None,
+                source: "test".to_string(),
+            },
+            Event {
+                id: Uuid::new_v4(),
+                event_type: EventType::ProgressStarted { operation_id },
+                timestamp: Utc::now(),
+                data: None,
+                source: "test".to_string(),
+            },
+        ];
+
+        for event in events {
+            let filter = EventFilter {
+                event_types: None,
+                entity_ids: None,
+                sources: None,
+                since: None,
+            };
+            assert!(filter.matches(&event));
+        }
+    }
+
+    #[test]
+    fn test_event_filter_entity_id_extraction() {
+        let task_id = Uuid::new_v4();
+        let project_id = Uuid::new_v4();
+        let area_id = Uuid::new_v4();
+        let operation_id = Uuid::new_v4();
+
+        let events = vec![
+            (EventType::TaskCreated { task_id }, Some(task_id)),
+            (EventType::TaskUpdated { task_id }, Some(task_id)),
+            (EventType::TaskDeleted { task_id }, Some(task_id)),
+            (EventType::TaskCompleted { task_id }, Some(task_id)),
+            (EventType::TaskCancelled { task_id }, Some(task_id)),
+            (EventType::ProjectCreated { project_id }, Some(project_id)),
+            (EventType::ProjectUpdated { project_id }, Some(project_id)),
+            (EventType::ProjectDeleted { project_id }, Some(project_id)),
+            (EventType::ProjectCompleted { project_id }, Some(project_id)),
+            (EventType::AreaCreated { area_id }, Some(area_id)),
+            (EventType::AreaUpdated { area_id }, Some(area_id)),
+            (EventType::AreaDeleted { area_id }, Some(area_id)),
+            (
+                EventType::ProgressStarted { operation_id },
+                Some(operation_id),
+            ),
+            (
+                EventType::ProgressUpdated { operation_id },
+                Some(operation_id),
+            ),
+            (
+                EventType::ProgressCompleted { operation_id },
+                Some(operation_id),
+            ),
+            (
+                EventType::ProgressFailed { operation_id },
+                Some(operation_id),
+            ),
+        ];
+
+        for (event_type, expected_id) in events {
+            let event = Event {
+                id: Uuid::new_v4(),
+                event_type,
+                timestamp: Utc::now(),
+                data: None,
+                source: "test".to_string(),
+            };
+
+            let filter = EventFilter {
+                event_types: None,
+                entity_ids: expected_id.map(|id| vec![id]),
+                sources: None,
+                since: None,
+            };
+
+            assert!(filter.matches(&event));
+        }
+    }
+
+    #[tokio::test]
+    async fn test_event_broadcaster_subscribe_all() {
+        let broadcaster = EventBroadcaster::new();
+        let mut receiver = broadcaster.subscribe_all();
+
+        let event = Event {
+            id: Uuid::new_v4(),
+            event_type: EventType::TaskCreated {
+                task_id: Uuid::new_v4(),
+            },
+            timestamp: Utc::now(),
+            data: None,
+            source: "test".to_string(),
+        };
+
+        broadcaster.broadcast(event.clone()).await.unwrap();
+
+        let received_event = receiver.recv().await.unwrap();
+        assert_eq!(received_event.id, event.id);
+    }
+
+    #[tokio::test]
+    async fn test_event_listener_creation() {
+        let broadcaster = EventBroadcaster::new();
+        let listener = EventListener::new(Arc::new(broadcaster));
+        assert_eq!(listener.subscriptions.len(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_event_listener_subscribe_to_events() {
+        let broadcaster = EventBroadcaster::new();
+        let mut listener = EventListener::new(Arc::new(broadcaster));
+
+        let event_types = vec![EventType::TaskCreated {
+            task_id: Uuid::new_v4(),
+        }];
+        let mut receiver = listener.subscribe_to_events(event_types).await;
+
+        // This should not panic
+        assert!(receiver.try_recv().is_err());
+    }
+
+    #[tokio::test]
+    async fn test_event_listener_subscribe_to_entity() {
+        let broadcaster = EventBroadcaster::new();
+        let mut listener = EventListener::new(Arc::new(broadcaster));
+
+        let entity_id = Uuid::new_v4();
+        let mut receiver = listener.subscribe_to_entity(entity_id).await;
+
+        // This should not panic
+        assert!(receiver.try_recv().is_err());
+    }
+
+    #[tokio::test]
+    async fn test_event_listener_subscribe_to_all() {
+        let broadcaster = EventBroadcaster::new();
+        let listener = EventListener::new(Arc::new(broadcaster));
+
+        let mut receiver = listener.subscribe_to_all();
+
+        // This should not panic
+        assert!(receiver.try_recv().is_err());
+    }
+
+    #[test]
+    fn test_event_serialization() {
+        let event = Event {
+            id: Uuid::new_v4(),
+            event_type: EventType::TaskCreated {
+                task_id: Uuid::new_v4(),
+            },
+            timestamp: Utc::now(),
+            data: Some(serde_json::json!({"key": "value"})),
+            source: "test".to_string(),
+        };
+
+        let json = serde_json::to_string(&event).unwrap();
+        let deserialized: Event = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(event.id, deserialized.id);
+        assert_eq!(event.source, deserialized.source);
+    }
+
+    #[test]
+    fn test_event_filter_serialization() {
+        let filter = EventFilter {
+            event_types: Some(vec![EventType::TaskCreated {
+                task_id: Uuid::new_v4(),
+            }]),
+            entity_ids: Some(vec![Uuid::new_v4()]),
+            sources: Some(vec!["test".to_string()]),
+            since: Some(Utc::now()),
+        };
+
+        let json = serde_json::to_string(&filter).unwrap();
+        let deserialized: EventFilter = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(filter.event_types, deserialized.event_types);
+        assert_eq!(filter.entity_ids, deserialized.entity_ids);
+        assert_eq!(filter.sources, deserialized.sources);
+    }
 }

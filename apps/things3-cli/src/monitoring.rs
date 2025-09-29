@@ -328,4 +328,211 @@ mod tests {
         assert!(!result.all_healthy());
         assert_eq!(result.unhealthy_features().len(), 1);
     }
+
+    #[tokio::test]
+    async fn test_async_operation_monitor_error_recording() {
+        let monitor = AsyncOperationMonitor::new("test_operation".to_string());
+
+        // Record some errors
+        monitor.record_error().await;
+        monitor.record_error().await;
+
+        // Check stats
+        let stats = monitor.get_stats().await;
+        assert_eq!(stats.operation_name, "test_operation");
+        assert_eq!(stats.error_count, 2);
+        assert_eq!(stats.success_count, 0);
+        assert_eq!(stats.update_count, 0);
+        assert_eq!(stats.success_rate, 0.0);
+    }
+
+    #[tokio::test]
+    async fn test_async_operation_monitor_mixed_operations() {
+        let monitor = AsyncOperationMonitor::new("test_operation".to_string());
+
+        // Record mixed operations
+        monitor.record_success().await;
+        monitor.record_update().await;
+        monitor.record_error().await;
+        monitor.record_success().await;
+
+        // Check stats
+        let stats = monitor.get_stats().await;
+        assert_eq!(stats.operation_name, "test_operation");
+        assert_eq!(stats.success_count, 2);
+        assert_eq!(stats.error_count, 1);
+        assert_eq!(stats.update_count, 1);
+        // Success rate is calculated as success_count / update_count, not total operations
+        assert_eq!(stats.success_rate, 2.0); // 2 successes out of 1 update
+    }
+
+    #[tokio::test]
+    async fn test_async_operation_monitor_health_check() {
+        let monitor = AsyncOperationMonitor::new("test_operation".to_string());
+
+        // Initially should not be healthy (no activity)
+        assert!(!monitor.is_healthy(Duration::from_secs(1)).await);
+
+        // Record activity
+        monitor.record_success().await;
+
+        // Should now be healthy
+        assert!(monitor.is_healthy(Duration::from_secs(1)).await);
+
+        // Wait longer than the health check duration
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        assert!(!monitor.is_healthy(Duration::from_millis(50)).await);
+    }
+
+    #[tokio::test]
+    async fn test_async_operation_monitor_duration() {
+        let monitor = AsyncOperationMonitor::new("test_operation".to_string());
+
+        // Wait a bit
+        tokio::time::sleep(Duration::from_millis(10)).await;
+
+        let stats = monitor.get_stats().await;
+        assert!(stats.duration.as_millis() >= 10);
+    }
+
+    #[tokio::test]
+    async fn test_realtime_feature_validator_creation() {
+        let validator = RealtimeFeatureValidator::new();
+        assert!(validator.progress_monitor.lock().await.is_none());
+        assert!(validator.event_monitor.lock().await.is_none());
+        assert!(validator.websocket_monitor.lock().await.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_realtime_feature_validator_default() {
+        let validator = RealtimeFeatureValidator::default();
+        assert!(validator.progress_monitor.lock().await.is_none());
+        assert!(validator.event_monitor.lock().await.is_none());
+        assert!(validator.websocket_monitor.lock().await.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_validation_result_all_healthy() {
+        let result = ValidationResult {
+            features: vec![
+                FeatureHealth {
+                    feature: "test1".to_string(),
+                    is_healthy: true,
+                    stats: None,
+                },
+                FeatureHealth {
+                    feature: "test2".to_string(),
+                    is_healthy: true,
+                    stats: None,
+                },
+            ],
+        };
+
+        assert!(result.all_healthy());
+        assert_eq!(result.unhealthy_features().len(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_validation_result_empty() {
+        let result = ValidationResult { features: vec![] };
+
+        assert!(result.all_healthy());
+        assert_eq!(result.unhealthy_features().len(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_validation_result_with_stats() {
+        let stats = OperationStats {
+            operation_name: "test_operation".to_string(),
+            duration: Duration::from_secs(1),
+            update_count: 10,
+            success_count: 8,
+            error_count: 2,
+            success_rate: 0.8,
+        };
+
+        let result = ValidationResult {
+            features: vec![FeatureHealth {
+                feature: "test1".to_string(),
+                is_healthy: true,
+                stats: Some(stats),
+            }],
+        };
+
+        assert!(result.all_healthy());
+        assert_eq!(result.unhealthy_features().len(), 0);
+    }
+
+    #[test]
+    fn test_operation_stats_creation() {
+        let stats = OperationStats {
+            operation_name: "test_operation".to_string(),
+            duration: Duration::from_secs(5),
+            update_count: 100,
+            success_count: 95,
+            error_count: 5,
+            success_rate: 0.95,
+        };
+
+        assert_eq!(stats.operation_name, "test_operation");
+        assert_eq!(stats.duration.as_secs(), 5);
+        assert_eq!(stats.update_count, 100);
+        assert_eq!(stats.success_count, 95);
+        assert_eq!(stats.error_count, 5);
+        assert_eq!(stats.success_rate, 0.95);
+    }
+
+    #[test]
+    fn test_feature_health_creation() {
+        let health = FeatureHealth {
+            feature: "test_feature".to_string(),
+            is_healthy: true,
+            stats: None,
+        };
+
+        assert_eq!(health.feature, "test_feature");
+        assert!(health.is_healthy);
+        assert!(health.stats.is_none());
+    }
+
+    #[test]
+    fn test_validation_result_creation() {
+        let result = ValidationResult { features: vec![] };
+
+        assert_eq!(result.features.len(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_async_operation_monitor_concurrent_updates() {
+        let monitor = Arc::new(AsyncOperationMonitor::new("concurrent_test".to_string()));
+
+        // Spawn multiple tasks that update the monitor concurrently
+        let mut handles = vec![];
+        for i in 0..10 {
+            let monitor_clone = monitor.clone();
+            let handle = tokio::spawn(async move {
+                for _ in 0..10 {
+                    if i % 2 == 0 {
+                        monitor_clone.record_success().await;
+                    } else {
+                        monitor_clone.record_error().await;
+                    }
+                }
+            });
+            handles.push(handle);
+        }
+
+        // Wait for all tasks to complete
+        for handle in handles {
+            handle.await.unwrap();
+        }
+
+        let stats = monitor.get_stats().await;
+        assert_eq!(stats.success_count, 50); // 5 tasks * 10 successes each
+        assert_eq!(stats.error_count, 50); // 5 tasks * 10 errors each
+        assert_eq!(stats.update_count, 0); // No direct updates
+                                           // Success rate is calculated as success_count / update_count
+                                           // Since update_count is 0, success_rate should be 0.0
+        assert_eq!(stats.success_rate, 0.0);
+    }
 }

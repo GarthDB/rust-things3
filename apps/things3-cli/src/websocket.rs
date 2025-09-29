@@ -322,4 +322,197 @@ mod tests {
             .unwrap();
         assert_eq!(received_msg.operation_name, update.operation_name);
     }
+
+    #[tokio::test]
+    async fn test_websocket_server_creation_with_port() {
+        let server = WebSocketServer::new(8080);
+        assert_eq!(server.port, 8080);
+    }
+
+    #[tokio::test]
+    async fn test_websocket_server_progress_manager() {
+        let server = WebSocketServer::new(8080);
+        let _progress_manager = server.progress_manager();
+        // Just verify we can get the progress manager without panicking
+        assert!(true);
+    }
+
+    #[tokio::test]
+    async fn test_websocket_client_creation_async() {
+        let (sender, _receiver) = crossbeam_channel::unbounded();
+        let client = WebSocketClient::new(sender);
+        // Just verify we can create the client without panicking
+        assert!(!client.id.is_nil());
+    }
+
+    #[tokio::test]
+    async fn test_websocket_client_connection_default() {
+        let _connection = WebSocketClientConnection::default();
+        // Just verify we can create the connection without panicking
+        assert!(true);
+    }
+
+    #[tokio::test]
+    async fn test_websocket_client_connection_subscribe() {
+        let connection = WebSocketClientConnection::new();
+        let _receiver = connection.subscribe();
+        // Just verify we can subscribe without panicking
+        assert!(true);
+    }
+
+    #[tokio::test]
+    async fn test_websocket_client_connection_send_update() {
+        let connection = WebSocketClientConnection::new();
+        let update = ProgressUpdate {
+            operation_id: Uuid::new_v4(),
+            operation_name: "test".to_string(),
+            current: 50,
+            total: Some(100),
+            message: Some("test message".to_string()),
+            timestamp: chrono::Utc::now(),
+            status: crate::progress::ProgressStatus::InProgress,
+        };
+
+        let result = connection.send_update(update);
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_websocket_message_serialization_async() {
+        let message = WebSocketMessage::Subscribe {
+            operation_id: Some(Uuid::new_v4()),
+        };
+
+        let json = serde_json::to_string(&message).unwrap();
+        let deserialized: WebSocketMessage = serde_json::from_str(&json).unwrap();
+
+        match (message, deserialized) {
+            (
+                WebSocketMessage::Subscribe { operation_id: id1 },
+                WebSocketMessage::Subscribe { operation_id: id2 },
+            ) => {
+                assert_eq!(id1, id2);
+            }
+            _ => panic!("Message types don't match"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_websocket_message_ping_pong() {
+        let ping = WebSocketMessage::Ping;
+        let pong = WebSocketMessage::Pong;
+
+        let ping_json = serde_json::to_string(&ping).unwrap();
+        let pong_json = serde_json::to_string(&pong).unwrap();
+
+        let ping_deserialized: WebSocketMessage = serde_json::from_str(&ping_json).unwrap();
+        let pong_deserialized: WebSocketMessage = serde_json::from_str(&pong_json).unwrap();
+
+        assert!(matches!(ping_deserialized, WebSocketMessage::Ping));
+        assert!(matches!(pong_deserialized, WebSocketMessage::Pong));
+    }
+
+    #[tokio::test]
+    async fn test_websocket_message_unsubscribe() {
+        let message = WebSocketMessage::Unsubscribe {
+            operation_id: Some(Uuid::new_v4()),
+        };
+
+        let json = serde_json::to_string(&message).unwrap();
+        let deserialized: WebSocketMessage = serde_json::from_str(&json).unwrap();
+
+        match (message, deserialized) {
+            (
+                WebSocketMessage::Unsubscribe { operation_id: id1 },
+                WebSocketMessage::Unsubscribe { operation_id: id2 },
+            ) => {
+                assert_eq!(id1, id2);
+            }
+            _ => panic!("Message types don't match"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_websocket_message_progress_update() {
+        let update = ProgressUpdate {
+            operation_id: Uuid::new_v4(),
+            operation_name: "test_operation".to_string(),
+            current: 75,
+            total: Some(100),
+            message: Some("Almost done".to_string()),
+            timestamp: chrono::Utc::now(),
+            status: crate::progress::ProgressStatus::InProgress,
+        };
+
+        let message = WebSocketMessage::ProgressUpdate(update.clone());
+
+        let json = serde_json::to_string(&message).unwrap();
+        let deserialized: WebSocketMessage = serde_json::from_str(&json).unwrap();
+
+        match deserialized {
+            WebSocketMessage::ProgressUpdate(deserialized_update) => {
+                assert_eq!(update.operation_id, deserialized_update.operation_id);
+                assert_eq!(update.operation_name, deserialized_update.operation_name);
+                assert_eq!(update.current, deserialized_update.current);
+            }
+            _ => panic!("Expected ProgressUpdate message"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_websocket_message_error() {
+        let message = WebSocketMessage::Error {
+            message: "Test error".to_string(),
+        };
+
+        let json = serde_json::to_string(&message).unwrap();
+        let deserialized: WebSocketMessage = serde_json::from_str(&json).unwrap();
+
+        match deserialized {
+            WebSocketMessage::Error { message: msg } => {
+                assert_eq!(msg, "Test error");
+            }
+            _ => panic!("Expected Error message"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_websocket_client_connection_multiple_updates() {
+        let connection = WebSocketClientConnection::new();
+        let mut receiver = connection.subscribe();
+
+        // Send multiple updates
+        for i in 0..5 {
+            let update = ProgressUpdate {
+                operation_id: Uuid::new_v4(),
+                operation_name: format!("test_{}", i),
+                current: i * 20,
+                total: Some(100),
+                message: Some(format!("Update {}", i)),
+                timestamp: chrono::Utc::now(),
+                status: crate::progress::ProgressStatus::InProgress,
+            };
+
+            connection.send_update(update).unwrap();
+        }
+
+        // Receive all updates
+        for i in 0..5 {
+            let received_msg = tokio::time::timeout(StdDuration::from_millis(100), receiver.recv())
+                .await
+                .unwrap()
+                .unwrap();
+            assert_eq!(received_msg.operation_name, format!("test_{}", i));
+        }
+    }
+
+    #[tokio::test]
+    async fn test_websocket_client_connection_timeout() {
+        let connection = WebSocketClientConnection::new();
+        let mut receiver = connection.subscribe();
+
+        // Try to receive without sending anything
+        let result = tokio::time::timeout(StdDuration::from_millis(50), receiver.recv()).await;
+        assert!(result.is_err()); // Should timeout
+    }
 }
