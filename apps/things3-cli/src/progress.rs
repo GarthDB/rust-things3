@@ -503,7 +503,7 @@ mod tests {
 
         // Test elapsed time
         let elapsed = tracker.elapsed();
-        assert!(elapsed.as_nanos() >= 0);
+        // Just verify we can get elapsed time (it's always >= 0 for Duration)
 
         // Wait a bit and check elapsed time increases
         std::thread::sleep(std::time::Duration::from_millis(10));
@@ -590,10 +590,10 @@ mod tests {
     #[test]
     fn test_progress_manager_sender_access() {
         let manager = ProgressManager::new();
-        let sender = manager.sender();
+        let _sender = manager.sender();
 
         // Test that sender is accessible (it's always available)
-        assert!(true);
+        // Just verify we can call the method without panicking
     }
 
     #[test]
