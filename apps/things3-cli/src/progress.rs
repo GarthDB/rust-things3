@@ -419,7 +419,7 @@ mod tests {
         tokio::time::sleep(StdDuration::from_millis(10)).await;
 
         // Check if we received the update with a timeout
-        let update_result =
+        let _update_result =
             tokio::time::timeout(StdDuration::from_millis(50), subscriber.recv()).await;
 
         // Cancel the manager task immediately to prevent hanging
@@ -427,7 +427,7 @@ mod tests {
 
         // The test passes if it doesn't hang, regardless of whether we receive the update
         // This is a timing-dependent test, so we just ensure it completes
-        assert!(update_result.is_ok() || subscriber.try_recv().is_ok() || true);
+        // We don't assert anything specific since this test is about not hanging
     }
 
     #[test]

@@ -11,7 +11,7 @@ async fn test_websocket_server_creation() {
     // This test verifies the WebSocket server can be created
     let _server = things3_cli::websocket::WebSocketServer::new(8081);
     // Just verify it can be created without errors
-    assert!(true);
+    // The test passes if no panic occurs during creation
 }
 
 /// Test progress tracking with actual bulk operations
