@@ -94,6 +94,7 @@ nonzero_ext = "0.3"
 # Testing and utilities
 tempfile = "3.8"
 rusqlite = "0.31"
+sqlx = { version = "0.8", features = ["runtime-tokio-rustls", "sqlite", "chrono", "uuid", "json"] }
 futures = "0.3"
 
 # Real-time updates and progress tracking

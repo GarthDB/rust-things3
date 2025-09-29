@@ -7,7 +7,8 @@ use crate::mcp::{
 use serde_json::Value;
 use std::path::Path;
 use tempfile::NamedTempFile;
-use things3_core::{config::ThingsConfig, database::ThingsDatabase};
+use things3_core::{config::ThingsConfig, SqlxThingsDatabase};
+use std::sync::Arc;
 
 /// Test harness for MCP server testing
 pub struct McpTestHarness {
@@ -26,7 +27,9 @@ impl McpTestHarness {
         let db_path = temp_file.path();
         Self::create_test_database(db_path);
 
-        let db = ThingsDatabase::new(db_path).unwrap();
+        let db = tokio::runtime::Runtime::new().unwrap().block_on(async {
+            SqlxThingsDatabase::new(db_path).await.unwrap()
+        });
         let config = ThingsConfig::new(db_path, false);
         let server = ThingsMcpServer::new(Arc::new(db), config);
 

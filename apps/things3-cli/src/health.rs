@@ -12,8 +12,7 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
-use things3_core::{ObservabilityManager, ThingsDatabase};
-use crate::thread_safe_db::ThreadSafeDatabase;
+use things3_core::{ObservabilityManager, SqlxThingsDatabase};
 use tokio::net::TcpListener;
 // Removed unused import
 use tower_http::cors::CorsLayer;
@@ -40,7 +39,7 @@ pub struct CheckResponse {
 #[derive(Clone)]
 pub struct AppState {
     pub observability: Arc<ObservabilityManager>,
-    pub database: ThreadSafeDatabase,
+    pub database: Arc<SqlxThingsDatabase>,
 }
 
 /// Health check server
@@ -51,10 +50,10 @@ pub struct HealthServer {
 
 impl HealthServer {
     /// Create a new health check server
-    pub fn new(port: u16, observability: Arc<ObservabilityManager>, database: Arc<ThingsDatabase>) -> Self {
+    pub fn new(port: u16, observability: Arc<ObservabilityManager>, database: Arc<SqlxThingsDatabase>) -> Self {
         let state = AppState {
             observability,
-            database: ThreadSafeDatabase::new(database),
+            database,
         };
         
         Self { port, state }
@@ -192,7 +191,7 @@ async fn metrics_endpoint(State(state): State<AppState>) -> Result<String, Statu
 pub async fn start_health_server(
     port: u16,
     observability: Arc<ObservabilityManager>,
-    database: Arc<ThingsDatabase>,
+    database: Arc<SqlxThingsDatabase>,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let server = HealthServer::new(port, observability, database);
     server.start().await

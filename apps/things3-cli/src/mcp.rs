@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::sync::Arc;
 use things3_core::{
-    BackupManager, DataExporter, PerformanceMonitor, ThingsCache, ThingsConfig, ThingsDatabase,
+    BackupManager, DataExporter, PerformanceMonitor, ThingsCache, ThingsConfig, SqlxThingsDatabase,
     ThingsError,
 };
 use thiserror::Error;
@@ -504,7 +504,7 @@ pub struct GetPromptResult {
 /// MCP server for Things 3 integration
 pub struct ThingsMcpServer {
     #[allow(dead_code)]
-    db: Arc<ThingsDatabase>,
+    db: Arc<SqlxThingsDatabase>,
     #[allow(dead_code)]
     cache: Arc<Mutex<ThingsCache>>,
     #[allow(dead_code)]
@@ -519,7 +519,7 @@ pub struct ThingsMcpServer {
 
 #[allow(dead_code)]
 impl ThingsMcpServer {
-    pub fn new(db: Arc<ThingsDatabase>, config: ThingsConfig) -> Self {
+    pub fn new(db: Arc<SqlxThingsDatabase>, config: ThingsConfig) -> Self {
         let cache = ThingsCache::new_default();
         let performance_monitor = PerformanceMonitor::new_default();
         let exporter = DataExporter::new_default();
@@ -999,7 +999,6 @@ impl ThingsMcpServer {
 
         let tasks = self
             .db
-            .lock()
             .await
             .get_inbox(limit)
             .map_err(|e| McpError::database_operation_failed("get_inbox", e))?;
@@ -1021,7 +1020,6 @@ impl ThingsMcpServer {
 
         let tasks = self
             .db
-            .lock()
             .await
             .get_today(limit)
             .map_err(|e| McpError::database_operation_failed("get_today", e))?;
@@ -1043,7 +1041,6 @@ impl ThingsMcpServer {
 
         let projects = self
             .db
-            .lock()
             .await
             .get_projects(area_uuid)
             .map_err(|e| McpError::database_operation_failed("get_projects", e))?;
@@ -1060,7 +1057,6 @@ impl ThingsMcpServer {
     async fn handle_get_areas(&self, _args: Value) -> McpResult<CallToolResult> {
         let areas = self
             .db
-            .lock()
             .await
             .get_areas()
             .map_err(|e| McpError::database_operation_failed("get_areas", e))?;
@@ -1087,7 +1083,6 @@ impl ThingsMcpServer {
 
         let tasks = self
             .db
-            .lock()
             .await
             .search_tasks(query, limit)
             .map_err(|e| McpError::database_operation_failed("search_tasks", e))?;
@@ -1156,7 +1151,7 @@ impl ThingsMcpServer {
         .unwrap_or(7);
 
         // Get various metrics
-        let db = self.db.lock().await;
+        let db = &self.db;
         let inbox_tasks = db
             .get_inbox(None)
             .map_err(|e| McpError::database_operation_failed("get_inbox for metrics", e))?;
@@ -1202,7 +1197,7 @@ impl ThingsMcpServer {
             .and_then(|v| v.as_str())
             .ok_or_else(|| McpError::missing_parameter("data_type"))?;
 
-        let db = self.db.lock().await;
+        let db = &self.db;
         let export_data = match data_type {
             "tasks" => {
                 let inbox = db
@@ -1308,7 +1303,6 @@ impl ThingsMcpServer {
         // In a real implementation, this would query by creation/modification date
         let tasks = self
             .db
-            .lock()
             .await
             .get_inbox(limit)
             .map_err(|e| McpError::database_operation_failed("get_recent_tasks", e))?;
@@ -1636,7 +1630,7 @@ impl ThingsMcpServer {
         let context = args.get("context").and_then(|v| v.as_str());
 
         // Get current data for context
-        let db = self.db.lock().await;
+        let db = &self.db;
         let inbox_tasks = db
             .get_inbox(Some(5))
             .map_err(|e| McpError::database_operation_failed("get_inbox for task_review", e))?;
@@ -1697,7 +1691,7 @@ impl ThingsMcpServer {
             .unwrap_or("medium");
 
         // Get current data for context
-        let db = self.db.lock().await;
+        let db = &self.db;
         let projects = db.get_projects(None).map_err(|e| {
             McpError::database_operation_failed("get_projects for project_planning", e)
         })?;
@@ -1770,7 +1764,7 @@ impl ThingsMcpServer {
             .unwrap_or(true);
 
         // Get current data for analysis
-        let db = self.db.lock().await;
+        let db = &self.db;
         let inbox_tasks = db.get_inbox(None).map_err(|e| {
             McpError::database_operation_failed("get_inbox for productivity_analysis", e)
         })?;
@@ -1878,7 +1872,7 @@ impl ThingsMcpServer {
             .unwrap_or("hybrid");
 
         // Get current data for context
-        let db = self.db.lock().await;
+        let db = &self.db;
         let projects = db.get_projects(None).map_err(|e| {
             McpError::database_operation_failed("get_projects for backup_strategy", e)
         })?;
@@ -1993,7 +1987,7 @@ impl ThingsMcpServer {
     ) -> McpResult<ReadResourceResult> {
         let uri = &request.uri;
 
-        let db = self.db.lock().await;
+        let db = &self.db;
         let data = match uri.as_str() {
             "things://inbox" => {
                 let tasks = db.get_inbox(None).map_err(|e| {

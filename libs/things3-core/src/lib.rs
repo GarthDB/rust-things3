@@ -13,6 +13,7 @@ pub mod models;
 pub mod observability;
 pub mod performance;
 pub mod query;
+pub mod sqlx_database;
 
 #[cfg(any(test, feature = "test-utils"))]
 pub mod test_utils;
@@ -29,6 +30,7 @@ pub use observability::{
     ThingsMetrics,
 };
 pub use performance::{OperationMetrics, PerformanceMonitor, PerformanceStats, PerformanceSummary};
+pub use sqlx_database::{DatabaseStats, SqlxThingsDatabase};
 
 /// Re-export commonly used types
 pub use chrono::{DateTime, NaiveDate, Utc};

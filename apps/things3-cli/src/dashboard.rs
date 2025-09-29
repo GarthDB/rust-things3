@@ -13,8 +13,7 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
-use things3_core::{HealthStatus, ObservabilityManager, ThingsDatabase};
-use crate::thread_safe_db::ThreadSafeDatabase;
+use things3_core::{HealthStatus, ObservabilityManager, SqlxThingsDatabase};
 use tokio::net::TcpListener;
 // Removed unused import
 use tower_http::cors::CorsLayer;
@@ -24,7 +23,7 @@ use tracing::{info, instrument};
 #[derive(Clone)]
 pub struct DashboardState {
     pub observability: Arc<ObservabilityManager>,
-    pub database: ThreadSafeDatabase,
+    pub database: Arc<SqlxThingsDatabase>,
 }
 
 /// Dashboard metrics
@@ -81,10 +80,10 @@ pub struct DashboardServer {
 
 impl DashboardServer {
     /// Create a new dashboard server
-    pub fn new(port: u16, observability: Arc<ObservabilityManager>, database: Arc<ThingsDatabase>) -> Self {
+    pub fn new(port: u16, observability: Arc<ObservabilityManager>, database: Arc<SqlxThingsDatabase>) -> Self {
         let state = DashboardState {
             observability,
-            database: ThreadSafeDatabase::new(database),
+            database,
         };
         
         Self { port, state }
@@ -247,7 +246,7 @@ pub struct SystemInfo {
 pub async fn start_dashboard_server(
     port: u16,
     observability: Arc<ObservabilityManager>,
-    database: Arc<ThingsDatabase>,
+    database: Arc<SqlxThingsDatabase>,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let server = DashboardServer::new(port, observability, database);
     server.start().await
