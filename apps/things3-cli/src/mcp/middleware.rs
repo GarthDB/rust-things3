@@ -587,7 +587,7 @@ impl AuthenticationMiddleware {
     }
 
     /// Extract API key from request headers or arguments
-    fn extract_api_key(&self, request: &CallToolRequest) -> Option<String> {
+    fn extract_api_key(request: &CallToolRequest) -> Option<String> {
         // Check if API key is in request arguments
         if let Some(args) = &request.arguments {
             if let Some(api_key) = args.get("api_key").and_then(|v| v.as_str()) {
@@ -598,7 +598,7 @@ impl AuthenticationMiddleware {
     }
 
     /// Extract JWT token from request headers or arguments
-    fn extract_jwt_token(&self, request: &CallToolRequest) -> Option<String> {
+    fn extract_jwt_token(request: &CallToolRequest) -> Option<String> {
         // Check if JWT token is in request arguments
         if let Some(args) = &request.arguments {
             if let Some(token) = args.get("jwt_token").and_then(|v| v.as_str()) {
@@ -625,7 +625,7 @@ impl AuthenticationMiddleware {
             .map_err(|_| McpError::validation_error("Invalid JWT token"))?;
 
         // Check if token is expired
-        let now = chrono::Utc::now().timestamp() as usize;
+        let now = chrono::Utc::now().timestamp().try_into().unwrap_or(0);
         if token_data.claims.exp < now {
             return Err(McpError::validation_error("JWT token has expired"));
         }
@@ -634,8 +634,13 @@ impl AuthenticationMiddleware {
     }
 
     /// Generate JWT token for testing
+    ///
+    /// # Panics
+    /// Panics if JWT encoding fails
     #[cfg(test)]
+    #[must_use]
     pub fn generate_test_jwt(&self, user_id: &str, permissions: Vec<String>) -> String {
+        #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
         let now = chrono::Utc::now().timestamp() as usize;
         let claims = JwtClaims {
             sub: user_id.to_string(),
@@ -671,48 +676,39 @@ impl McpMiddleware for AuthenticationMiddleware {
         }
 
         // Try API key authentication first
-        if let Some(api_key) = self.extract_api_key(request) {
-            match self.validate_api_key(&api_key) {
-                Ok(api_key_info) => {
-                    context.set_metadata(
-                        "auth_type".to_string(),
-                        Value::String("api_key".to_string()),
-                    );
-                    context.set_metadata(
-                        "auth_key_id".to_string(),
-                        Value::String(api_key_info.key_id),
-                    );
-                    context.set_metadata(
-                        "auth_permissions".to_string(),
-                        serde_json::to_value(api_key_info.permissions)
-                            .unwrap_or(Value::Array(vec![])),
-                    );
-                    context.set_metadata("auth_required".to_string(), Value::Bool(true));
-                    return Ok(MiddlewareResult::Continue);
-                }
-                Err(_) => {
-                    // API key failed, try JWT
-                }
+        if let Some(api_key) = Self::extract_api_key(request) {
+            if let Ok(api_key_info) = self.validate_api_key(&api_key) {
+                context.set_metadata(
+                    "auth_type".to_string(),
+                    Value::String("api_key".to_string()),
+                );
+                context.set_metadata(
+                    "auth_key_id".to_string(),
+                    Value::String(api_key_info.key_id),
+                );
+                context.set_metadata(
+                    "auth_permissions".to_string(),
+                    serde_json::to_value(api_key_info.permissions).unwrap_or(Value::Array(vec![])),
+                );
+                context.set_metadata("auth_required".to_string(), Value::Bool(true));
+                return Ok(MiddlewareResult::Continue);
             }
+            // API key failed, try JWT
         }
 
         // Try JWT authentication
-        if let Some(jwt_token) = self.extract_jwt_token(request) {
-            match self.validate_jwt_token(&jwt_token) {
-                Ok(claims) => {
-                    context.set_metadata("auth_type".to_string(), Value::String("jwt".to_string()));
-                    context.set_metadata("auth_user_id".to_string(), Value::String(claims.sub));
-                    context.set_metadata(
-                        "auth_permissions".to_string(),
-                        serde_json::to_value(claims.permissions).unwrap_or(Value::Array(vec![])),
-                    );
-                    context.set_metadata("auth_required".to_string(), Value::Bool(true));
-                    return Ok(MiddlewareResult::Continue);
-                }
-                Err(_) => {
-                    // JWT failed
-                }
+        if let Some(jwt_token) = Self::extract_jwt_token(request) {
+            if let Ok(claims) = self.validate_jwt_token(&jwt_token) {
+                context.set_metadata("auth_type".to_string(), Value::String("jwt".to_string()));
+                context.set_metadata("auth_user_id".to_string(), Value::String(claims.sub));
+                context.set_metadata(
+                    "auth_permissions".to_string(),
+                    serde_json::to_value(claims.permissions).unwrap_or(Value::Array(vec![])),
+                );
+                context.set_metadata("auth_required".to_string(), Value::Bool(true));
+                return Ok(MiddlewareResult::Continue);
             }
+            // JWT failed
         }
 
         // No valid authentication found
@@ -738,6 +734,7 @@ pub struct RateLimitMiddleware {
 
 impl RateLimitMiddleware {
     /// Create a new rate limiting middleware
+    #[must_use]
     pub fn new(requests_per_minute: u32, burst_limit: u32) -> Self {
         let quota = Quota::per_minute(nonzero!(60u32)); // Use a constant for now
         let rate_limiter = Arc::new(RateLimiter::keyed(quota));
@@ -750,34 +747,36 @@ impl RateLimitMiddleware {
     }
 
     /// Create with custom limits
+    #[must_use]
     pub fn with_limits(requests_per_minute: u32, burst_limit: u32) -> Self {
         Self::new(requests_per_minute, burst_limit)
     }
 
     /// Create with default limits (60 requests per minute, burst of 10)
     #[allow(clippy::should_implement_trait)]
+    #[must_use]
     pub fn default() -> Self {
         Self::new(60, 10)
     }
 
     /// Extract client identifier from request
-    fn extract_client_id(&self, request: &CallToolRequest, context: &MiddlewareContext) -> String {
+    fn extract_client_id(request: &CallToolRequest, context: &MiddlewareContext) -> String {
         // Try to get from authentication context first
         if let Some(auth_key_id) = context.get_metadata("auth_key_id").and_then(|v| v.as_str()) {
-            return format!("api_key:{}", auth_key_id);
+            return format!("api_key:{auth_key_id}");
         }
 
         if let Some(auth_user_id) = context
             .get_metadata("auth_user_id")
             .and_then(|v| v.as_str())
         {
-            return format!("jwt:{}", auth_user_id);
+            return format!("jwt:{auth_user_id}");
         }
 
         // Fallback to request-based identifier
         if let Some(args) = &request.arguments {
             if let Some(client_id) = args.get("client_id").and_then(|v| v.as_str()) {
-                return format!("client:{}", client_id);
+                return format!("client:{client_id}");
             }
         }
 
@@ -813,7 +812,7 @@ impl McpMiddleware for RateLimitMiddleware {
         request: &CallToolRequest,
         context: &mut MiddlewareContext,
     ) -> McpResult<MiddlewareResult> {
-        let client_id = self.extract_client_id(request, context);
+        let client_id = Self::extract_client_id(request, context);
 
         if !self.check_rate_limit(&client_id) {
             let error_result = CallToolResult {
@@ -1451,12 +1450,6 @@ mod tests {
 
     #[tokio::test]
     async fn test_middleware_chain_execution_with_stop() {
-        let chain = MiddlewareChain::new().add_middleware(LoggingMiddleware::new(LogLevel::Info));
-        let request = CallToolRequest {
-            name: "test_tool".to_string(),
-            arguments: None,
-        };
-
         // Create a middleware that stops execution
         struct StopMiddleware;
         #[async_trait::async_trait]
@@ -1497,6 +1490,12 @@ mod tests {
             }
         }
 
+        let chain = MiddlewareChain::new().add_middleware(LoggingMiddleware::new(LogLevel::Info));
+        let request = CallToolRequest {
+            name: "test_tool".to_string(),
+            arguments: None,
+        };
+
         let chain = chain.add_middleware(StopMiddleware);
 
         let result = chain
@@ -1518,12 +1517,6 @@ mod tests {
 
     #[tokio::test]
     async fn test_middleware_chain_execution_with_middleware_error() {
-        let chain = MiddlewareChain::new().add_middleware(LoggingMiddleware::new(LogLevel::Info));
-        let request = CallToolRequest {
-            name: "test_tool".to_string(),
-            arguments: None,
-        };
-
         // Create a middleware that returns an error
         struct ErrorMiddleware;
         #[async_trait::async_trait]
@@ -1559,6 +1552,12 @@ mod tests {
             }
         }
 
+        let chain = MiddlewareChain::new().add_middleware(LoggingMiddleware::new(LogLevel::Info));
+        let request = CallToolRequest {
+            name: "test_tool".to_string(),
+            arguments: None,
+        };
+
         let chain = chain.add_middleware(ErrorMiddleware);
 
         let result = chain
@@ -1579,12 +1578,6 @@ mod tests {
 
     #[tokio::test]
     async fn test_middleware_chain_execution_with_on_error() {
-        let chain = MiddlewareChain::new().add_middleware(LoggingMiddleware::new(LogLevel::Info));
-        let request = CallToolRequest {
-            name: "test_tool".to_string(),
-            arguments: None,
-        };
-
         // Create a middleware that handles errors
         struct ErrorHandlerMiddleware;
         #[async_trait::async_trait]
@@ -1624,6 +1617,12 @@ mod tests {
                 }))
             }
         }
+
+        let chain = MiddlewareChain::new().add_middleware(LoggingMiddleware::new(LogLevel::Info));
+        let request = CallToolRequest {
+            name: "test_tool".to_string(),
+            arguments: None,
+        };
 
         let chain = chain.add_middleware(ErrorHandlerMiddleware);
 

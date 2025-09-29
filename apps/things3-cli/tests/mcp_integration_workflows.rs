@@ -533,7 +533,7 @@ async fn test_stress_workflows() {
         let result = harness
             .call_tool("get_inbox", Some(json!({"limit": 1})))
             .await;
-        assert!(result.is_ok(), "Call {} failed", i);
+        assert!(result.is_ok(), "Call {i} failed");
     }
 
     // Test mixed operation types
@@ -559,8 +559,8 @@ async fn test_stress_workflows() {
     // Check tool results
     for (i, result) in tool_results.iter().enumerate() {
         match result {
-            Ok(tool_result) => assert!(!tool_result.is_error, "Tool call {} failed", i),
-            Err(e) => panic!("Tool operation {} failed: {:?}", i, e),
+            Ok(tool_result) => assert!(!tool_result.is_error, "Tool call {i} failed"),
+            Err(e) => panic!("Tool operation {i} failed: {e:?}"),
         }
     }
 
@@ -569,18 +569,17 @@ async fn test_stress_workflows() {
         match result {
             Ok(resource_result) => assert!(
                 !resource_result.contents.is_empty(),
-                "Resource call {} failed",
-                i
+                "Resource call {i} failed"
             ),
-            Err(e) => panic!("Resource operation {} failed: {:?}", i, e),
+            Err(e) => panic!("Resource operation {i} failed: {e:?}"),
         }
     }
 
     // Check prompt results
     for (i, result) in prompt_results.iter().enumerate() {
         match result {
-            Ok(prompt_result) => assert!(!prompt_result.is_error, "Prompt call {} failed", i),
-            Err(e) => panic!("Prompt operation {} failed: {:?}", i, e),
+            Ok(prompt_result) => assert!(!prompt_result.is_error, "Prompt call {i} failed"),
+            Err(e) => panic!("Prompt operation {i} failed: {e:?}"),
         }
     }
 }

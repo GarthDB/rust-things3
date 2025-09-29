@@ -62,6 +62,7 @@ impl Default for McpPerformanceTestRunner {
 
 impl McpPerformanceTestRunner {
     /// Create a new performance test runner
+    #[must_use]
     pub fn new() -> Self {
         Self {
             harness: McpTestHarness::new(),
@@ -70,6 +71,7 @@ impl McpPerformanceTestRunner {
     }
 
     /// Create a new performance test runner with custom configuration
+    #[must_use]
     pub fn with_config(config: PerformanceTestConfig) -> Self {
         Self {
             harness: McpTestHarness::new(),
@@ -102,16 +104,13 @@ impl McpPerformanceTestRunner {
                     durations.push(duration);
                     success_count += 1;
                 }
-                Ok(Err(_)) => {
-                    failure_count += 1;
-                }
-                Err(_) => {
+                Ok(Err(_)) | Err(_) => {
                     failure_count += 1;
                 }
             }
         }
 
-        self.calculate_results(durations, success_count, failure_count)
+        self.calculate_results(&durations, success_count, failure_count)
     }
 
     /// Run performance tests for resource reads
@@ -131,16 +130,13 @@ impl McpPerformanceTestRunner {
                     durations.push(duration);
                     success_count += 1;
                 }
-                Ok(Err(_)) => {
-                    failure_count += 1;
-                }
-                Err(_) => {
+                Ok(Err(_)) | Err(_) => {
                     failure_count += 1;
                 }
             }
         }
 
-        self.calculate_results(durations, success_count, failure_count)
+        self.calculate_results(&durations, success_count, failure_count)
     }
 
     /// Run performance tests for prompt calls
@@ -168,16 +164,13 @@ impl McpPerformanceTestRunner {
                     durations.push(duration);
                     success_count += 1;
                 }
-                Ok(Err(_)) => {
-                    failure_count += 1;
-                }
-                Err(_) => {
+                Ok(Err(_)) | Err(_) => {
                     failure_count += 1;
                 }
             }
         }
 
-        self.calculate_results(durations, success_count, failure_count)
+        self.calculate_results(&durations, success_count, failure_count)
     }
 
     /// Run concurrent performance tests
@@ -244,6 +237,7 @@ impl McpPerformanceTestRunner {
             total_duration,
             success_count,
             total_operations,
+            #[allow(clippy::cast_precision_loss)]
             operations_per_second: success_count as f64 / total_duration.as_secs_f64(),
         }
     }
@@ -266,9 +260,10 @@ impl McpPerformanceTestRunner {
     }
 
     /// Calculate performance test results
+    #[allow(clippy::cast_precision_loss)]
     fn calculate_results(
         &self,
-        durations: Vec<Duration>,
+        durations: &[Duration],
         success_count: usize,
         failure_count: usize,
     ) -> PerformanceTestResults {
@@ -285,7 +280,7 @@ impl McpPerformanceTestRunner {
         }
 
         let total_duration: Duration = durations.iter().sum();
-        let average_duration = total_duration / durations.len() as u32;
+        let average_duration = total_duration / u32::try_from(durations.len()).unwrap_or(1);
 
         let min_duration = durations.iter().min().copied().unwrap_or(Duration::ZERO);
         let max_duration = durations.iter().max().copied().unwrap_or(Duration::ZERO);
@@ -300,6 +295,7 @@ impl McpPerformanceTestRunner {
             .sum::<f64>()
             / durations.len() as f64;
 
+        #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
         let std_deviation = Duration::from_nanos(variance.sqrt() as u64);
 
         let passed = average_duration <= self.config.max_duration && failure_count == 0;
@@ -336,6 +332,7 @@ pub struct ComprehensivePerformanceResults {
 
 impl ComprehensivePerformanceResults {
     /// Check if all performance tests passed
+    #[must_use]
     pub fn all_passed(&self) -> bool {
         self.tool_performance.passed
             && self.resource_performance.passed
@@ -343,6 +340,8 @@ impl ComprehensivePerformanceResults {
     }
 
     /// Get the overall performance score (0.0 to 1.0)
+    #[must_use]
+    #[allow(clippy::cast_precision_loss)]
     pub fn performance_score(&self) -> f64 {
         let mut score = 0.0;
         let mut count = 0;
@@ -369,7 +368,7 @@ impl ComprehensivePerformanceResults {
         }
 
         if count > 0 {
-            score / count as f64
+            score / f64::from(count)
         } else {
             0.0
         }
@@ -389,6 +388,7 @@ impl Default for MemoryTracker {
 }
 
 impl MemoryTracker {
+    #[must_use]
     pub fn new() -> Self {
         Self {
             initial_memory: None,
@@ -397,12 +397,12 @@ impl MemoryTracker {
     }
 
     pub fn start(&mut self) {
-        self.initial_memory = Some(self.get_current_memory_usage());
+        self.initial_memory = Some(Self::get_current_memory_usage());
         self.peak_memory = self.initial_memory;
     }
 
     pub fn update(&mut self) {
-        let current = self.get_current_memory_usage();
+        let current = Self::get_current_memory_usage();
         if let Some(peak) = self.peak_memory {
             if current > peak {
                 self.peak_memory = Some(current);
@@ -412,12 +412,13 @@ impl MemoryTracker {
         }
     }
 
+    #[must_use]
     pub fn get_memory_usage(&self) -> Option<usize> {
         self.peak_memory
             .and_then(|peak| self.initial_memory.map(|initial| peak - initial))
     }
 
-    fn get_current_memory_usage(&self) -> usize {
+    fn get_current_memory_usage() -> usize {
         // This is a simplified implementation
         // In a real implementation, you might use system-specific APIs
         // or external tools to get accurate memory usage
@@ -438,6 +439,7 @@ impl Default for McpBenchmark {
 }
 
 impl McpBenchmark {
+    #[must_use]
     pub fn new() -> Self {
         Self {
             harness: McpTestHarness::new(),
@@ -445,6 +447,7 @@ impl McpBenchmark {
         }
     }
 
+    #[must_use]
     pub fn with_config(config: PerformanceTestConfig) -> Self {
         Self {
             harness: McpTestHarness::new(),
@@ -453,6 +456,9 @@ impl McpBenchmark {
     }
 
     /// Benchmark a specific tool call
+    ///
+    /// # Panics
+    /// Panics if the tool call fails during benchmarking
     pub async fn benchmark_tool(
         &self,
         tool_name: &str,
@@ -476,15 +482,17 @@ impl McpBenchmark {
             // Ensure the operation succeeded
             assert!(
                 result.is_ok(),
-                "Tool call '{}' failed during benchmark",
-                tool_name
+                "Tool call '{tool_name}' failed during benchmark"
             );
         }
 
-        self.calculate_benchmark_results(durations, memory_tracker)
+        Self::calculate_benchmark_results(&durations, &memory_tracker)
     }
 
     /// Benchmark a specific resource read
+    ///
+    /// # Panics
+    /// Panics if the resource read fails during benchmarking
     pub async fn benchmark_resource(&self, uri: &str) -> BenchmarkResults {
         let mut durations = Vec::new();
         let mut memory_tracker = MemoryTracker::new();
@@ -504,15 +512,17 @@ impl McpBenchmark {
             // Ensure the operation succeeded
             assert!(
                 result.is_ok(),
-                "Resource read '{}' failed during benchmark",
-                uri
+                "Resource read '{uri}' failed during benchmark"
             );
         }
 
-        self.calculate_benchmark_results(durations, memory_tracker)
+        Self::calculate_benchmark_results(&durations, &memory_tracker)
     }
 
     /// Benchmark a specific prompt call
+    ///
+    /// # Panics
+    /// Panics if the prompt call fails during benchmarking
     pub async fn benchmark_prompt(
         &self,
         prompt_name: &str,
@@ -539,31 +549,34 @@ impl McpBenchmark {
             // Ensure the operation succeeded
             assert!(
                 result.is_ok(),
-                "Prompt call '{}' failed during benchmark",
-                prompt_name
+                "Prompt call '{prompt_name}' failed during benchmark"
             );
         }
 
-        self.calculate_benchmark_results(durations, memory_tracker)
+        Self::calculate_benchmark_results(&durations, &memory_tracker)
     }
 
+    #[allow(
+        clippy::cast_precision_loss,
+        clippy::cast_possible_truncation,
+        clippy::cast_sign_loss
+    )]
     fn calculate_benchmark_results(
-        &self,
-        durations: Vec<Duration>,
-        memory_tracker: MemoryTracker,
+        durations: &[Duration],
+        memory_tracker: &MemoryTracker,
     ) -> BenchmarkResults {
         if durations.is_empty() {
             return BenchmarkResults::default();
         }
 
         let total_duration: Duration = durations.iter().sum();
-        let average_duration = total_duration / durations.len() as u32;
+        let average_duration = total_duration / u32::try_from(durations.len()).unwrap_or(1);
 
         let min_duration = durations.iter().min().copied().unwrap_or(Duration::ZERO);
         let max_duration = durations.iter().max().copied().unwrap_or(Duration::ZERO);
 
         // Calculate percentiles
-        let mut sorted_durations = durations.clone();
+        let mut sorted_durations = durations.to_owned();
         sorted_durations.sort();
 
         let p50_index = (sorted_durations.len() * 50) / 100;
@@ -611,6 +624,8 @@ pub struct BenchmarkResults {
 
 impl BenchmarkResults {
     /// Get the operations per second
+    #[must_use]
+    #[allow(clippy::cast_precision_loss)]
     pub fn operations_per_second(&self) -> f64 {
         if self.average_duration.as_nanos() > 0 {
             1_000_000_000.0 / self.average_duration.as_nanos() as f64
@@ -620,6 +635,7 @@ impl BenchmarkResults {
     }
 
     /// Check if the benchmark meets performance requirements
+    #[must_use]
     pub fn meets_requirements(
         &self,
         max_average_duration: Duration,

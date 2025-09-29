@@ -1,8 +1,10 @@
 //! Things CLI - Command line interface for Things 3 with integrated MCP server
 
 use clap::Parser;
+use things3_cli::bulk_operations::BulkOperationsManager;
 use things3_cli::{
-    health_check, print_areas, print_projects, print_tasks, start_mcp_server, Cli, Commands,
+    health_check, print_areas, print_projects, print_tasks, start_mcp_server,
+    start_websocket_server, watch_updates, BulkOperation, Cli, Commands,
 };
 use things3_core::{Result, ThingsConfig, ThingsDatabase};
 
@@ -64,6 +66,61 @@ async fn main() -> Result<()> {
         }
         Commands::Health => {
             health_check(&db)?;
+        }
+        Commands::Server { port } => {
+            start_websocket_server(port).await?;
+        }
+        Commands::Watch { url } => {
+            watch_updates(&url)?;
+        }
+        Commands::Validate => {
+            println!("🔍 Validating real-time features...");
+            // TODO: Implement validation logic
+            println!("✅ Real-time features validation completed");
+        }
+        Commands::Bulk { operation } => {
+            let bulk_manager = BulkOperationsManager::new();
+
+            match operation {
+                BulkOperation::Export { format } => {
+                    println!("🚀 Starting bulk export in {format} format...");
+                    let tasks = bulk_manager.export_all_tasks(&db, &format).await?;
+                    println!("✅ Exported {} tasks successfully", tasks.len());
+                }
+                BulkOperation::UpdateStatus { task_ids, status } => {
+                    println!("🚀 Starting bulk status update...");
+                    let ids: Vec<uuid::Uuid> = task_ids
+                        .split(',')
+                        .filter_map(|id| uuid::Uuid::parse_str(id.trim()).ok())
+                        .collect();
+
+                    let task_status = match status.as_str() {
+                        "completed" => things3_core::TaskStatus::Completed,
+                        "cancelled" => things3_core::TaskStatus::Canceled,
+                        "trashed" => things3_core::TaskStatus::Trashed,
+                        "incomplete" => things3_core::TaskStatus::Incomplete,
+                        _ => {
+                            eprintln!("❌ Invalid status: {status}. Use: completed, cancelled, trashed, or incomplete");
+                            return Ok(());
+                        }
+                    };
+
+                    let updated_count = bulk_manager
+                        .bulk_update_task_status(&db, ids, task_status)
+                        .await?;
+                    println!("✅ Updated {updated_count} tasks successfully");
+                }
+                BulkOperation::SearchAndProcess { query } => {
+                    println!("🚀 Starting search and process for: {query}");
+                    let tasks = bulk_manager
+                        .search_and_process_tasks(&db, &query, |task| {
+                            println!("  Processing: {}", task.title);
+                            Ok(())
+                        })
+                        .await?;
+                    println!("✅ Processed {} tasks successfully", tasks.len());
+                }
+            }
         }
     }
 

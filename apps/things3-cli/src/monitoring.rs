@@ -1,0 +1,331 @@
+//! Monitoring and validation utilities for real-time features
+//! This module provides tools to verify that async functionality works correctly
+
+use crate::events::EventBroadcaster;
+use crate::progress::ProgressManager;
+use std::sync::Arc;
+use std::time::{Duration, Instant};
+use tokio::sync::Mutex;
+
+/// Monitor for tracking async operation health
+pub struct AsyncOperationMonitor {
+    pub operation_name: String,
+    pub start_time: Instant,
+    pub last_update: Arc<Mutex<Option<Instant>>>,
+    pub update_count: Arc<Mutex<u64>>,
+    pub success_count: Arc<Mutex<u64>>,
+    pub error_count: Arc<Mutex<u64>>,
+}
+
+impl AsyncOperationMonitor {
+    /// Create a new monitor
+    pub fn new(operation_name: String) -> Self {
+        Self {
+            operation_name,
+            start_time: Instant::now(),
+            last_update: Arc::new(Mutex::new(None)),
+            update_count: Arc::new(Mutex::new(0)),
+            success_count: Arc::new(Mutex::new(0)),
+            error_count: Arc::new(Mutex::new(0)),
+        }
+    }
+
+    /// Record a successful operation
+    pub async fn record_success(&self) {
+        let mut count = self.success_count.lock().await;
+        *count += 1;
+        self.update_last_seen().await;
+    }
+
+    /// Record an error
+    pub async fn record_error(&self) {
+        let mut count = self.error_count.lock().await;
+        *count += 1;
+        self.update_last_seen().await;
+    }
+
+    /// Record an update
+    pub async fn record_update(&self) {
+        let mut count = self.update_count.lock().await;
+        *count += 1;
+        self.update_last_seen().await;
+    }
+
+    /// Update the last seen timestamp
+    async fn update_last_seen(&self) {
+        let mut last_update = self.last_update.lock().await;
+        *last_update = Some(Instant::now());
+    }
+
+    /// Check if the operation is healthy (has recent activity)
+    pub async fn is_healthy(&self, max_silence: Duration) -> bool {
+        let last_update = self.last_update.lock().await;
+        match *last_update {
+            Some(last) => Instant::now().duration_since(last) < max_silence,
+            None => false,
+        }
+    }
+
+    /// Get operation statistics
+    pub async fn get_stats(&self) -> OperationStats {
+        let update_count = *self.update_count.lock().await;
+        let success_count = *self.success_count.lock().await;
+        let error_count = *self.error_count.lock().await;
+        let duration = self.start_time.elapsed();
+
+        OperationStats {
+            operation_name: self.operation_name.clone(),
+            duration,
+            update_count,
+            success_count,
+            error_count,
+            success_rate: if update_count > 0 {
+                success_count as f64 / update_count as f64
+            } else {
+                0.0
+            },
+        }
+    }
+}
+
+/// Statistics for an async operation
+#[derive(Debug, Clone)]
+pub struct OperationStats {
+    pub operation_name: String,
+    pub duration: Duration,
+    pub update_count: u64,
+    pub success_count: u64,
+    pub error_count: u64,
+    pub success_rate: f64,
+}
+
+/// Validator for real-time features
+pub struct RealtimeFeatureValidator {
+    progress_monitor: Arc<Mutex<Option<Arc<AsyncOperationMonitor>>>>,
+    event_monitor: Arc<Mutex<Option<Arc<AsyncOperationMonitor>>>>,
+    websocket_monitor: Arc<Mutex<Option<Arc<AsyncOperationMonitor>>>>,
+}
+
+impl RealtimeFeatureValidator {
+    /// Create a new validator
+    pub fn new() -> Self {
+        Self {
+            progress_monitor: Arc::new(Mutex::new(None)),
+            event_monitor: Arc::new(Mutex::new(None)),
+            websocket_monitor: Arc::new(Mutex::new(None)),
+        }
+    }
+}
+
+impl Default for RealtimeFeatureValidator {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl RealtimeFeatureValidator {
+    /// Start monitoring progress operations
+    pub async fn start_progress_monitoring(&self, progress_manager: &ProgressManager) {
+        let monitor = AsyncOperationMonitor::new("progress_tracking".to_string());
+        let monitor_arc = Arc::new(monitor);
+
+        // Store the monitor
+        {
+            let mut stored = self.progress_monitor.lock().await;
+            *stored = Some(monitor_arc.clone());
+        }
+
+        // Subscribe to progress updates
+        let mut receiver = progress_manager.subscribe();
+        let monitor_clone = monitor_arc.clone();
+
+        tokio::spawn(async move {
+            while let Ok(update) = receiver.recv().await {
+                monitor_clone.record_update().await;
+
+                match update.status {
+                    crate::progress::ProgressStatus::Completed => {
+                        monitor_clone.record_success().await;
+                    }
+                    crate::progress::ProgressStatus::Failed => {
+                        monitor_clone.record_error().await;
+                    }
+                    _ => {
+                        monitor_clone.record_update().await;
+                    }
+                }
+            }
+        });
+    }
+
+    /// Start monitoring event broadcasting
+    pub async fn start_event_monitoring(&self, event_broadcaster: &EventBroadcaster) {
+        let monitor = AsyncOperationMonitor::new("event_broadcasting".to_string());
+        let monitor_arc = Arc::new(monitor);
+
+        // Store the monitor
+        {
+            let mut stored = self.event_monitor.lock().await;
+            *stored = Some(monitor_arc.clone());
+        }
+
+        // Subscribe to events
+        let mut receiver = event_broadcaster.subscribe_all();
+        let monitor_clone = monitor_arc.clone();
+
+        tokio::spawn(async move {
+            while let Ok(_event) = receiver.recv().await {
+                monitor_clone.record_success().await;
+            }
+        });
+    }
+
+    /// Validate that all monitored features are healthy
+    pub async fn validate_health(&self) -> ValidationResult {
+        let mut results = Vec::new();
+
+        // Check progress monitoring
+        if let Some(monitor) = self.progress_monitor.lock().await.as_ref() {
+            let is_healthy = monitor.is_healthy(Duration::from_secs(30)).await;
+            let stats = monitor.get_stats().await;
+            results.push(FeatureHealth {
+                feature: "progress_tracking".to_string(),
+                is_healthy,
+                stats: Some(stats),
+            });
+        }
+
+        // Check event monitoring
+        if let Some(monitor) = self.event_monitor.lock().await.as_ref() {
+            let is_healthy = monitor.is_healthy(Duration::from_secs(30)).await;
+            let stats = monitor.get_stats().await;
+            results.push(FeatureHealth {
+                feature: "event_broadcasting".to_string(),
+                is_healthy,
+                stats: Some(stats),
+            });
+        }
+
+        // Check WebSocket monitoring
+        if let Some(monitor) = self.websocket_monitor.lock().await.as_ref() {
+            let is_healthy = monitor.is_healthy(Duration::from_secs(30)).await;
+            let stats = monitor.get_stats().await;
+            results.push(FeatureHealth {
+                feature: "websocket_communication".to_string(),
+                is_healthy,
+                stats: Some(stats),
+            });
+        }
+
+        ValidationResult { features: results }
+    }
+}
+
+/// Health status for a feature
+#[derive(Debug, Clone)]
+pub struct FeatureHealth {
+    pub feature: String,
+    pub is_healthy: bool,
+    pub stats: Option<OperationStats>,
+}
+
+/// Result of validation
+#[derive(Debug, Clone)]
+pub struct ValidationResult {
+    pub features: Vec<FeatureHealth>,
+}
+
+impl ValidationResult {
+    /// Check if all features are healthy
+    pub fn all_healthy(&self) -> bool {
+        self.features.iter().all(|f| f.is_healthy)
+    }
+
+    /// Get unhealthy features
+    pub fn unhealthy_features(&self) -> Vec<&FeatureHealth> {
+        self.features.iter().filter(|f| !f.is_healthy).collect()
+    }
+
+    /// Print a summary
+    pub fn print_summary(&self) {
+        println!("🔍 Real-time Feature Health Check");
+        println!("=================================");
+
+        for feature in &self.features {
+            let status = if feature.is_healthy { "✅" } else { "❌" };
+            println!(
+                "{} {}: {}",
+                status,
+                feature.feature,
+                if feature.is_healthy {
+                    "Healthy"
+                } else {
+                    "Unhealthy"
+                }
+            );
+
+            if let Some(stats) = &feature.stats {
+                println!("   Duration: {:?}", stats.duration);
+                println!("   Updates: {}", stats.update_count);
+                println!("   Success Rate: {:.2}%", stats.success_rate * 100.0);
+            }
+        }
+
+        if self.all_healthy() {
+            println!("\n🎉 All real-time features are working correctly!");
+        } else {
+            println!("\n⚠️  Some features need attention:");
+            for feature in self.unhealthy_features() {
+                println!("   - {}", feature.feature);
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_async_operation_monitor() {
+        let monitor = AsyncOperationMonitor::new("test_operation".to_string());
+
+        // Initially should not be healthy (no activity)
+        assert!(!monitor.is_healthy(Duration::from_secs(1)).await);
+
+        // Record some activity
+        monitor.record_success().await;
+        monitor.record_update().await;
+
+        // Should now be healthy
+        assert!(monitor.is_healthy(Duration::from_secs(1)).await);
+
+        // Check stats
+        let stats = monitor.get_stats().await;
+        assert_eq!(stats.operation_name, "test_operation");
+        assert_eq!(stats.success_count, 1);
+        assert_eq!(stats.update_count, 1);
+        assert_eq!(stats.success_rate, 1.0);
+    }
+
+    #[tokio::test]
+    async fn test_validation_result() {
+        let result = ValidationResult {
+            features: vec![
+                FeatureHealth {
+                    feature: "test1".to_string(),
+                    is_healthy: true,
+                    stats: None,
+                },
+                FeatureHealth {
+                    feature: "test2".to_string(),
+                    is_healthy: false,
+                    stats: None,
+                },
+            ],
+        };
+
+        assert!(!result.all_healthy());
+        assert_eq!(result.unhealthy_features().len(), 1);
+    }
+}

@@ -1,10 +1,18 @@
 //! Things CLI library
 
+pub mod bulk_operations;
+pub mod events;
 pub mod mcp;
+pub mod monitoring;
+pub mod progress;
+pub mod websocket;
 
+use crate::events::EventBroadcaster;
+use crate::websocket::WebSocketServer;
 use clap::{Parser, Subcommand};
 use std::io::Write;
 use std::path::PathBuf;
+use std::sync::Arc;
 use things3_core::{Result, ThingsConfig, ThingsDatabase};
 
 #[derive(Parser, Debug)]
@@ -69,6 +77,47 @@ pub enum Commands {
     Mcp,
     /// Health check
     Health,
+    /// Start WebSocket server for real-time updates
+    Server {
+        /// Port to listen on
+        #[arg(long, short, default_value = "8080")]
+        port: u16,
+    },
+    /// Watch for real-time updates
+    Watch {
+        /// WebSocket server URL
+        #[arg(long, short, default_value = "ws://127.0.0.1:8080")]
+        url: String,
+    },
+    /// Validate real-time features health
+    Validate,
+    /// Bulk operations with progress tracking
+    Bulk {
+        #[command(subcommand)]
+        operation: BulkOperation,
+    },
+}
+
+#[derive(Subcommand, Debug, PartialEq, Eq)]
+pub enum BulkOperation {
+    /// Export all tasks with progress tracking
+    Export {
+        /// Export format (json, csv, xml)
+        #[arg(long, short, default_value = "json")]
+        format: String,
+    },
+    /// Update multiple tasks status
+    UpdateStatus {
+        /// Task IDs to update (comma-separated)
+        task_ids: String,
+        /// New status (completed, cancelled, trashed, incomplete)
+        status: String,
+    },
+    /// Search and process tasks
+    SearchAndProcess {
+        /// Search query
+        query: String,
+    },
 }
 
 /// Print tasks to the given writer
@@ -198,6 +247,40 @@ pub fn start_mcp_server(db: ThingsDatabase, config: ThingsConfig) -> Result<()> 
     // For now, we'll just print that it would start
     println!("✅ MCP server would start here");
     println!("   (This is a placeholder - actual MCP server implementation would go here)");
+
+    Ok(())
+}
+
+/// Start the WebSocket server for real-time updates
+///
+/// # Errors
+/// Returns an error if the server fails to start
+pub async fn start_websocket_server(port: u16) -> Result<()> {
+    println!("🚀 Starting WebSocket server on port {port}...");
+
+    let server = WebSocketServer::new(port);
+    let _event_broadcaster = Arc::new(EventBroadcaster::new());
+
+    // Start the server
+    server
+        .start()
+        .await
+        .map_err(|e| things3_core::ThingsError::unknown(e.to_string()))?;
+
+    Ok(())
+}
+
+/// Watch for real-time updates via WebSocket
+///
+/// # Errors
+/// Returns an error if the connection fails
+pub fn watch_updates(url: &str) -> Result<()> {
+    println!("👀 Connecting to WebSocket server at {url}...");
+
+    // In a real implementation, this would connect to the WebSocket server
+    // For now, we'll just print that it would connect
+    println!("✅ Would connect to WebSocket server");
+    println!("   (This is a placeholder - actual WebSocket client implementation would go here)");
 
     Ok(())
 }

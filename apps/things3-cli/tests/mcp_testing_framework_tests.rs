@@ -539,7 +539,7 @@ async fn test_mcp_test_harness_concurrent_operations() {
             Ok(_) => {
                 // Tool results are already handled by the harness
             }
-            Err(e) => panic!("Concurrent tool operation failed: {:?}", e),
+            Err(e) => panic!("Concurrent tool operation failed: {e:?}"),
         }
     }
 
@@ -549,7 +549,7 @@ async fn test_mcp_test_harness_concurrent_operations() {
             Ok(_) => {
                 // Resource results are already handled by the harness
             }
-            Err(e) => panic!("Concurrent resource operation failed: {:?}", e),
+            Err(e) => panic!("Concurrent resource operation failed: {e:?}"),
         }
     }
 
@@ -559,7 +559,7 @@ async fn test_mcp_test_harness_concurrent_operations() {
             Ok(_) => {
                 // Prompt results are already handled by the harness
             }
-            Err(e) => panic!("Concurrent prompt operation failed: {:?}", e),
+            Err(e) => panic!("Concurrent prompt operation failed: {e:?}"),
         }
     }
 }
