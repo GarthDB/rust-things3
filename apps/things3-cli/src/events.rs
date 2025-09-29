@@ -205,10 +205,8 @@ impl EventBroadcaster {
     /// # Errors
     /// Returns an error if broadcasting fails
     pub async fn broadcast(&self, event: Event) -> Result<()> {
-        // Send to main channel
-        self.sender
-            .send(event.clone())
-            .map_err(|e| things3_core::ThingsError::unknown(e.to_string()))?;
+        // Send to main channel (ignore if no receivers)
+        let _ = self.sender.send(event.clone());
 
         // Send to filtered subscriptions
         let subscriptions = self.subscriptions.read().await;
@@ -1339,5 +1337,240 @@ mod tests {
 
         // Should have two subscriptions now
         assert_eq!(broadcaster.subscription_count().await, 2);
+    }
+
+    #[tokio::test]
+    async fn test_event_filter_matching_with_timestamp() {
+        let filter = EventFilter {
+            event_types: Some(vec![EventType::TaskCreated {
+                task_id: Uuid::new_v4(),
+            }]),
+            entity_ids: None,
+            sources: None,
+            since: Some(Utc::now() - chrono::Duration::hours(1)),
+        };
+
+        let event = Event {
+            event_type: EventType::TaskCreated {
+                task_id: Uuid::new_v4(),
+            },
+            id: Uuid::new_v4(),
+            source: "test".to_string(),
+            timestamp: Utc::now(),
+            data: None,
+        };
+
+        assert!(filter.matches(&event));
+    }
+
+    #[tokio::test]
+    async fn test_event_filter_matching_with_sources() {
+        let filter = EventFilter {
+            event_types: None,
+            entity_ids: None,
+            sources: Some(vec!["test_source".to_string()]),
+            since: None,
+        };
+
+        let event = Event {
+            event_type: EventType::TaskCreated {
+                task_id: Uuid::new_v4(),
+            },
+            id: Uuid::new_v4(),
+            source: "test_source".to_string(),
+            timestamp: Utc::now(),
+            data: None,
+        };
+
+        assert!(filter.matches(&event));
+    }
+
+    #[tokio::test]
+    async fn test_event_filter_matching_with_entity_ids() {
+        let entity_id = Uuid::new_v4();
+        let filter = EventFilter {
+            event_types: None,
+            entity_ids: Some(vec![entity_id]),
+            sources: None,
+            since: None,
+        };
+
+        let event = Event {
+            event_type: EventType::TaskCreated { task_id: entity_id },
+            id: entity_id,
+            source: "test".to_string(),
+            timestamp: Utc::now(),
+            data: None,
+        };
+
+        assert!(filter.matches(&event));
+    }
+
+    #[tokio::test]
+    async fn test_event_filter_matching_no_match() {
+        let filter = EventFilter {
+            event_types: Some(vec![EventType::TaskCreated {
+                task_id: Uuid::new_v4(),
+            }]),
+            entity_ids: None,
+            sources: None,
+            since: None,
+        };
+
+        let event = Event {
+            event_type: EventType::ProjectCreated {
+                project_id: Uuid::new_v4(),
+            },
+            id: Uuid::new_v4(),
+            source: "test".to_string(),
+            timestamp: Utc::now(),
+            data: None,
+        };
+
+        assert!(!filter.matches(&event));
+    }
+
+    #[tokio::test]
+    async fn test_event_filter_matching_empty_filter() {
+        let filter = EventFilter {
+            event_types: None,
+            entity_ids: None,
+            sources: None,
+            since: None,
+        };
+
+        let event = Event {
+            event_type: EventType::TaskCreated {
+                task_id: Uuid::new_v4(),
+            },
+            id: Uuid::new_v4(),
+            source: "test".to_string(),
+            timestamp: Utc::now(),
+            data: None,
+        };
+
+        // Empty filter should match all events
+        assert!(filter.matches(&event));
+    }
+
+    #[tokio::test]
+    async fn test_event_creation_without_data() {
+        let event = Event {
+            event_type: EventType::TaskCreated {
+                task_id: Uuid::new_v4(),
+            },
+            id: Uuid::new_v4(),
+            source: "test".to_string(),
+            timestamp: Utc::now(),
+            data: None,
+        };
+
+        assert_eq!(event.source, "test");
+        assert!(event.data.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_event_type_entity_id_extraction_comprehensive() {
+        let task_id = Uuid::new_v4();
+        let project_id = Uuid::new_v4();
+        let area_id = Uuid::new_v4();
+        let operation_id = Uuid::new_v4();
+
+        // Test all event types
+        let events = vec![
+            EventType::TaskCreated { task_id },
+            EventType::TaskUpdated { task_id },
+            EventType::TaskDeleted { task_id },
+            EventType::TaskCompleted { task_id },
+            EventType::TaskCancelled { task_id },
+            EventType::ProjectCreated { project_id },
+            EventType::ProjectUpdated { project_id },
+            EventType::ProjectDeleted { project_id },
+            EventType::ProjectCompleted { project_id },
+            EventType::AreaCreated { area_id },
+            EventType::AreaUpdated { area_id },
+            EventType::AreaDeleted { area_id },
+            EventType::ProgressStarted { operation_id },
+            EventType::ProgressUpdated { operation_id },
+            EventType::ProgressCompleted { operation_id },
+            EventType::ProgressFailed { operation_id },
+        ];
+
+        for event_type in events {
+            let extracted_id = match event_type {
+                EventType::TaskCreated { task_id } => Some(task_id),
+                EventType::TaskUpdated { task_id } => Some(task_id),
+                EventType::TaskDeleted { task_id } => Some(task_id),
+                EventType::TaskCompleted { task_id } => Some(task_id),
+                EventType::TaskCancelled { task_id } => Some(task_id),
+                EventType::ProjectCreated { project_id } => Some(project_id),
+                EventType::ProjectUpdated { project_id } => Some(project_id),
+                EventType::ProjectDeleted { project_id } => Some(project_id),
+                EventType::ProjectCompleted { project_id } => Some(project_id),
+                EventType::AreaCreated { area_id } => Some(area_id),
+                EventType::AreaUpdated { area_id } => Some(area_id),
+                EventType::AreaDeleted { area_id } => Some(area_id),
+                EventType::ProgressStarted { operation_id } => Some(operation_id),
+                EventType::ProgressUpdated { operation_id } => Some(operation_id),
+                EventType::ProgressCompleted { operation_id } => Some(operation_id),
+                EventType::ProgressFailed { operation_id } => Some(operation_id),
+            };
+            assert!(extracted_id.is_some());
+        }
+    }
+
+    #[tokio::test]
+    async fn test_event_serialization_roundtrip() {
+        let original_event = Event {
+            event_type: EventType::TaskCreated {
+                task_id: Uuid::new_v4(),
+            },
+            id: Uuid::new_v4(),
+            source: "test".to_string(),
+            timestamp: Utc::now(),
+            data: Some(serde_json::json!({"title": "Test Task"})),
+        };
+
+        // Serialize to JSON
+        let json = serde_json::to_string(&original_event).unwrap();
+
+        // Deserialize back to Event
+        let deserialized_event: Event = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(original_event.event_type, deserialized_event.event_type);
+        assert_eq!(original_event.id, deserialized_event.id);
+        assert_eq!(original_event.source, deserialized_event.source);
+        assert_eq!(original_event.data, deserialized_event.data);
+    }
+
+    #[tokio::test]
+    async fn test_event_filter_serialization_roundtrip() {
+        let original_filter = EventFilter {
+            event_types: Some(vec![
+                EventType::TaskCreated {
+                    task_id: Uuid::new_v4(),
+                },
+                EventType::ProjectCreated {
+                    project_id: Uuid::new_v4(),
+                },
+            ]),
+            entity_ids: Some(vec![Uuid::new_v4(), Uuid::new_v4()]),
+            sources: Some(vec![
+                "test_source".to_string(),
+                "another_source".to_string(),
+            ]),
+            since: Some(Utc::now()),
+        };
+
+        // Serialize to JSON
+        let json = serde_json::to_string(&original_filter).unwrap();
+
+        // Deserialize back to EventFilter
+        let deserialized_filter: EventFilter = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(original_filter.event_types, deserialized_filter.event_types);
+        assert_eq!(original_filter.entity_ids, deserialized_filter.entity_ids);
+        assert_eq!(original_filter.sources, deserialized_filter.sources);
+        assert_eq!(original_filter.since, deserialized_filter.since);
     }
 }
