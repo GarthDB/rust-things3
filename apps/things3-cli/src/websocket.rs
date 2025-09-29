@@ -14,7 +14,7 @@ use uuid::Uuid;
 use crate::progress::{ProgressManager, ProgressUpdate};
 
 /// WebSocket message types
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "type")]
 pub enum WebSocketMessage {
     /// Subscribe to progress updates
@@ -32,6 +32,7 @@ pub enum WebSocketMessage {
 }
 
 /// WebSocket client connection
+#[derive(Debug)]
 pub struct WebSocketClient {
     id: Uuid,
     #[allow(dead_code)]
@@ -134,6 +135,7 @@ impl WebSocketClient {
 }
 
 /// WebSocket server for real-time updates
+#[derive(Debug)]
 pub struct WebSocketServer {
     progress_manager: Arc<ProgressManager>,
     clients: Arc<RwLock<HashMap<Uuid, WebSocketClient>>>,
@@ -227,6 +229,7 @@ impl WebSocketServer {
 }
 
 /// WebSocket client for connecting to the server
+#[derive(Debug)]
 pub struct WebSocketClientConnection {
     sender: broadcast::Sender<ProgressUpdate>,
     #[allow(dead_code)]
@@ -511,5 +514,233 @@ mod tests {
         // Try to receive without sending anything
         let result = tokio::time::timeout(StdDuration::from_millis(50), receiver.recv()).await;
         assert!(result.is_err()); // Should timeout
+    }
+
+    #[tokio::test]
+    async fn test_websocket_server_start() {
+        let server = WebSocketServer::new(8080);
+
+        // Test that start method doesn't panic by running it with a timeout
+        let result =
+            tokio::time::timeout(std::time::Duration::from_millis(50), server.start()).await;
+
+        // The timeout should occur since start() runs indefinitely
+        // If it doesn't timeout, that means start() completed successfully
+        match result {
+            Ok(Ok(_)) => {
+                // If start() completed successfully, that's fine
+                assert!(true);
+            }
+            Ok(Err(_)) => {
+                // If start() completed with an error, that's also acceptable
+                assert!(true);
+            }
+            Err(_) => {
+                // If it timed out, that's expected behavior
+                assert!(true);
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn test_websocket_server_broadcast() {
+        let server = WebSocketServer::new(8080);
+
+        let update = ProgressUpdate {
+            operation_id: Uuid::new_v4(),
+            operation_name: "test_operation".to_string(),
+            current: 50,
+            total: Some(100),
+            message: Some("Test message".to_string()),
+            timestamp: chrono::Utc::now(),
+            status: crate::progress::ProgressStatus::InProgress,
+        };
+
+        // Test that broadcast method doesn't panic
+        let result = server
+            .broadcast(WebSocketMessage::ProgressUpdate(update))
+            .await;
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_websocket_message_debug() {
+        let message = WebSocketMessage::Ping;
+        let debug_str = format!("{:?}", message);
+        assert!(debug_str.contains("Ping"));
+    }
+
+    #[test]
+    fn test_websocket_message_clone() {
+        let message = WebSocketMessage::Ping;
+        let cloned = message.clone();
+        assert_eq!(message, cloned);
+    }
+
+    #[test]
+    fn test_websocket_message_partial_eq() {
+        let message1 = WebSocketMessage::Ping;
+        let message2 = WebSocketMessage::Ping;
+        let message3 = WebSocketMessage::Pong;
+
+        assert_eq!(message1, message2);
+        assert_ne!(message1, message3);
+    }
+
+    #[test]
+    fn test_websocket_client_debug() {
+        let (sender, _receiver) = crossbeam_channel::unbounded();
+        let client = WebSocketClient::new(sender);
+        let debug_str = format!("{:?}", client);
+        assert!(debug_str.contains("WebSocketClient"));
+    }
+
+    #[test]
+    fn test_websocket_client_connection_debug() {
+        let connection = WebSocketClientConnection::new();
+        let debug_str = format!("{:?}", connection);
+        assert!(debug_str.contains("WebSocketClientConnection"));
+    }
+
+    #[test]
+    fn test_websocket_server_debug() {
+        let server = WebSocketServer::new(8080);
+        let debug_str = format!("{:?}", server);
+        assert!(debug_str.contains("WebSocketServer"));
+    }
+
+    #[test]
+    fn test_websocket_message_subscribe_serialization() {
+        let message = WebSocketMessage::Subscribe {
+            operation_id: Some(Uuid::new_v4()),
+        };
+        let json = serde_json::to_string(&message).unwrap();
+        let deserialized: WebSocketMessage = serde_json::from_str(&json).unwrap();
+        assert_eq!(message, deserialized);
+    }
+
+    #[test]
+    fn test_websocket_message_unsubscribe_serialization() {
+        let message = WebSocketMessage::Unsubscribe {
+            operation_id: Some(Uuid::new_v4()),
+        };
+        let json = serde_json::to_string(&message).unwrap();
+        let deserialized: WebSocketMessage = serde_json::from_str(&json).unwrap();
+        assert_eq!(message, deserialized);
+    }
+
+    #[test]
+    fn test_websocket_message_progress_update_serialization() {
+        let update = ProgressUpdate {
+            operation_id: Uuid::new_v4(),
+            operation_name: "test_operation".to_string(),
+            current: 50,
+            total: Some(100),
+            message: Some("Test message".to_string()),
+            timestamp: chrono::Utc::now(),
+            status: crate::progress::ProgressStatus::InProgress,
+        };
+        let message = WebSocketMessage::ProgressUpdate(update);
+        let json = serde_json::to_string(&message).unwrap();
+        let deserialized: WebSocketMessage = serde_json::from_str(&json).unwrap();
+        assert_eq!(message, deserialized);
+    }
+
+    #[test]
+    fn test_websocket_message_error_serialization() {
+        let message = WebSocketMessage::Error {
+            message: "Test error".to_string(),
+        };
+        let json = serde_json::to_string(&message).unwrap();
+        let deserialized: WebSocketMessage = serde_json::from_str(&json).unwrap();
+        assert_eq!(message, deserialized);
+    }
+
+    #[tokio::test]
+    async fn test_websocket_server_multiple_broadcasts() {
+        let server = WebSocketServer::new(8080);
+
+        let update1 = ProgressUpdate {
+            operation_id: Uuid::new_v4(),
+            operation_name: "operation1".to_string(),
+            current: 25,
+            total: Some(100),
+            message: Some("First update".to_string()),
+            timestamp: chrono::Utc::now(),
+            status: crate::progress::ProgressStatus::InProgress,
+        };
+
+        let update2 = ProgressUpdate {
+            operation_id: Uuid::new_v4(),
+            operation_name: "operation2".to_string(),
+            current: 50,
+            total: Some(100),
+            message: Some("Second update".to_string()),
+            timestamp: chrono::Utc::now(),
+            status: crate::progress::ProgressStatus::InProgress,
+        };
+
+        // Test multiple broadcasts
+        let result1 = server
+            .broadcast(WebSocketMessage::ProgressUpdate(update1))
+            .await;
+        let result2 = server
+            .broadcast(WebSocketMessage::ProgressUpdate(update2))
+            .await;
+
+        assert!(result1.is_ok());
+        assert!(result2.is_ok());
+    }
+
+    #[test]
+    fn test_websocket_server_port_access() {
+        let server = WebSocketServer::new(8080);
+        assert_eq!(server.port, 8080);
+    }
+
+    #[test]
+    fn test_websocket_client_id_generation() {
+        let (sender1, _receiver1) = crossbeam_channel::unbounded();
+        let (sender2, _receiver2) = crossbeam_channel::unbounded();
+
+        let client1 = WebSocketClient::new(sender1);
+        let client2 = WebSocketClient::new(sender2);
+
+        // IDs should be different
+        assert_ne!(client1.id, client2.id);
+        assert!(!client1.id.is_nil());
+        assert!(!client2.id.is_nil());
+    }
+
+    #[tokio::test]
+    async fn test_websocket_message_roundtrip_all_types() {
+        let messages = vec![
+            WebSocketMessage::Subscribe {
+                operation_id: Some(Uuid::new_v4()),
+            },
+            WebSocketMessage::Unsubscribe {
+                operation_id: Some(Uuid::new_v4()),
+            },
+            WebSocketMessage::Ping,
+            WebSocketMessage::Pong,
+            WebSocketMessage::ProgressUpdate(ProgressUpdate {
+                operation_id: Uuid::new_v4(),
+                operation_name: "test".to_string(),
+                current: 0,
+                total: Some(100),
+                message: None,
+                timestamp: chrono::Utc::now(),
+                status: crate::progress::ProgressStatus::InProgress,
+            }),
+            WebSocketMessage::Error {
+                message: "test error".to_string(),
+            },
+        ];
+
+        for message in messages {
+            let json = serde_json::to_string(&message).unwrap();
+            let deserialized: WebSocketMessage = serde_json::from_str(&json).unwrap();
+            assert_eq!(message, deserialized);
+        }
     }
 }

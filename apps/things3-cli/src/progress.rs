@@ -14,7 +14,7 @@ use tokio::sync::broadcast;
 use uuid::Uuid;
 
 /// Progress update message
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ProgressUpdate {
     pub operation_id: Uuid,
     pub operation_name: String,
@@ -237,7 +237,7 @@ impl ProgressTracker {
 }
 
 /// Progress manager for handling multiple operations
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct ProgressManager {
     sender: Sender<ProgressUpdate>,
     receiver: Receiver<ProgressUpdate>,

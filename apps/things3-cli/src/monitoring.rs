@@ -535,4 +535,223 @@ mod tests {
                                            // Since update_count is 0, success_rate should be 0.0
         assert_eq!(stats.success_rate, 0.0);
     }
+
+    #[tokio::test]
+    async fn test_async_operation_monitor_record_success() {
+        let monitor = AsyncOperationMonitor::new("test_operation".to_string());
+
+        monitor.record_success().await;
+        let stats = monitor.get_stats().await;
+
+        assert_eq!(stats.success_count, 1);
+        assert_eq!(stats.error_count, 0);
+        assert_eq!(stats.update_count, 0);
+        assert_eq!(stats.success_rate, 0.0); // No updates, so 0.0
+    }
+
+    #[tokio::test]
+    async fn test_async_operation_monitor_record_error() {
+        let monitor = AsyncOperationMonitor::new("test_operation".to_string());
+
+        monitor.record_error().await;
+        let stats = monitor.get_stats().await;
+
+        assert_eq!(stats.success_count, 0);
+        assert_eq!(stats.error_count, 1);
+        assert_eq!(stats.update_count, 0);
+        assert_eq!(stats.success_rate, 0.0); // No updates, so 0.0
+    }
+
+    #[tokio::test]
+    async fn test_async_operation_monitor_record_update() {
+        let monitor = AsyncOperationMonitor::new("test_operation".to_string());
+
+        monitor.record_update().await;
+        let stats = monitor.get_stats().await;
+
+        assert_eq!(stats.success_count, 0);
+        assert_eq!(stats.error_count, 0);
+        assert_eq!(stats.update_count, 1);
+        assert_eq!(stats.success_rate, 0.0); // No successes, so 0.0
+    }
+
+    #[tokio::test]
+    async fn test_async_operation_monitor_duration_tracking() {
+        let monitor = AsyncOperationMonitor::new("test_operation".to_string());
+
+        let start = Instant::now();
+        monitor.record_success().await;
+        let duration = start.elapsed();
+
+        let stats = monitor.get_stats().await;
+        assert!(stats.duration >= duration);
+    }
+
+    #[tokio::test]
+    async fn test_realtime_feature_validator_start_progress_monitoring() {
+        let validator = RealtimeFeatureValidator::new();
+        let progress_manager = Arc::new(ProgressManager::new());
+
+        // This should not panic
+        validator.start_progress_monitoring(&progress_manager).await;
+
+        // Verify the monitor was created
+        let progress_monitor = validator.progress_monitor.lock().await;
+        assert!(progress_monitor.is_some());
+    }
+
+    #[tokio::test]
+    async fn test_realtime_feature_validator_start_event_monitoring() {
+        let validator = RealtimeFeatureValidator::new();
+        let event_broadcaster = Arc::new(EventBroadcaster::new());
+
+        // This should not panic
+        validator.start_event_monitoring(&event_broadcaster).await;
+
+        // Verify the monitor was created
+        let event_monitor = validator.event_monitor.lock().await;
+        assert!(event_monitor.is_some());
+    }
+
+    #[test]
+    fn test_operation_stats_clone() {
+        let stats = OperationStats {
+            operation_name: "test_operation".to_string(),
+            duration: Duration::from_secs(5),
+            update_count: 100,
+            success_count: 95,
+            error_count: 5,
+            success_rate: 0.95,
+        };
+
+        let cloned = stats.clone();
+        assert_eq!(stats.operation_name, cloned.operation_name);
+        assert_eq!(stats.duration, cloned.duration);
+        assert_eq!(stats.update_count, cloned.update_count);
+        assert_eq!(stats.success_count, cloned.success_count);
+        assert_eq!(stats.error_count, cloned.error_count);
+        assert_eq!(stats.success_rate, cloned.success_rate);
+    }
+
+    #[test]
+    fn test_operation_stats_debug() {
+        let stats = OperationStats {
+            operation_name: "test_operation".to_string(),
+            duration: Duration::from_secs(5),
+            update_count: 100,
+            success_count: 95,
+            error_count: 5,
+            success_rate: 0.95,
+        };
+
+        let debug_str = format!("{:?}", stats);
+        assert!(debug_str.contains("OperationStats"));
+        assert!(debug_str.contains("test_operation"));
+    }
+
+    #[test]
+    fn test_feature_health_clone() {
+        let stats = OperationStats {
+            operation_name: "test_operation".to_string(),
+            duration: Duration::from_secs(5),
+            update_count: 100,
+            success_count: 95,
+            error_count: 5,
+            success_rate: 0.95,
+        };
+
+        let health = FeatureHealth {
+            feature: "test_feature".to_string(),
+            is_healthy: true,
+            stats: Some(stats),
+        };
+
+        let cloned = health.clone();
+        assert_eq!(health.feature, cloned.feature);
+        assert_eq!(health.is_healthy, cloned.is_healthy);
+        assert!(cloned.stats.is_some());
+    }
+
+    #[test]
+    fn test_feature_health_debug() {
+        let health = FeatureHealth {
+            feature: "test_feature".to_string(),
+            is_healthy: true,
+            stats: None,
+        };
+
+        let debug_str = format!("{:?}", health);
+        assert!(debug_str.contains("FeatureHealth"));
+        assert!(debug_str.contains("test_feature"));
+    }
+
+    #[test]
+    fn test_validation_result_clone() {
+        let result = ValidationResult {
+            features: vec![FeatureHealth {
+                feature: "test_feature".to_string(),
+                is_healthy: true,
+                stats: None,
+            }],
+        };
+
+        let cloned = result.clone();
+        assert_eq!(result.features.len(), cloned.features.len());
+        assert_eq!(result.features[0].feature, cloned.features[0].feature);
+    }
+
+    #[test]
+    fn test_validation_result_debug() {
+        let result = ValidationResult {
+            features: vec![FeatureHealth {
+                feature: "test_feature".to_string(),
+                is_healthy: true,
+                stats: None,
+            }],
+        };
+
+        let debug_str = format!("{:?}", result);
+        assert!(debug_str.contains("ValidationResult"));
+    }
+
+    #[tokio::test]
+    async fn test_async_operation_monitor_zero_operations() {
+        let monitor = AsyncOperationMonitor::new("test_operation".to_string());
+
+        let stats = monitor.get_stats().await;
+        assert_eq!(stats.success_count, 0);
+        assert_eq!(stats.error_count, 0);
+        assert_eq!(stats.update_count, 0);
+        assert_eq!(stats.success_rate, 0.0);
+    }
+
+    #[tokio::test]
+    async fn test_async_operation_monitor_all_success() {
+        let monitor = AsyncOperationMonitor::new("test_operation".to_string());
+
+        for _ in 0..5 {
+            monitor.record_success().await;
+        }
+
+        let stats = monitor.get_stats().await;
+        assert_eq!(stats.success_count, 5);
+        assert_eq!(stats.error_count, 0);
+        assert_eq!(stats.update_count, 0);
+        assert_eq!(stats.success_rate, 0.0); // No updates, so 0.0
+    }
+
+    #[tokio::test]
+    async fn test_async_operation_monitor_all_error() {
+        let monitor = AsyncOperationMonitor::new("test_operation".to_string());
+
+        for _ in 0..5 {
+            monitor.record_error().await;
+        }
+
+        let stats = monitor.get_stats().await;
+        assert_eq!(stats.success_count, 0);
+        assert_eq!(stats.error_count, 5);
+        assert_eq!(stats.update_count, 0);
+        assert_eq!(stats.success_rate, 0.0); // No updates, so 0.0
+    }
 }
