@@ -23,10 +23,6 @@ tasks:
     - benches/**/*.rs
     - tests/**/*.rs
     - Cargo.toml
-    - Cargo.lock
-    - README.md
-    - API.md
-    - TUTORIAL.md
     outputs:
     - "**/*.rs"
   lint:
@@ -37,10 +33,6 @@ tasks:
     - benches/**/*.rs
     - tests/**/*.rs
     - Cargo.toml
-    - Cargo.lock
-    - README.md
-    - API.md
-    - TUTORIAL.md
     outputs: []
   test:
     command: cargo test --all-features
@@ -50,9 +42,6 @@ tasks:
     - benches/**/*.rs
     - tests/**/*.rs
     - Cargo.toml
-    - README.md
-    - API.md
-    - TUTORIAL.md
     deps:
     - lint
   build:
@@ -63,10 +52,6 @@ tasks:
     - benches/**/*.rs
     - tests/**/*.rs
     - Cargo.toml
-    - Cargo.lock
-    - README.md
-    - API.md
-    - TUTORIAL.md
     deps:
     - test
     outputs: []
@@ -79,9 +64,6 @@ tasks:
     - src/**/*.rs
     - src/**/*.md
     - Cargo.toml
-    - README.md
-    - API.md
-    - TUTORIAL.md
   bench:
     command: cargo bench
     inputs:
@@ -90,9 +72,6 @@ tasks:
     - benches/**/*.rs
     - tests/**/*.rs
     - Cargo.toml
-    - README.md
-    - API.md
-    - TUTORIAL.md
     deps:
     - build
   coverage:
@@ -104,9 +83,6 @@ tasks:
     - benches/**/*.rs
     - tests/**/*.rs
     - Cargo.toml
-    - README.md
-    - API.md
-    - TUTORIAL.md
     outputs:
     - lcov.info
     - coverage.json

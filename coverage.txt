@@ -19360,103 +19360,107 @@
   168|      1|    println!("✅ Performance tests complete!");
   169|      1|}
   170|       |
-  171|      5|fn setup_git_hooks() -> Result<()> {
-  172|      5|    println!("🔧 Setting up git hooks...");
+  171|      6|fn setup_git_hooks() -> Result<()> {
+  172|      6|    println!("🔧 Setting up git hooks...");
   173|       |
   174|       |    // Create .git/hooks directory if it doesn't exist
-  175|      5|    let hooks_dir = Path::new(".git/hooks");
-  176|      5|    if !hooks_dir.exists() {
+  175|      6|    let hooks_dir = Path::new(".git/hooks");
+  176|      6|    if !hooks_dir.exists() {
   177|      3|        fs::create_dir_all(hooks_dir)?;
                                                    ^0
-  178|      2|    }
+  178|      3|    }
   179|       |
   180|       |    // Create pre-commit hook
-  181|      5|    let pre_commit_hook = r#"#!/bin/bash
-  182|      5|# Pre-commit hook for Rust Things project
-  183|      5|
-  184|      5|echo "🔍 Running pre-commit checks..."
-  185|      5|
-  186|      5|# Format code
-  187|      5|echo "📝 Formatting code..."
-  188|      5|cargo fmt --all
-  189|      5|if [ $? -ne 0 ]; then
-  190|      5|    echo "❌ Code formatting failed"
-  191|      5|    exit 1
-  192|      5|fi
-  193|      5|
-  194|      5|# Run clippy with pedantic lints
-  195|      5|echo "🔍 Running clippy..."
-  196|      5|cargo clippy --all-targets --all-features -- -D warnings -D clippy::pedantic -A clippy::missing_docs_in_private_items -A clippy::module_name_repetitions
-  197|      5|if [ $? -ne 0 ]; then
-  198|      5|    echo "❌ Clippy checks failed"
-  199|      5|    exit 1
-  200|      5|fi
-  201|      5|
-  202|      5|# Run tests
-  203|      5|echo "🧪 Running tests..."
-  204|      5|cargo test --all-features
-  205|      5|if [ $? -ne 0 ]; then
-  206|      5|    echo "❌ Tests failed"
-  207|      5|    exit 1
-  208|      5|fi
-  209|      5|
-  210|      5|echo "✅ All pre-commit checks passed!"
-  211|      5|"#;
+  181|      6|    let pre_commit_hook = r#"#!/bin/bash
+  182|      6|# Pre-commit hook for Rust Things project
+  183|      6|
+  184|      6|echo "🔍 Running pre-commit checks..."
+  185|      6|
+  186|      6|# Format code
+  187|      6|echo "📝 Formatting code..."
+  188|      6|cargo fmt --all
+  189|      6|if [ $? -ne 0 ]; then
+  190|      6|    echo "❌ Code formatting failed"
+  191|      6|    exit 1
+  192|      6|fi
+  193|      6|
+  194|      6|# Run clippy with pedantic lints
+  195|      6|echo "🔍 Running clippy..."
+  196|      6|cargo clippy --all-targets --all-features -- -D warnings -D clippy::pedantic -A clippy::missing_docs_in_private_items -A clippy::module_name_repetitions
+  197|      6|if [ $? -ne 0 ]; then
+  198|      6|    echo "❌ Clippy checks failed"
+  199|      6|    exit 1
+  200|      6|fi
+  201|      6|
+  202|      6|# Run tests
+  203|      6|echo "🧪 Running tests..."
+  204|      6|cargo test --all-features
+  205|      6|if [ $? -ne 0 ]; then
+  206|      6|    echo "❌ Tests failed"
+  207|      6|    exit 1
+  208|      6|fi
+  209|      6|
+  210|      6|echo "✅ All pre-commit checks passed!"
+  211|      6|"#;
   212|       |
-  213|      5|    let pre_commit_path = hooks_dir.join("pre-commit");
-  214|      5|    fs::write(&pre_commit_path, pre_commit_hook)?;
-                                                              ^2
+  213|      6|    let pre_commit_path = hooks_dir.join("pre-commit");
+  214|      6|    fs::write(&pre_commit_path, pre_commit_hook)?;
+                                                              ^3
   215|       |
   216|       |    // Make the hook executable
   217|      3|    let mut perms = fs::metadata(&pre_commit_path)?.permissions();
-                      ^0                                          ^0
-  218|      0|    perms.set_mode(0o755);
-  219|      0|    fs::set_permissions(&pre_commit_path, perms)?;
+                      ^2                                        ^1^2
+  218|      2|    perms.set_mode(0o755);
+  219|      2|    fs::set_permissions(&pre_commit_path, perms)?;
+                                                              ^0
   220|       |
   221|       |    // Create pre-push hook
-  222|      0|    let pre_push_hook = r#"#!/bin/bash
-  223|      0|# Pre-push hook for Rust Things project
-  224|      0|
-  225|      0|echo "🔍 Running pre-push checks..."
-  226|      0|
-  227|      0|# Run clippy with pedantic lints
-  228|      0|echo "🔍 Running clippy..."
-  229|      0|cargo clippy --all-targets --all-features -- -D warnings -D clippy::pedantic -A clippy::missing_docs_in_private_items -A clippy::module_name_repetitions
-  230|      0|if [ $? -ne 0 ]; then
-  231|      0|    echo "❌ Clippy checks failed"
-  232|      0|    exit 1
-  233|      0|fi
-  234|      0|
-  235|      0|# Run tests
-  236|      0|echo "🧪 Running tests..."
-  237|      0|cargo test --all-features
-  238|      0|if [ $? -ne 0 ]; then
-  239|      0|    echo "❌ Tests failed"
-  240|      0|    exit 1
-  241|      0|fi
-  242|      0|
-  243|      0|echo "✅ All pre-push checks passed!"
-  244|      0|"#;
+  222|      2|    let pre_push_hook = r#"#!/bin/bash
+  223|      2|# Pre-push hook for Rust Things project
+  224|      2|
+  225|      2|echo "🔍 Running pre-push checks..."
+  226|      2|
+  227|      2|# Run clippy with pedantic lints
+  228|      2|echo "🔍 Running clippy..."
+  229|      2|cargo clippy --all-targets --all-features -- -D warnings -D clippy::pedantic -A clippy::missing_docs_in_private_items -A clippy::module_name_repetitions
+  230|      2|if [ $? -ne 0 ]; then
+  231|      2|    echo "❌ Clippy checks failed"
+  232|      2|    exit 1
+  233|      2|fi
+  234|      2|
+  235|      2|# Run tests
+  236|      2|echo "🧪 Running tests..."
+  237|      2|cargo test --all-features
+  238|      2|if [ $? -ne 0 ]; then
+  239|      2|    echo "❌ Tests failed"
+  240|      2|    exit 1
+  241|      2|fi
+  242|      2|
+  243|      2|echo "✅ All pre-push checks passed!"
+  244|      2|"#;
   245|       |
-  246|      0|    let pre_push_path = hooks_dir.join("pre-push");
-  247|      0|    fs::write(&pre_push_path, pre_push_hook)?;
+  246|      2|    let pre_push_path = hooks_dir.join("pre-push");
+  247|      2|    fs::write(&pre_push_path, pre_push_hook)?;
+                                                          ^0
   248|       |
   249|       |    // Make the hook executable
-  250|      0|    let mut perms = fs::metadata(&pre_push_path)?.permissions();
-  251|      0|    perms.set_mode(0o755);
-  252|      0|    fs::set_permissions(&pre_push_path, perms)?;
+  250|      2|    let mut perms = fs::metadata(&pre_push_path)?.permissions();
+                      ^1                                      ^1^1
+  251|      1|    perms.set_mode(0o755);
+  252|      1|    fs::set_permissions(&pre_push_path, perms)?;
+                                                            ^0
   253|       |
-  254|      0|    println!("✅ Git hooks installed successfully!");
-  255|      0|    println!("📝 Pre-commit hook: .git/hooks/pre-commit");
-  256|      0|    println!("📝 Pre-push hook: .git/hooks/pre-push");
-  257|      0|    println!();
-  258|      0|    println!("The hooks will run:");
-  259|      0|    println!("  • cargo fmt --all");
-  260|      0|    println!("  • cargo clippy --all-targets --all-features -- -D warnings -D clippy::pedantic");
-  261|      0|    println!("  • cargo test --all-features");
+  254|      1|    println!("✅ Git hooks installed successfully!");
+  255|      1|    println!("📝 Pre-commit hook: .git/hooks/pre-commit");
+  256|      1|    println!("📝 Pre-push hook: .git/hooks/pre-push");
+  257|      1|    println!();
+  258|      1|    println!("The hooks will run:");
+  259|      1|    println!("  • cargo fmt --all");
+  260|      1|    println!("  • cargo clippy --all-targets --all-features -- -D warnings -D clippy::pedantic");
+  261|      1|    println!("  • cargo test --all-features");
   262|       |
-  263|      0|    Ok(())
-  264|      5|}
+  263|      1|    Ok(())
+  264|      6|}
   265|       |
   266|       |#[cfg(test)]
   267|       |mod tests {
@@ -19928,27 +19932,28 @@
   714|       |
   715|       |        // Create .git directory
   716|      1|        if let Err(e) = std::fs::create_dir_all(".git/hooks") {
-  717|      1|            println!("Warning: Failed to create .git/hooks directory: {e:?}");
-  718|      1|            return;
-  719|      0|        }
+                                 ^0
+  717|      0|            println!("Warning: Failed to create .git/hooks directory: {e:?}");
+  718|      0|            return;
+  719|      1|        }
   720|       |
   721|       |        // Test the function
-  722|      0|        let result = setup_git_hooks();
-  723|      0|        if result.is_err() {
+  722|      1|        let result = setup_git_hooks();
+  723|      1|        if result.is_err() {
   724|      0|            // If it fails due to permission issues, that's okay for testing
   725|      0|            println!("setup_git_hooks failed (expected in test environment): {result:?}");
   726|      0|        } else {
   727|       |            // Check permissions - only if files exist
-  728|      0|            if std::path::Path::new(".git/hooks/pre-commit").exists() {
-  729|      0|                if let Ok(pre_commit_metadata) = std::fs::metadata(".git/hooks/pre-commit") {
+  728|      1|            if std::path::Path::new(".git/hooks/pre-commit").exists() {
+  729|      1|                if let Ok(pre_commit_metadata) = std::fs::metadata(".git/hooks/pre-commit") {
   730|       |                    // On Unix systems, check that the files are executable
   731|       |                    #[cfg(unix)]
   732|       |                    {
   733|       |                        use std::os::unix::fs::PermissionsExt;
-  734|      0|                        let pre_commit_perms = pre_commit_metadata.permissions();
-  735|      0|                        if pre_commit_perms.mode() & 0o111 == 0 {
+  734|      1|                        let pre_commit_perms = pre_commit_metadata.permissions();
+  735|      1|                        if pre_commit_perms.mode() & 0o111 == 0 {
   736|      0|                            println!("Warning: Pre-commit hook is not executable");
-  737|      0|                        }
+  737|      1|                        }
   738|       |                    }
   739|      0|                } else {
   740|      0|                    println!("Warning: Could not read pre-commit hook metadata");
@@ -19957,16 +19962,16 @@
   743|      0|                println!("Warning: Pre-commit hook file does not exist");
   744|      0|            }
   745|       |
-  746|      0|            if std::path::Path::new(".git/hooks/pre-push").exists() {
-  747|      0|                if let Ok(pre_push_metadata) = std::fs::metadata(".git/hooks/pre-push") {
+  746|      1|            if std::path::Path::new(".git/hooks/pre-push").exists() {
+  747|      1|                if let Ok(pre_push_metadata) = std::fs::metadata(".git/hooks/pre-push") {
   748|       |                    // On Unix systems, check that the files are executable
   749|       |                    #[cfg(unix)]
   750|       |                    {
   751|       |                        use std::os::unix::fs::PermissionsExt;
-  752|      0|                        let pre_push_perms = pre_push_metadata.permissions();
-  753|      0|                        if pre_push_perms.mode() & 0o111 == 0 {
+  752|      1|                        let pre_push_perms = pre_push_metadata.permissions();
+  753|      1|                        if pre_push_perms.mode() & 0o111 == 0 {
   754|      0|                            println!("Warning: Pre-push hook is not executable");
-  755|      0|                        }
+  755|      1|                        }
   756|       |                    }
   757|      0|                } else {
   758|      0|                    println!("Warning: Could not read pre-push hook metadata");
@@ -19977,9 +19982,10 @@
   763|       |        }
   764|       |
   765|       |        // Restore original directory - handle potential errors gracefully
-  766|      0|        if let Err(e) = std::env::set_current_dir(&original_dir) {
+  766|      1|        if let Err(e) = std::env::set_current_dir(&original_dir) {
+                                 ^0
   767|      0|            println!("Warning: Failed to restore original directory: {e:?}");
-  768|      0|        }
+  768|      1|        }
   769|      1|    }
   770|       |
   771|       |    #[test]
@@ -20066,14 +20072,13 @@
   848|       |
   849|       |        // Create .git directory
   850|      1|        if let Err(e) = std::fs::create_dir_all(".git/hooks") {
-                                 ^0
-  851|      0|            println!("Warning: Failed to create .git/hooks directory: {e:?}");
-  852|      0|            return;
-  853|      1|        }
+  851|      1|            println!("Warning: Failed to create .git/hooks directory: {e:?}");
+  852|      1|            return;
+  853|      0|        }
   854|       |
   855|       |        // Test the function
-  856|      1|        let result = setup_git_hooks();
-  857|      1|        if result.is_ok() {
+  856|      0|        let result = setup_git_hooks();
+  857|      0|        if result.is_ok() {
   858|       |            // Test content verification paths - only if files exist
   859|      0|            if std::path::Path::new(".git/hooks/pre-commit").exists() {
   860|      0|                if let Ok(pre_commit_content) = std::fs::read_to_string(".git/hooks/pre-commit") {
@@ -20109,15 +20114,14 @@
   890|      0|            } else {
   891|      0|                println!("Warning: Pre-push hook file does not exist");
   892|      0|            }
-  893|      1|        } else {
-  894|      1|            println!("Warning: setup_git_hooks failed: {result:?}");
-  895|      1|        }
+  893|      0|        } else {
+  894|      0|            println!("Warning: setup_git_hooks failed: {result:?}");
+  895|      0|        }
   896|       |
   897|       |        // Restore original directory - handle potential errors gracefully
-  898|      1|        if let Err(e) = std::env::set_current_dir(&original_dir) {
-                                 ^0
+  898|      0|        if let Err(e) = std::env::set_current_dir(&original_dir) {
   899|      0|            println!("Warning: Failed to restore original directory: {e:?}");
-  900|      1|        }
+  900|      0|        }
   901|      1|    }
   902|       |
   903|       |    #[test]
@@ -20156,9 +20160,9 @@
   933|       |
   934|       |        // Restore original directory - handle potential errors gracefully
   935|      1|        if let Err(e) = std::env::set_current_dir(&original_dir) {
-                                 ^0
-  936|      0|            println!("Warning: Failed to restore original directory: {e:?}");
+  936|      1|            println!("Warning: Failed to restore original directory: {e:?}");
   937|      1|        }
+                      ^0
   938|      1|    }
   939|       |
   940|       |    #[test]
@@ -20182,32 +20186,36 @@
   957|       |
   958|       |        // Create .git directory but make it read-only to force errors
   959|      1|        if let Err(e) = std::fs::create_dir_all(".git/hooks") {
-  960|      1|            println!("Warning: Failed to create .git/hooks directory: {e:?}");
-  961|      1|            return;
-  962|      0|        }
+                                 ^0
+  960|      0|            println!("Warning: Failed to create .git/hooks directory: {e:?}");
+  961|      0|            return;
+  962|      1|        }
   963|       |
   964|       |        // Make the hooks directory read-only (this might not work on all systems)
   965|       |        #[cfg(unix)]
   966|       |        {
   967|       |            use std::os::unix::fs::PermissionsExt;
-  968|      0|            if let Ok(metadata) = std::fs::metadata(".git/hooks") {
-  969|      0|                let mut perms = metadata.permissions();
-  970|      0|                perms.set_mode(0o444); // Read-only
-  971|      0|                let _ = std::fs::set_permissions(".git/hooks", perms);
-  972|      0|            }
+  968|      1|            if let Ok(metadata) = std::fs::metadata(".git/hooks") {
+  969|      1|                let mut perms = metadata.permissions();
+  970|      1|                perms.set_mode(0o444); // Read-only
+  971|      1|                let _ = std::fs::set_permissions(".git/hooks", perms);
+  972|      1|            }
+                          ^0
   973|       |        }
   974|       |
   975|       |        // Test the function - this should trigger error paths
-  976|      0|        let result = setup_git_hooks();
-  977|      0|        if result.is_err() {
-  978|      0|            // This should trigger the error handling paths in the function
-  979|      0|            println!("setup_git_hooks failed as expected: {result:?}");
-  980|      0|        }
+  976|      1|        let result = setup_git_hooks();
+  977|      1|        if result.is_err() {
+  978|      1|            // This should trigger the error handling paths in the function
+  979|      1|            println!("setup_git_hooks failed as expected: {result:?}");
+  980|      1|        }
+                      ^0
   981|       |
   982|       |        // Restore original directory - handle potential errors gracefully
-  983|      0|        if let Err(e) = std::env::set_current_dir(&original_dir) {
+  983|      1|        if let Err(e) = std::env::set_current_dir(&original_dir) {
+                                 ^0
   984|      0|            println!("Warning: Failed to restore original directory: {e:?}");
-  985|      0|        }
+  985|      1|        }
   986|      1|    }
   987|       |
   988|       |    #[test]

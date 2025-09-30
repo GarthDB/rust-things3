@@ -453,6 +453,8 @@ impl LogSearcher {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs;
+    use tempfile::TempDir;
 
     #[test]
     fn test_log_entry_creation() {
@@ -471,6 +473,33 @@ mod tests {
     }
 
     #[test]
+    fn test_log_entry_with_fields() {
+        let mut fields = HashMap::new();
+        fields.insert(
+            "user_id".to_string(),
+            serde_json::Value::String("123".to_string()),
+        );
+        fields.insert(
+            "action".to_string(),
+            serde_json::Value::String("login".to_string()),
+        );
+
+        let entry = LogEntry {
+            timestamp: "2023-01-01T00:00:00Z".to_string(),
+            level: "INFO".to_string(),
+            target: "things3_cli".to_string(),
+            message: "User logged in".to_string(),
+            fields,
+            span_id: Some("span-123".to_string()),
+            trace_id: Some("trace-456".to_string()),
+        };
+
+        assert_eq!(entry.fields.len(), 2);
+        assert_eq!(entry.span_id, Some("span-123".to_string()));
+        assert_eq!(entry.trace_id, Some("trace-456".to_string()));
+    }
+
+    #[test]
     fn test_log_filter_creation() {
         let filter = LogFilter {
             level: Some("ERROR".to_string()),
@@ -484,9 +513,161 @@ mod tests {
     }
 
     #[test]
+    fn test_log_filter_with_all_fields() {
+        let mut fields = HashMap::new();
+        fields.insert(
+            "module".to_string(),
+            serde_json::Value::String("auth".to_string()),
+        );
+
+        let time_range = TimeRange {
+            start: Some("2023-01-01T00:00:00Z".to_string()),
+            end: Some("2023-01-01T23:59:59Z".to_string()),
+        };
+
+        let filter = LogFilter {
+            level: Some("WARN".to_string()),
+            target: Some("things3_cli::auth".to_string()),
+            message_pattern: Some("failed".to_string()),
+            time_range: Some(time_range),
+            fields,
+        };
+
+        assert_eq!(filter.level, Some("WARN".to_string()));
+        assert_eq!(filter.target, Some("things3_cli::auth".to_string()));
+        assert_eq!(filter.message_pattern, Some("failed".to_string()));
+        assert!(filter.time_range.is_some());
+        assert_eq!(filter.fields.len(), 1);
+    }
+
+    #[test]
+    fn test_time_range_creation() {
+        let time_range = TimeRange {
+            start: Some("2023-01-01T00:00:00Z".to_string()),
+            end: Some("2023-01-01T23:59:59Z".to_string()),
+        };
+
+        assert_eq!(time_range.start, Some("2023-01-01T00:00:00Z".to_string()));
+        assert_eq!(time_range.end, Some("2023-01-01T23:59:59Z".to_string()));
+    }
+
+    #[test]
     fn test_log_aggregator_creation() {
         let aggregator = LogAggregator::new("test.log".to_string(), 1000);
         assert_eq!(aggregator.max_entries, 1000);
+        assert_eq!(aggregator.entries.len(), 0);
+    }
+
+    #[test]
+    fn test_log_aggregator_entries_access() {
+        let aggregator = LogAggregator::new("test.log".to_string(), 1000);
+        assert_eq!(aggregator.entries.len(), 0);
+    }
+
+    #[test]
+    fn test_log_aggregator_filter_logs() {
+        let mut aggregator = LogAggregator::new("test.log".to_string(), 1000);
+
+        // Manually add entries to test filtering
+        let entry1 = LogEntry {
+            timestamp: "2023-01-01T00:00:00Z".to_string(),
+            level: "INFO".to_string(),
+            target: "things3_cli".to_string(),
+            message: "Info message".to_string(),
+            fields: HashMap::new(),
+            span_id: None,
+            trace_id: None,
+        };
+
+        let entry2 = LogEntry {
+            timestamp: "2023-01-01T00:00:01Z".to_string(),
+            level: "ERROR".to_string(),
+            target: "things3_cli".to_string(),
+            message: "Error message".to_string(),
+            fields: HashMap::new(),
+            span_id: None,
+            trace_id: None,
+        };
+
+        aggregator.entries.push(entry1);
+        aggregator.entries.push(entry2);
+
+        let filter = LogFilter {
+            level: Some("ERROR".to_string()),
+            target: None,
+            message_pattern: None,
+            time_range: None,
+            fields: HashMap::new(),
+        };
+
+        let filtered = aggregator.filter_logs(&filter);
+        assert_eq!(filtered.len(), 1);
+        assert_eq!(filtered[0].level, "ERROR");
+    }
+
+    #[test]
+    fn test_log_aggregator_filter_by_message_pattern() {
+        let mut aggregator = LogAggregator::new("test.log".to_string(), 1000);
+
+        let entry1 = LogEntry {
+            timestamp: "2023-01-01T00:00:00Z".to_string(),
+            level: "INFO".to_string(),
+            target: "things3_cli".to_string(),
+            message: "User login successful".to_string(),
+            fields: HashMap::new(),
+            span_id: None,
+            trace_id: None,
+        };
+
+        let entry2 = LogEntry {
+            timestamp: "2023-01-01T00:00:01Z".to_string(),
+            level: "INFO".to_string(),
+            target: "things3_cli".to_string(),
+            message: "Database connection failed".to_string(),
+            fields: HashMap::new(),
+            span_id: None,
+            trace_id: None,
+        };
+
+        aggregator.entries.push(entry1);
+        aggregator.entries.push(entry2);
+
+        let filter = LogFilter {
+            level: None,
+            target: None,
+            message_pattern: Some("failed".to_string()),
+            time_range: None,
+            fields: HashMap::new(),
+        };
+
+        let filtered = aggregator.filter_logs(&filter);
+        assert_eq!(filtered.len(), 1);
+        assert!(filtered[0].message.contains("failed"));
+    }
+
+    #[test]
+    fn test_log_aggregator_get_statistics() {
+        let mut aggregator = LogAggregator::new("test.log".to_string(), 1000);
+
+        // Add entries with different levels
+        for i in 0..5 {
+            let level = if i % 2 == 0 { "INFO" } else { "ERROR" };
+            let entry = LogEntry {
+                timestamp: format!("2023-01-01T00:00:0{i}Z"),
+                level: level.to_string(),
+                target: "things3_cli".to_string(),
+                message: format!("Message {i}"),
+                fields: HashMap::new(),
+                span_id: None,
+                trace_id: None,
+            };
+            aggregator.entries.push(entry);
+        }
+
+        let stats = aggregator.get_statistics();
+        assert_eq!(stats.total_entries, 5);
+        assert_eq!(stats.level_counts.get("INFO"), Some(&3));
+        assert_eq!(stats.level_counts.get("ERROR"), Some(&2));
     }
 
     #[test]
@@ -494,5 +675,126 @@ mod tests {
         let rotator = LogRotator::new("test.log".to_string(), 1024 * 1024, 5);
         assert_eq!(rotator.max_size, 1024 * 1024);
         assert_eq!(rotator.max_files, 5);
+    }
+
+    #[test]
+    fn test_log_rotator_should_rotate() {
+        let temp_dir = TempDir::new().unwrap();
+        let log_file = temp_dir.path().join("test.log");
+        let log_file_str = log_file.to_string_lossy().to_string();
+
+        // Create a small test log file
+        fs::write(&log_file, "small content").unwrap();
+
+        let rotator = LogRotator::new(log_file_str.clone(), 100, 5);
+
+        // Should not rotate for small files
+        assert!(!rotator.should_rotate());
+
+        // Create a large test log file
+        let large_content = "x".repeat(200);
+        fs::write(&log_file, large_content).unwrap();
+
+        let rotator_large = LogRotator::new(log_file_str, 100, 5);
+
+        // Should rotate for large files
+        assert!(rotator_large.should_rotate());
+    }
+
+    #[test]
+    fn test_log_rotator_rotate() {
+        let temp_dir = TempDir::new().unwrap();
+        let log_file = temp_dir.path().join("test.log");
+        let log_file_str = log_file.to_string_lossy().to_string();
+
+        // Create a large test log file
+        let large_content = "x".repeat(200);
+        fs::write(&log_file, large_content).unwrap();
+
+        let rotator = LogRotator::new(log_file_str, 100, 5);
+
+        // This should create a rotated file
+        let result = rotator.rotate();
+        assert!(result.is_ok());
+
+        // Check that the original file was renamed
+        let rotated_files: Vec<_> = fs::read_dir(temp_dir.path())
+            .unwrap()
+            .map(|entry| entry.unwrap().file_name())
+            .collect();
+
+        // Should have at least one rotated file
+        assert!(!rotated_files.is_empty());
+    }
+
+    #[test]
+    fn test_logging_error_display() {
+        let error = LoggingError::FileRead("test error".to_string());
+        assert!(error.to_string().contains("Failed to read log file"));
+        assert!(error.to_string().contains("test error"));
+    }
+
+    #[test]
+    fn test_logging_error_variants() {
+        let file_read_error = LoggingError::FileRead("read error".to_string());
+        let file_write_error = LoggingError::FileWrite("write error".to_string());
+        let invalid_format_error = LoggingError::InvalidFormat("format error".to_string());
+        let filter_compilation_error = LoggingError::FilterCompilation("filter error".to_string());
+
+        assert!(matches!(file_read_error, LoggingError::FileRead(_)));
+        assert!(matches!(file_write_error, LoggingError::FileWrite(_)));
+        assert!(matches!(
+            invalid_format_error,
+            LoggingError::InvalidFormat(_)
+        ));
+        assert!(matches!(
+            filter_compilation_error,
+            LoggingError::FilterCompilation(_)
+        ));
+    }
+
+    #[test]
+    fn test_log_aggregator_load_logs_nonexistent_file() {
+        let mut aggregator = LogAggregator::new("nonexistent.log".to_string(), 1000);
+        let result = aggregator.load_logs();
+        assert!(result.is_ok());
+        assert_eq!(aggregator.entries.len(), 0);
+    }
+
+    #[test]
+    fn test_log_aggregator_export_logs() {
+        let temp_dir = TempDir::new().unwrap();
+        let log_file = temp_dir.path().join("test.log");
+        let log_file_str = log_file.to_string_lossy().to_string();
+        let output_file = temp_dir.path().join("exported.log");
+        let output_file_str = output_file.to_string_lossy().to_string();
+
+        let mut aggregator = LogAggregator::new(log_file_str, 1000);
+
+        let entry = LogEntry {
+            timestamp: "2023-01-01T00:00:00Z".to_string(),
+            level: "INFO".to_string(),
+            target: "things3_cli".to_string(),
+            message: "Test message".to_string(),
+            fields: HashMap::new(),
+            span_id: None,
+            trace_id: None,
+        };
+
+        aggregator.entries.push(entry);
+
+        let filter = LogFilter {
+            level: None,
+            target: None,
+            message_pattern: None,
+            time_range: None,
+            fields: HashMap::new(),
+        };
+
+        let result = aggregator.export_logs(&filter, &output_file_str);
+        assert!(result.is_ok());
+
+        // Verify file was created
+        assert!(output_file.exists());
     }
 }

@@ -7,7 +7,6 @@ use things3_core::{
 };
 use uuid::Uuid;
 
-#[cfg(feature = "test-utils")]
 // Helper function to create test schema and data
 #[allow(clippy::too_many_lines)]
 async fn create_test_schema(db: &ThingsDatabase) -> Result<(), Box<dyn std::error::Error>> {
