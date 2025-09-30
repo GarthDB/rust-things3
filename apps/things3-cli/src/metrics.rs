@@ -391,7 +391,7 @@ mod tests {
         let db_path = temp_file.path();
 
         let config = ThingsConfig::new(db_path, false);
-        let database = Arc::new(ThingsDatabase::new(&config.database_path).await.unwrap());
+        let _database = Arc::new(ThingsDatabase::new(&config.database_path).await.unwrap());
 
         let obs_config = ObservabilityConfig::default();
         let observability = Arc::new(ObservabilityManager::new(obs_config).unwrap());
@@ -412,7 +412,7 @@ mod tests {
         let db_path = temp_file.path();
 
         let config = ThingsConfig::new(db_path, false);
-        let database = Arc::new(ThingsDatabase::new(&config.database_path).await.unwrap());
+        let _database = Arc::new(ThingsDatabase::new(&config.database_path).await.unwrap());
 
         let obs_config = ObservabilityConfig::default();
         let observability = Arc::new(ObservabilityManager::new(obs_config).unwrap());
@@ -429,7 +429,7 @@ mod tests {
         let db_path = temp_file.path();
 
         let config = ThingsConfig::new(db_path, false);
-        let database = Arc::new(ThingsDatabase::new(&config.database_path).await.unwrap());
+        let _database = Arc::new(ThingsDatabase::new(&config.database_path).await.unwrap());
 
         let obs_config = ObservabilityConfig::default();
         let observability = Arc::new(ObservabilityManager::new(obs_config).unwrap());
@@ -447,7 +447,7 @@ mod tests {
         let db_path = temp_file.path();
 
         let config = ThingsConfig::new(db_path, false);
-        let database = Arc::new(ThingsDatabase::new(&config.database_path).await.unwrap());
+        let _database = Arc::new(ThingsDatabase::new(&config.database_path).await.unwrap());
 
         let obs_config = ObservabilityConfig::default();
         let observability = Arc::new(ObservabilityManager::new(obs_config).unwrap());
@@ -465,7 +465,7 @@ mod tests {
         let db_path = temp_file.path();
 
         let config = ThingsConfig::new(db_path, false);
-        let database = Arc::new(ThingsDatabase::new(&config.database_path).await.unwrap());
+        let _database = Arc::new(ThingsDatabase::new(&config.database_path).await.unwrap());
 
         let obs_config = ObservabilityConfig::default();
         let observability = Arc::new(ObservabilityManager::new(obs_config).unwrap());
@@ -597,8 +597,10 @@ mod tests {
             rt.block_on(async { ThingsDatabase::new(&config.database_path).await.unwrap() }),
         );
 
-        let mut obs_config = ObservabilityConfig::default();
-        obs_config.service_name = "test-service".to_string();
+        let obs_config = ObservabilityConfig {
+            service_name: "test-service".to_string(),
+            ..Default::default()
+        };
         let observability = Arc::new(ObservabilityManager::new(obs_config).unwrap());
 
         let _monitor = PerformanceMonitor::new(observability);
@@ -616,8 +618,10 @@ mod tests {
             rt.block_on(async { ThingsDatabase::new(&config.database_path).await.unwrap() }),
         );
 
-        let mut obs_config = ObservabilityConfig::default();
-        obs_config.service_name = "test-service".to_string();
+        let obs_config = ObservabilityConfig {
+            service_name: "test-service".to_string(),
+            ..Default::default()
+        };
         let observability = Arc::new(ObservabilityManager::new(obs_config).unwrap());
 
         let _tracker = ErrorTracker::new(observability);
