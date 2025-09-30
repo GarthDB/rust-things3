@@ -12,7 +12,7 @@ version = "0.1.0"
 edition = "2021"
 authors = ["GarthDB <garth@example.com>"]
 license = "MIT"
-repository = "https://github.com/GarthDB/rust-things"
+repository = "https://github.com/GarthDB/rust-things3"
 description = "Rust library and CLI for Things 3 integration with integrated MCP server"
 
 [workspace.dependencies]

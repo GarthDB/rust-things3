@@ -9,7 +9,7 @@ Things CLI is a command-line interface for Things 3 with integrated MCP (Model C
 ### From Source
 
 ```bash
-git clone https://github.com/GarthDB/rust-things.git
+git clone https://github.com/GarthDB/rust-things3.git
 cd rust-things
 cargo build --release --bin things-cli
 ```
@@ -427,7 +427,7 @@ RUST_LOG=debug things3 health
 ### Building from Source
 
 ```bash
-git clone https://github.com/GarthDB/rust-things.git
+git clone https://github.com/GarthDB/rust-things3.git
 cd rust-things
 cargo build --bin things-cli
 ```
@@ -454,6 +454,6 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 For issues and questions:
 
-1. Check the [GitHub Issues](https://github.com/GarthDB/rust-things/issues)
+1. Check the [GitHub Issues](https://github.com/GarthDB/rust-things3/issues)
 2. Create a new issue with detailed information
 3. Include system information and error messages

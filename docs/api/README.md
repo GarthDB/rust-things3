@@ -267,7 +267,7 @@ This project is licensed under the MIT License - see the [LICENSE](../../LICENSE
 
 ## Support
 
-- **Documentation**: [docs.rust-things.dev](https://docs.rust-things.dev)
-- **Issues**: [GitHub Issues](https://github.com/GarthDB/rust-things/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/GarthDB/rust-things/discussions)
-- **Discord**: [Rust Things Discord](https://discord.gg/rust-things)
+- **Documentation**: [docs.rust-things3.dev](https://docs.rust-things3.dev)
+- **Issues**: [GitHub Issues](https://github.com/GarthDB/rust-things3/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/GarthDB/rust-things3/discussions)
+- **Discord**: [Rust Things3 Discord](https://discord.gg/rust-things3)

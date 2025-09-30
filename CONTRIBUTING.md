@@ -32,12 +32,12 @@ This project follows the [Rust Code of Conduct](https://www.rust-lang.org/polici
 1. Fork the repository on GitHub
 2. Clone your fork locally:
    ```bash
-   git clone https://github.com/YOUR_USERNAME/rust-things.git
+   git clone https://github.com/YOUR_USERNAME/rust-things3.git
    cd rust-things
    ```
 3. Add the upstream remote:
    ```bash
-   git remote add upstream https://github.com/GarthDB/rust-things.git
+   git remote add upstream https://github.com/GarthDB/rust-things3.git
    ```
 
 ## Development Setup
@@ -55,7 +55,7 @@ moon run :dev-pipeline
 ### Project Structure
 
 ```
-rust-things/
+rust-things3/
 ├── apps/
 │   └── things3-cli/          # CLI application with MCP server
 ├── libs/

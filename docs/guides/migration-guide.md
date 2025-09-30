@@ -242,7 +242,7 @@ async fn test_get_inbox() {
 
 If you encounter issues during migration:
 
-1. Check the [GitHub Issues](https://github.com/GarthDB/rust-things/issues)
+1. Check the [GitHub Issues](https://github.com/GarthDB/rust-things3/issues)
 2. Review the [API documentation](docs/api/README.md)
 3. Look at the [examples](docs/examples/README.md)
 
