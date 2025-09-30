@@ -451,7 +451,7 @@ mod tests {
         assert!(result.is_ok());
 
         let json = result.unwrap();
-        assert!(json.contains("\"Review quarterly reports\""));
+        assert!(json.contains("\"Research competitors\""));
         assert!(json.contains("\"Website Redesign\""));
         assert!(json.contains("\"Work\""));
     }
@@ -482,7 +482,7 @@ mod tests {
         assert!(csv.contains(
             "Type,Title,Status,Notes,Start Date,Deadline,Created,Modified,Project,Area,Parent"
         ));
-        assert!(csv.contains("Review quarterly reports"));
+        assert!(csv.contains("Research competitors"));
         assert!(csv.contains("Projects"));
         assert!(csv.contains("Website Redesign"));
         assert!(csv.contains("Areas"));
@@ -519,7 +519,7 @@ mod tests {
         assert!(md.contains("## Projects"));
         assert!(md.contains("### Website Redesign"));
         assert!(md.contains("## Tasks"));
-        assert!(md.contains("- [ ] Review quarterly reports"));
+        assert!(md.contains("- [ ] Research competitors"));
     }
 
     #[test]
