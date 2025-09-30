@@ -77,14 +77,15 @@ async fn test_mock_data_validation() {
         // Test task creation
         let tasks = create_mock_tasks();
         assert_eq!(tasks.len(), 2);
-        assert_eq!(tasks[0].title, "Review quarterly reports");
-        assert_eq!(tasks[1].title, "Call dentist");
+        assert_eq!(tasks[0].title, "Research competitors");
+        assert_eq!(tasks[1].title, "Read Rust book");
 
         // Test project creation
         let projects = create_mock_projects();
-        assert_eq!(projects.len(), 1);
+        assert_eq!(projects.len(), 2);
         assert_eq!(projects[0].title, "Website Redesign");
-        assert!(projects[0].deadline.is_some());
+        assert_eq!(projects[1].title, "Learn Rust");
+        assert!(projects[0].deadline.is_none());
 
         // Test area creation
         let areas = create_mock_areas();
