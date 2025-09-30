@@ -2,7 +2,6 @@
 //! These tests verify that the async functionality works in real scenarios
 
 use std::time::Duration;
-use tempfile::TempDir;
 use tokio::time::timeout;
 
 /// Test the WebSocket server creation
@@ -17,11 +16,18 @@ async fn test_websocket_server_creation() {
 /// Test progress tracking with actual bulk operations
 #[tokio::test]
 async fn test_progress_tracking_integration() {
-    let temp_dir = TempDir::new().unwrap();
-    let db_path = temp_dir.path().join("test.db");
+    use tempfile::NamedTempFile;
+
+    // Use NamedTempFile for better database handling
+    let temp_file = NamedTempFile::new().unwrap();
+    let db_path = temp_file.path();
 
     // Create a test database with some data
-    let db = things3_core::ThingsDatabase::new(&db_path).unwrap();
+    things3_core::test_utils::create_test_database(db_path)
+        .await
+        .unwrap();
+
+    let db = things3_core::ThingsDatabase::new(db_path).await.unwrap();
 
     // Test progress tracking with bulk operations
     let manager = things3_cli::bulk_operations::BulkOperationsManager::new();

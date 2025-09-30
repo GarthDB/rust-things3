@@ -22,8 +22,6 @@ tasks:
     - src/**/*.md
     - tests/**/*.rs
     - Cargo.toml
-    - Cargo.lock
-    - README.md
     outputs:
     - "**/*.rs"
   lint:
@@ -33,8 +31,6 @@ tasks:
     - src/**/*.md
     - tests/**/*.rs
     - Cargo.toml
-    - Cargo.lock
-    - README.md
     outputs: []
   test:
     command: cargo test --all-features
@@ -43,7 +39,6 @@ tasks:
     - src/**/*.md
     - tests/**/*.rs
     - Cargo.toml
-    - README.md
     deps:
     - lint
   build:
@@ -53,8 +48,6 @@ tasks:
     - src/**/*.md
     - tests/**/*.rs
     - Cargo.toml
-    - Cargo.lock
-    - README.md
     deps:
     - test
     outputs: []
@@ -67,7 +60,6 @@ tasks:
     - src/**/*.rs
     - src/**/*.md
     - Cargo.toml
-    - README.md
 tags:
 - cli
 - things3

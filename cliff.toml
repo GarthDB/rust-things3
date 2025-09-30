@@ -3,7 +3,7 @@
 
 [remote.github]
 owner = "GarthDB"
-repo = "rust-things"
+repo = "rust-things3"
 
 [changelog]
 # changelog header
@@ -28,7 +28,7 @@ body = """
 {% for group, commits in commits | group_by(attribute="group") %}
 ### {{ group | striptags | trim | upper_first }}
 {% for commit in commits %}
-- {{ commit.message | upper_first }} ([{{ commit.id | truncate(length=7, end="") }}](https://github.com/GarthDB/rust-things/commit/{{ commit.id }}))
+- {{ commit.message | upper_first }} ([{{ commit.id | truncate(length=7, end="") }}](https://github.com/GarthDB/rust-things3/commit/{{ commit.id }}))
 {%- if commit.breaking %}
   - **BREAKING**: {{ commit.breaking_description }}
 {%- endif %}
@@ -43,7 +43,7 @@ footer = """
 trim = true
 # postprocessors
 postprocessors = [
-  # { pattern = '<REPO>', replace = "https://github.com/GarthDB/rust-things" }, # replace repository URL
+  # { pattern = '<REPO>', replace = "https://github.com/GarthDB/rust-things3" }, # replace repository URL
 ]
 
 [git]
@@ -56,7 +56,7 @@ split_commits = false
 # regex for preprocessing the commit messages
 commit_preprocessors = [
   # Replace issue numbers
-  { pattern = '\((\w+\s)?#([0-9]+)\)', replace = "([#${2}](https://github.com/GarthDB/rust-things/issues/${2}))"},
+  { pattern = '\((\w+\s)?#([0-9]+)\)', replace = "([#${2}](https://github.com/GarthDB/rust-things3/issues/${2}))"},
   # Check spelling of the commit with https://github.com/crate-ci/typos
   # If the spelling is incorrect, it will be automatically fixed.
   #{ pattern = '.*', replace_command = 'typos --write-changes -' },

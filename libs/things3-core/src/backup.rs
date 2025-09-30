@@ -44,8 +44,8 @@ impl BackupManager {
 
         if !source_path.exists() {
             return Err(anyhow::anyhow!(
-                "Source database does not exist: {:?}",
-                source_path
+                "Source database does not exist: {}",
+                source_path.display()
             ));
         }
 
@@ -89,8 +89,8 @@ impl BackupManager {
     pub fn restore_backup(&self, backup_path: &Path) -> Result<()> {
         if !backup_path.exists() {
             return Err(anyhow::anyhow!(
-                "Backup file does not exist: {:?}",
-                backup_path
+                "Backup file does not exist: {}",
+                backup_path.display()
             ));
         }
 
@@ -149,8 +149,8 @@ impl BackupManager {
         let metadata_path = backup_path.with_extension("json");
         if !metadata_path.exists() {
             return Err(anyhow::anyhow!(
-                "Backup metadata not found: {:?}",
-                metadata_path
+                "Backup metadata not found: {}",
+                metadata_path.display()
             ));
         }
 
@@ -212,13 +212,13 @@ impl BackupManager {
     /// # Errors
     ///
     /// Returns an error if the file cannot be accessed or opened.
-    pub fn verify_backup(&self, backup_path: &Path) -> Result<bool> {
+    pub async fn verify_backup(&self, backup_path: &Path) -> Result<bool> {
         if !backup_path.exists() {
             return Ok(false);
         }
 
         // Try to open the backup as a database
-        match ThingsDatabase::new(backup_path) {
+        match ThingsDatabase::new(backup_path).await {
             Ok(_) => Ok(true),
             Err(_) => Ok(false),
         }
@@ -521,12 +521,14 @@ mod tests {
         assert!(error_msg.contains("not found"));
     }
 
-    #[test]
-    fn test_verify_backup_nonexistent() {
+    #[tokio::test]
+    async fn test_verify_backup_nonexistent() {
         let config = ThingsConfig::from_env();
         let backup_manager = BackupManager::new(config);
 
-        let result = backup_manager.verify_backup(Path::new("/nonexistent/backup.db"));
+        let result = backup_manager
+            .verify_backup(Path::new("/nonexistent/backup.db"))
+            .await;
         assert!(result.is_ok());
         assert!(!result.unwrap());
     }

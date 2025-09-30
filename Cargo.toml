@@ -12,7 +12,7 @@ version = "0.1.0"
 edition = "2021"
 authors = ["GarthDB <garth@example.com>"]
 license = "MIT"
-repository = "https://github.com/GarthDB/rust-things"
+repository = "https://github.com/GarthDB/rust-things3"
 description = "Rust library and CLI for Things 3 integration with integrated MCP server"
 
 [workspace.dependencies]
@@ -48,6 +48,25 @@ quick-xml = { version = "0.36", features = ["serialize"] }
 
 # Performance monitoring
 sysinfo = "0.30"
+
+# Logging and Observability
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json", "chrono"] }
+tracing-appender = "0.2"
+metrics = "0.22"
+metrics-exporter-prometheus = "0.13"
+metrics-exporter-tcp = "0.6"
+# OpenTelemetry dependencies temporarily disabled due to version conflicts
+# opentelemetry = { version = "0.21", features = ["trace"] }
+# opentelemetry_sdk = { version = "0.21", features = ["rt-tokio", "trace"] }
+# opentelemetry-jaeger = { version = "0.20", features = ["tokio"] }
+# opentelemetry-otlp = { version = "0.20", features = ["tokio"] }
+# opentelemetry-semantic-conventions = "0.12"
+
+# Health checks
+axum = { version = "0.7", features = ["macros", "tracing"] }
+tower = "0.4"
+tower-http = { version = "0.5", features = ["cors", "trace"] }
 
 # Testing
 proptest = "1.0"

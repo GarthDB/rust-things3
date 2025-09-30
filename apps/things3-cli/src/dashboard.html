@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Things 3 CLI Dashboard</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background-color: #f5f5f5;
+            color: #333;
+            line-height: 1.6;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 2rem;
+            border-radius: 10px;
+            margin-bottom: 2rem;
+            text-align: center;
+        }
+        
+        .header h1 {
+            font-size: 2.5rem;
+            margin-bottom: 0.5rem;
+        }
+        
+        .header p {
+            font-size: 1.1rem;
+            opacity: 0.9;
+        }
+        
+        .status-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+        }
+        
+        .status-card {
+            background: white;
+            padding: 1.5rem;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            border-left: 4px solid #667eea;
+        }
+        
+        .status-card h3 {
+            color: #667eea;
+            margin-bottom: 1rem;
+            font-size: 1.2rem;
+        }
+        
+        .status-indicator {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 8px;
+        }
+        
+        .status-healthy {
+            background-color: #4CAF50;
+        }
+        
+        .status-warning {
+            background-color: #FF9800;
+        }
+        
+        .status-error {
+            background-color: #F44336;
+        }
+        
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+        }
+        
+        .metric-card {
+            background: white;
+            padding: 1.5rem;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            text-align: center;
+        }
+        
+        .metric-value {
+            font-size: 2rem;
+            font-weight: bold;
+            color: #667eea;
+            margin-bottom: 0.5rem;
+        }
+        
+        .metric-label {
+            color: #666;
+            font-size: 0.9rem;
+        }
+        
+        .logs-section {
+            background: white;
+            padding: 1.5rem;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            margin-bottom: 2rem;
+        }
+        
+        .logs-section h3 {
+            color: #667eea;
+            margin-bottom: 1rem;
+        }
+        
+        .log-entry {
+            padding: 0.75rem;
+            border-bottom: 1px solid #eee;
+            font-family: 'Monaco', 'Menlo', monospace;
+            font-size: 0.9rem;
+        }
+        
+        .log-entry:last-child {
+            border-bottom: none;
+        }
+        
+        .log-level {
+            display: inline-block;
+            padding: 0.25rem 0.5rem;
+            border-radius: 4px;
+            font-size: 0.8rem;
+            font-weight: bold;
+            margin-right: 0.5rem;
+        }
+        
+        .log-level-info {
+            background-color: #e3f2fd;
+            color: #1976d2;
+        }
+        
+        .log-level-warn {
+            background-color: #fff3e0;
+            color: #f57c00;
+        }
+        
+        .log-level-error {
+            background-color: #ffebee;
+            color: #d32f2f;
+        }
+        
+        .refresh-btn {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 0.75rem 1.5rem;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 1rem;
+            margin-bottom: 1rem;
+        }
+        
+        .refresh-btn:hover {
+            background: #5a6fd8;
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 2rem;
+            color: #666;
+        }
+        
+        .error {
+            background-color: #ffebee;
+            color: #d32f2f;
+            padding: 1rem;
+            border-radius: 5px;
+            margin-bottom: 1rem;
+        }
+        
+        @media (max-width: 768px) {
+            .container {
+                padding: 10px;
+            }
+            
+            .header h1 {
+                font-size: 2rem;
+            }
+            
+            .status-grid,
+            .metrics-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Things 3 CLI Dashboard</h1>
+            <p>Real-time monitoring and observability</p>
+        </div>
+        
+        <button class="refresh-btn" onclick="refreshData()">Refresh Data</button>
+        
+        <div id="loading" class="loading">
+            Loading dashboard data...
+        </div>
+        
+        <div id="error" class="error" style="display: none;"></div>
+        
+        <div id="dashboard" style="display: none;">
+            <div class="status-grid">
+                <div class="status-card">
+                    <h3>System Health</h3>
+                    <div id="health-status">
+                        <span class="status-indicator status-healthy"></span>
+                        <span id="health-text">Healthy</span>
+                    </div>
+                    <div id="health-details" style="margin-top: 1rem; font-size: 0.9rem; color: #666;"></div>
+                </div>
+                
+                <div class="status-card">
+                    <h3>Database Status</h3>
+                    <div id="db-status">
+                        <span class="status-indicator status-healthy"></span>
+                        <span id="db-text">Connected</span>
+                    </div>
+                    <div id="db-details" style="margin-top: 1rem; font-size: 0.9rem; color: #666;"></div>
+                </div>
+                
+                <div class="status-card">
+                    <h3>Uptime</h3>
+                    <div id="uptime-text">0 seconds</div>
+                    <div id="uptime-details" style="margin-top: 1rem; font-size: 0.9rem; color: #666;"></div>
+                </div>
+            </div>
+            
+            <div class="metrics-grid">
+                <div class="metric-card">
+                    <div class="metric-value" id="memory-usage">0 MB</div>
+                    <div class="metric-label">Memory Usage</div>
+                </div>
+                
+                <div class="metric-card">
+                    <div class="metric-value" id="cpu-usage">0%</div>
+                    <div class="metric-label">CPU Usage</div>
+                </div>
+                
+                <div class="metric-card">
+                    <div class="metric-value" id="cache-hit-rate">0%</div>
+                    <div class="metric-label">Cache Hit Rate</div>
+                </div>
+                
+                <div class="metric-card">
+                    <div class="metric-value" id="db-operations">0</div>
+                    <div class="metric-label">DB Operations</div>
+                </div>
+                
+                <div class="metric-card">
+                    <div class="metric-value" id="tasks-created">0</div>
+                    <div class="metric-label">Tasks Created</div>
+                </div>
+                
+                <div class="metric-card">
+                    <div class="metric-value" id="search-operations">0</div>
+                    <div class="metric-label">Search Operations</div>
+                </div>
+            </div>
+            
+            <div class="logs-section">
+                <h3>Recent Logs</h3>
+                <div id="logs-container">
+                    <div class="log-entry">
+                        <span class="log-level log-level-info">INFO</span>
+                        <span>Application started successfully</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        let refreshInterval;
+        
+        async function fetchData() {
+            try {
+                const response = await fetch('/api/metrics');
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                return await response.json();
+            } catch (error) {
+                console.error('Error fetching data:', error);
+                throw error;
+            }
+        }
+        
+        function formatBytes(bytes) {
+            if (bytes === 0) return '0 B';
+            const k = 1024;
+            const sizes = ['B', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+        
+        function formatUptime(seconds) {
+            const hours = Math.floor(seconds / 3600);
+            const minutes = Math.floor((seconds % 3600) / 60);
+            const secs = seconds % 60;
+            
+            if (hours > 0) {
+                return `${hours}h ${minutes}m ${secs}s`;
+            } else if (minutes > 0) {
+                return `${minutes}m ${secs}s`;
+            } else {
+                return `${secs}s`;
+            }
+        }
+        
+        function updateDashboard(data) {
+            // Update health status
+            const healthStatus = document.getElementById('health-status');
+            const healthText = document.getElementById('health-text');
+            const healthDetails = document.getElementById('health-details');
+            
+            if (data.health.status === 'healthy') {
+                healthStatus.innerHTML = '<span class="status-indicator status-healthy"></span><span>Healthy</span>';
+            } else {
+                healthStatus.innerHTML = '<span class="status-indicator status-error"></span><span>Unhealthy</span>';
+            }
+            
+            healthDetails.innerHTML = `Version: ${data.health.version}<br>Checks: ${Object.keys(data.health.checks).length}`;
+            
+            // Update database status
+            const dbStatus = document.getElementById('db-status');
+            const dbText = document.getElementById('db-text');
+            const dbDetails = document.getElementById('db-details');
+            
+            const dbCheck = data.health.checks.database;
+            if (dbCheck && dbCheck.status === 'healthy') {
+                dbStatus.innerHTML = '<span class="status-indicator status-healthy"></span><span>Connected</span>';
+            } else {
+                dbStatus.innerHTML = '<span class="status-indicator status-error"></span><span>Disconnected</span>';
+            }
+            
+            if (dbCheck) {
+                dbDetails.innerHTML = `${dbCheck.message || 'Database check completed'}`;
+            }
+            
+            // Update uptime
+            document.getElementById('uptime-text').textContent = formatUptime(data.health.uptime);
+            document.getElementById('uptime-details').innerHTML = `Started: ${new Date(data.health.timestamp).toLocaleString()}`;
+            
+            // Update metrics
+            document.getElementById('memory-usage').textContent = formatBytes(data.system_metrics.memory_usage);
+            document.getElementById('cpu-usage').textContent = `${data.system_metrics.cpu_usage.toFixed(1)}%`;
+            document.getElementById('cache-hit-rate').textContent = `${(data.system_metrics.cache_hit_rate * 100).toFixed(1)}%`;
+            document.getElementById('db-operations').textContent = data.application_metrics.db_operations_total.toLocaleString();
+            document.getElementById('tasks-created').textContent = data.application_metrics.tasks_created_total.toLocaleString();
+            document.getElementById('search-operations').textContent = data.application_metrics.search_operations_total.toLocaleString();
+            
+            // Update logs
+            updateLogs(data.log_statistics);
+        }
+        
+        function updateLogs(logStats) {
+            const logsContainer = document.getElementById('logs-container');
+            
+            if (logStats.recent_errors && logStats.recent_errors.length > 0) {
+                logsContainer.innerHTML = logStats.recent_errors.map(log => `
+                    <div class="log-entry">
+                        <span class="log-level log-level-${log.level.toLowerCase()}">${log.level}</span>
+                        <span>${log.message}</span>
+                        <span style="float: right; color: #666; font-size: 0.8rem;">${log.timestamp}</span>
+                    </div>
+                `).join('');
+            } else {
+                logsContainer.innerHTML = '<div class="log-entry">No recent logs available</div>';
+            }
+        }
+        
+        async function refreshData() {
+            const loading = document.getElementById('loading');
+            const error = document.getElementById('error');
+            const dashboard = document.getElementById('dashboard');
+            
+            loading.style.display = 'block';
+            error.style.display = 'none';
+            dashboard.style.display = 'none';
+            
+            try {
+                const data = await fetchData();
+                updateDashboard(data);
+                
+                loading.style.display = 'none';
+                dashboard.style.display = 'block';
+            } catch (err) {
+                loading.style.display = 'none';
+                error.style.display = 'block';
+                error.textContent = `Error loading dashboard: ${err.message}`;
+            }
+        }
+        
+        function startAutoRefresh() {
+            refreshInterval = setInterval(refreshData, 5000); // Refresh every 5 seconds
+        }
+        
+        function stopAutoRefresh() {
+            if (refreshInterval) {
+                clearInterval(refreshInterval);
+            }
+        }
+        
+        // Initialize dashboard
+        document.addEventListener('DOMContentLoaded', () => {
+            refreshData();
+            startAutoRefresh();
+        });
+        
+        // Stop auto-refresh when page is hidden
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden) {
+                stopAutoRefresh();
+            } else {
+                startAutoRefresh();
+            }
+        });
+    </script>
+</body>
+</html>
+

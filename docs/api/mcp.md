@@ -2,6 +2,8 @@
 
 The Rust Things MCP server provides 17 tools for AI/LLM integration. This document describes each tool in detail.
 
+> **Note**: The MCP server now uses SQLx for async database operations, providing better performance and thread safety compared to the previous rusqlite implementation.
+
 ## Core Task Tools
 
 ### `get_inbox`

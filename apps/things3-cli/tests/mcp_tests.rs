@@ -1,190 +1,177 @@
 //! Comprehensive tests for MCP server functionality
 
 use serde_json::json;
-use std::path::Path;
+use sqlx::SqlitePool;
 use tempfile::NamedTempFile;
 use things3_cli::mcp::{CallToolRequest, Content, McpError, ThingsMcpServer};
 use things3_core::{config::ThingsConfig, database::ThingsDatabase};
 
 /// Create a test MCP server with mock database
-fn create_test_mcp_server() -> ThingsMcpServer {
-    let temp_file = NamedTempFile::new().unwrap();
-    let db_path = temp_file.path();
-    create_comprehensive_test_database(db_path);
+async fn create_test_mcp_server() -> ThingsMcpServer {
+    // Use in-memory database for testing
+    let db = ThingsDatabase::from_connection_string("sqlite::memory:")
+        .await
+        .unwrap();
 
-    let db = ThingsDatabase::new(db_path).unwrap();
-    let config = ThingsConfig::new(db_path, false);
+    // Create the database schema
+    create_test_schema(&db).await.unwrap();
 
-    ThingsMcpServer::new(db, config)
+    let config = ThingsConfig::for_testing().unwrap();
+    ThingsMcpServer::new(db.into(), config)
 }
 
-/// Create a comprehensive test database with mock data
-#[allow(clippy::too_many_lines)]
-fn create_comprehensive_test_database<P: AsRef<Path>>(db_path: P) -> rusqlite::Connection {
-    let conn = rusqlite::Connection::open(db_path).unwrap();
+/// Create the test database schema
+async fn create_test_schema(db: &ThingsDatabase) -> Result<(), Box<dyn std::error::Error>> {
+    let pool = db.pool();
 
     // Create the Things 3 schema
-    conn.execute_batch(
-        r#"
-        -- TMTask table (main tasks table)
+    sqlx::query(
+        r"
+        -- TMTask table (main tasks table) - matches real Things 3 schema
         CREATE TABLE IF NOT EXISTS TMTask (
             uuid TEXT PRIMARY KEY,
-            title TEXT,
-            type INTEGER,
-            status INTEGER,
+            title TEXT NOT NULL,
+            type INTEGER NOT NULL DEFAULT 0,
+            status INTEGER NOT NULL DEFAULT 0,
             notes TEXT,
-            startDate INTEGER,
-            deadline INTEGER,
-            creationDate REAL,
-            userModificationDate REAL,
-            project TEXT,
-            area TEXT,
-            heading TEXT
-        );
+            start_date TEXT,
+            due_date TEXT,
+            created TEXT NOT NULL,
+            modified TEXT NOT NULL,
+            project_uuid TEXT,
+            area_uuid TEXT,
+            parent_uuid TEXT,
+            tags TEXT DEFAULT '[]'
+        )
+        ",
+    )
+    .execute(pool)
+    .await?;
 
-        -- TMArea table (areas)
+    sqlx::query(
+        r"
+        -- TMProject table (projects table)
+        CREATE TABLE IF NOT EXISTS TMProject (
+            uuid TEXT PRIMARY KEY,
+            title TEXT NOT NULL,
+            type INTEGER NOT NULL DEFAULT 1,
+            status INTEGER NOT NULL DEFAULT 0,
+            notes TEXT,
+            start_date TEXT,
+            due_date TEXT,
+            created TEXT NOT NULL,
+            modified TEXT NOT NULL,
+            area_uuid TEXT,
+            parent_uuid TEXT,
+            tags TEXT DEFAULT '[]'
+        )
+        ",
+    )
+    .execute(pool)
+    .await?;
+
+    sqlx::query(
+        r"
+        -- TMArea table (areas table)
         CREATE TABLE IF NOT EXISTS TMArea (
             uuid TEXT PRIMARY KEY,
             title TEXT NOT NULL,
-            visible INTEGER,
-            "index" INTEGER NOT NULL DEFAULT 0
-        );
-
-        -- TMTag table (tags)
-        CREATE TABLE IF NOT EXISTS TMTag (
-            uuid TEXT PRIMARY KEY,
-            title TEXT NOT NULL,
+            type INTEGER NOT NULL DEFAULT 3,
+            status INTEGER NOT NULL DEFAULT 0,
+            notes TEXT,
+            start_date TEXT,
+            due_date TEXT,
             created TEXT NOT NULL,
             modified TEXT NOT NULL,
-            "index" INTEGER NOT NULL DEFAULT 0
-        );
-
-        -- TMTaskTag table (task-tag relationships)
-        CREATE TABLE IF NOT EXISTS TMTaskTag (
-            task_uuid TEXT NOT NULL,
-            tag_uuid TEXT NOT NULL,
-            PRIMARY KEY (task_uuid, tag_uuid),
-            FOREIGN KEY (task_uuid) REFERENCES TMTask(uuid),
-            FOREIGN KEY (tag_uuid) REFERENCES TMTag(uuid)
-        );
-        "#,
-    )
-    .unwrap();
-
-    let now = chrono::Utc::now();
-
-    // Insert areas
-    let areas = vec![("area-1", "Work", 1, 0), ("area-2", "Personal", 1, 1)];
-
-    for (uuid, title, visible, index) in areas {
-        conn.execute(
-            "INSERT INTO TMArea (uuid, title, visible, \"index\") VALUES (?, ?, ?, ?)",
-            (uuid, title, visible, index),
+            parent_uuid TEXT,
+            tags TEXT DEFAULT '[]'
         )
-        .unwrap();
-    }
+        ",
+    )
+    .execute(pool)
+    .await?;
 
-    // Insert tasks
-    let tasks = vec![
-        // Inbox tasks
-        (
-            "task-1",
-            "Review quarterly reports",
-            0,
-            0,
-            "Need to review Q3 reports",
-            None,
-            Some(1),
-            None::<&str>,
-            None::<&str>,
-            None::<&str>,
-        ),
-        (
-            "task-2",
-            "Call dentist",
-            0,
-            0,
-            "Schedule annual checkup",
-            None,
-            None,
-            None::<&str>,
-            None::<&str>,
-            None::<&str>,
-        ),
-        (
-            "task-3",
-            "Buy groceries",
-            0,
-            0,
-            "Milk, bread, eggs",
-            None,
-            None,
-            None::<&str>,
-            None::<&str>,
-            None::<&str>,
-        ),
-    ];
+    // Insert test data
+    insert_test_data(pool).await?;
 
-    for (
-        uuid,
-        title,
-        task_type,
-        status,
-        notes,
-        start_days,
-        deadline_days,
-        project,
-        area,
-        heading,
-    ) in tasks
-    {
-        let start_date = start_days.map(|d: i64| {
-            let base_date = chrono::NaiveDate::from_ymd_opt(2001, 1, 1).unwrap();
-            #[allow(clippy::cast_sign_loss)]
-            { base_date.checked_add_days(chrono::Days::new(d as u64)) }.map(|d| {
-                d.signed_duration_since(chrono::NaiveDate::from_ymd_opt(2001, 1, 1).unwrap())
-                    .num_days()
-            })
-        });
+    Ok(())
+}
 
-        let deadline = deadline_days.map(|d: i64| {
-            let base_date = chrono::NaiveDate::from_ymd_opt(2001, 1, 1).unwrap();
-            #[allow(clippy::cast_sign_loss)]
-            { base_date.checked_add_days(chrono::Days::new(d as u64)) }.map(|d| {
-                d.signed_duration_since(chrono::NaiveDate::from_ymd_opt(2001, 1, 1).unwrap())
-                    .num_days()
-            })
-        });
+/// Insert test data into the database
+async fn insert_test_data(pool: &SqlitePool) -> Result<(), Box<dyn std::error::Error>> {
+    use chrono::Utc;
+    use uuid::Uuid;
 
-        conn.execute(
-            "INSERT INTO TMTask (uuid, title, type, status, notes, startDate, deadline, creationDate, userModificationDate, project, area, heading) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            (uuid, title, task_type, status, notes, start_date, deadline,
-                #[allow(clippy::cast_precision_loss)]
-                {
-                    now.timestamp() as f64
-                },
-                #[allow(clippy::cast_precision_loss)]
-                {
-                    now.timestamp() as f64
-                },
-                project.map(std::string::ToString::to_string),
-                area.map(std::string::ToString::to_string),
-                heading),
-        ).unwrap();
-    }
+    let now = Utc::now().to_rfc3339();
 
-    conn
+    // Generate valid UUIDs for test data
+    let area_uuid = Uuid::new_v4().to_string();
+    let project_uuid = Uuid::new_v4().to_string();
+    let task_uuid = Uuid::new_v4().to_string();
+
+    // Insert test areas
+    sqlx::query(
+        "INSERT INTO TMArea (uuid, title, type, status, created, modified) VALUES (?, ?, ?, ?, ?, ?)"
+    )
+    .bind(&area_uuid)
+    .bind("Work")
+    .bind(3) // Area type
+    .bind(0) // Incomplete
+    .bind(&now)
+    .bind(&now)
+    .execute(pool).await?;
+
+    // Insert test projects
+    sqlx::query(
+        "INSERT INTO TMProject (uuid, title, type, status, area_uuid, created, modified) VALUES (?, ?, ?, ?, ?, ?, ?)"
+    )
+    .bind(&project_uuid)
+    .bind("Website Redesign")
+    .bind(1) // Project type
+    .bind(0) // Incomplete
+    .bind(&area_uuid)
+    .bind(&now)
+    .bind(&now)
+    .execute(pool).await?;
+
+    // Insert test tasks - one in inbox (no project), one in project
+    let inbox_task_uuid = Uuid::new_v4().to_string();
+    sqlx::query(
+        "INSERT INTO TMTask (uuid, title, type, status, project_uuid, created, modified) VALUES (?, ?, ?, ?, ?, ?, ?)"
+    )
+    .bind(&inbox_task_uuid)
+    .bind("Inbox Task")
+    .bind(0) // Todo type
+    .bind(0) // Incomplete
+    .bind::<Option<String>>(None) // No project (inbox) - use NULL instead of empty string
+    .bind(&now)
+    .bind(&now)
+    .execute(pool).await?;
+
+    sqlx::query(
+        "INSERT INTO TMTask (uuid, title, type, status, project_uuid, created, modified) VALUES (?, ?, ?, ?, ?, ?, ?)"
+    )
+    .bind(&task_uuid)
+    .bind("Research competitors")
+    .bind(0) // Todo type
+    .bind(0) // Incomplete
+    .bind(&project_uuid)
+    .bind(&now)
+    .bind(&now)
+    .execute(pool).await?;
+
+    Ok(())
 }
 
 #[tokio::test]
 async fn test_mcp_server_creation() {
-    let _server = create_test_mcp_server();
+    let _server = create_test_mcp_server().await;
     // Server should be created successfully - if we get here, creation succeeded
 }
 
 #[tokio::test]
 async fn test_list_tools() {
-    let server = create_test_mcp_server();
+    let server = create_test_mcp_server().await;
     let result = server.list_tools().unwrap();
 
     assert!(result.tools.len() > 10); // Should have many tools
@@ -205,7 +192,7 @@ async fn test_list_tools() {
 
 #[tokio::test]
 async fn test_tool_schemas() {
-    let server = create_test_mcp_server();
+    let server = create_test_mcp_server().await;
     let result = server.list_tools().unwrap();
 
     // Check that each tool has proper schema
@@ -218,7 +205,7 @@ async fn test_tool_schemas() {
 
 #[tokio::test]
 async fn test_get_inbox_tool() {
-    let server = create_test_mcp_server();
+    let server = create_test_mcp_server().await;
     let request = CallToolRequest {
         name: "get_inbox".to_string(),
         arguments: Some(json!({ "limit": 5 })),
@@ -242,7 +229,7 @@ async fn test_get_inbox_tool() {
 
 #[tokio::test]
 async fn test_get_inbox_tool_no_limit() {
-    let server = create_test_mcp_server();
+    let server = create_test_mcp_server().await;
     let request = CallToolRequest {
         name: "get_inbox".to_string(),
         arguments: None,
@@ -255,7 +242,7 @@ async fn test_get_inbox_tool_no_limit() {
 
 #[tokio::test]
 async fn test_get_today_tool() {
-    let server = create_test_mcp_server();
+    let server = create_test_mcp_server().await;
     let request = CallToolRequest {
         name: "get_today".to_string(),
         arguments: Some(json!({ "limit": 3 })),
@@ -275,7 +262,7 @@ async fn test_get_today_tool() {
 
 #[tokio::test]
 async fn test_get_projects_tool() {
-    let server = create_test_mcp_server();
+    let server = create_test_mcp_server().await;
     let request = CallToolRequest {
         name: "get_projects".to_string(),
         arguments: None,
@@ -295,7 +282,7 @@ async fn test_get_projects_tool() {
 
 #[tokio::test]
 async fn test_get_projects_tool_with_area() {
-    let server = create_test_mcp_server();
+    let server = create_test_mcp_server().await;
     let request = CallToolRequest {
         name: "get_projects".to_string(),
         arguments: Some(json!({ "area_uuid": "test-area-uuid" })),
@@ -308,7 +295,7 @@ async fn test_get_projects_tool_with_area() {
 
 #[tokio::test]
 async fn test_get_areas_tool() {
-    let server = create_test_mcp_server();
+    let server = create_test_mcp_server().await;
     let request = CallToolRequest {
         name: "get_areas".to_string(),
         arguments: None,
@@ -328,7 +315,7 @@ async fn test_get_areas_tool() {
 
 #[tokio::test]
 async fn test_search_tasks_tool() {
-    let server = create_test_mcp_server();
+    let server = create_test_mcp_server().await;
     let request = CallToolRequest {
         name: "search_tasks".to_string(),
         arguments: Some(json!({ "query": "test", "limit": 5 })),
@@ -348,7 +335,7 @@ async fn test_search_tasks_tool() {
 
 #[tokio::test]
 async fn test_search_tasks_tool_missing_query() {
-    let server = create_test_mcp_server();
+    let server = create_test_mcp_server().await;
     let request = CallToolRequest {
         name: "search_tasks".to_string(),
         arguments: Some(json!({ "limit": 5 })),
@@ -366,7 +353,7 @@ async fn test_search_tasks_tool_missing_query() {
 
 #[tokio::test]
 async fn test_create_task_tool() {
-    let server = create_test_mcp_server();
+    let server = create_test_mcp_server().await;
     let request = CallToolRequest {
         name: "create_task".to_string(),
         arguments: Some(json!({
@@ -391,7 +378,7 @@ async fn test_create_task_tool() {
 
 #[tokio::test]
 async fn test_create_task_tool_missing_title() {
-    let server = create_test_mcp_server();
+    let server = create_test_mcp_server().await;
     let request = CallToolRequest {
         name: "create_task".to_string(),
         arguments: Some(json!({
@@ -411,7 +398,7 @@ async fn test_create_task_tool_missing_title() {
 
 #[tokio::test]
 async fn test_update_task_tool() {
-    let server = create_test_mcp_server();
+    let server = create_test_mcp_server().await;
     let request = CallToolRequest {
         name: "update_task".to_string(),
         arguments: Some(json!({
@@ -436,7 +423,7 @@ async fn test_update_task_tool() {
 
 #[tokio::test]
 async fn test_update_task_tool_missing_uuid() {
-    let server = create_test_mcp_server();
+    let server = create_test_mcp_server().await;
     let request = CallToolRequest {
         name: "update_task".to_string(),
         arguments: Some(json!({
@@ -456,7 +443,7 @@ async fn test_update_task_tool_missing_uuid() {
 
 #[tokio::test]
 async fn test_get_productivity_metrics_tool() {
-    let server = create_test_mcp_server();
+    let server = create_test_mcp_server().await;
     let request = CallToolRequest {
         name: "get_productivity_metrics".to_string(),
         arguments: Some(json!({ "days": 7 })),
@@ -480,7 +467,7 @@ async fn test_get_productivity_metrics_tool() {
 
 #[tokio::test]
 async fn test_get_productivity_metrics_tool_default_days() {
-    let server = create_test_mcp_server();
+    let server = create_test_mcp_server().await;
     let request = CallToolRequest {
         name: "get_productivity_metrics".to_string(),
         arguments: None,
@@ -500,7 +487,7 @@ async fn test_get_productivity_metrics_tool_default_days() {
 
 #[tokio::test]
 async fn test_export_data_tool_json() {
-    let server = create_test_mcp_server();
+    let server = create_test_mcp_server().await;
     let request = CallToolRequest {
         name: "export_data".to_string(),
         arguments: Some(json!({
@@ -524,7 +511,7 @@ async fn test_export_data_tool_json() {
 
 #[tokio::test]
 async fn test_export_data_tool_all_data() {
-    let server = create_test_mcp_server();
+    let server = create_test_mcp_server().await;
     let request = CallToolRequest {
         name: "export_data".to_string(),
         arguments: Some(json!({
@@ -550,7 +537,7 @@ async fn test_export_data_tool_all_data() {
 
 #[tokio::test]
 async fn test_export_data_tool_missing_parameters() {
-    let server = create_test_mcp_server();
+    let server = create_test_mcp_server().await;
     let request = CallToolRequest {
         name: "export_data".to_string(),
         arguments: Some(json!({
@@ -570,7 +557,7 @@ async fn test_export_data_tool_missing_parameters() {
 
 #[tokio::test]
 async fn test_export_data_tool_invalid_format() {
-    let server = create_test_mcp_server();
+    let server = create_test_mcp_server().await;
     let request = CallToolRequest {
         name: "export_data".to_string(),
         arguments: Some(json!({
@@ -592,7 +579,7 @@ async fn test_export_data_tool_invalid_format() {
 
 #[tokio::test]
 async fn test_bulk_create_tasks_tool() {
-    let server = create_test_mcp_server();
+    let server = create_test_mcp_server().await;
     let request = CallToolRequest {
         name: "bulk_create_tasks".to_string(),
         arguments: Some(json!({
@@ -618,7 +605,7 @@ async fn test_bulk_create_tasks_tool() {
 
 #[tokio::test]
 async fn test_bulk_create_tasks_tool_missing_tasks() {
-    let server = create_test_mcp_server();
+    let server = create_test_mcp_server().await;
     let request = CallToolRequest {
         name: "bulk_create_tasks".to_string(),
         arguments: Some(json!({})),
@@ -636,7 +623,7 @@ async fn test_bulk_create_tasks_tool_missing_tasks() {
 
 #[tokio::test]
 async fn test_get_recent_tasks_tool() {
-    let server = create_test_mcp_server();
+    let server = create_test_mcp_server().await;
     let request = CallToolRequest {
         name: "get_recent_tasks".to_string(),
         arguments: Some(json!({ "limit": 5, "hours": 24 })),
@@ -657,7 +644,7 @@ async fn test_get_recent_tasks_tool() {
 
 #[tokio::test]
 async fn test_get_recent_tasks_tool_default_hours() {
-    let server = create_test_mcp_server();
+    let server = create_test_mcp_server().await;
     let request = CallToolRequest {
         name: "get_recent_tasks".to_string(),
         arguments: None,
@@ -677,7 +664,7 @@ async fn test_get_recent_tasks_tool_default_hours() {
 
 #[tokio::test]
 async fn test_get_performance_stats_tool() {
-    let server = create_test_mcp_server();
+    let server = create_test_mcp_server().await;
     let request = CallToolRequest {
         name: "get_performance_stats".to_string(),
         arguments: None,
@@ -698,7 +685,7 @@ async fn test_get_performance_stats_tool() {
 
 #[tokio::test]
 async fn test_get_system_metrics_tool() {
-    let server = create_test_mcp_server();
+    let server = create_test_mcp_server().await;
     let request = CallToolRequest {
         name: "get_system_metrics".to_string(),
         arguments: None,
@@ -718,7 +705,7 @@ async fn test_get_system_metrics_tool() {
 
 #[tokio::test]
 async fn test_get_cache_stats_tool() {
-    let server = create_test_mcp_server();
+    let server = create_test_mcp_server().await;
     let request = CallToolRequest {
         name: "get_cache_stats".to_string(),
         arguments: None,
@@ -738,7 +725,7 @@ async fn test_get_cache_stats_tool() {
 
 #[tokio::test]
 async fn test_unknown_tool() {
-    let server = create_test_mcp_server();
+    let server = create_test_mcp_server().await;
     let request = CallToolRequest {
         name: "unknown_tool".to_string(),
         arguments: None,
@@ -756,7 +743,7 @@ async fn test_unknown_tool() {
 
 #[tokio::test]
 async fn test_backup_database_tool() {
-    let server = create_test_mcp_server();
+    let server = create_test_mcp_server().await;
     let temp_dir = tempfile::tempdir().unwrap();
     let backup_dir = temp_dir.path().to_str().unwrap();
 
@@ -782,7 +769,7 @@ async fn test_backup_database_tool() {
 
 #[tokio::test]
 async fn test_backup_database_tool_missing_backup_dir() {
-    let server = create_test_mcp_server();
+    let server = create_test_mcp_server().await;
     let request = CallToolRequest {
         name: "backup_database".to_string(),
         arguments: Some(json!({
@@ -802,7 +789,7 @@ async fn test_backup_database_tool_missing_backup_dir() {
 
 #[tokio::test]
 async fn test_list_backups_tool() {
-    let server = create_test_mcp_server();
+    let server = create_test_mcp_server().await;
     let temp_dir = tempfile::tempdir().unwrap();
     let backup_dir = temp_dir.path().to_str().unwrap();
 
@@ -828,7 +815,7 @@ async fn test_list_backups_tool() {
 
 #[tokio::test]
 async fn test_list_backups_tool_missing_backup_dir() {
-    let server = create_test_mcp_server();
+    let server = create_test_mcp_server().await;
     let request = CallToolRequest {
         name: "list_backups".to_string(),
         arguments: None,
@@ -846,7 +833,7 @@ async fn test_list_backups_tool_missing_backup_dir() {
 
 #[tokio::test]
 async fn test_restore_database_tool() {
-    let server = create_test_mcp_server();
+    let server = create_test_mcp_server().await;
     let temp_file = tempfile::NamedTempFile::new().unwrap();
     let backup_path = temp_file.path().to_str().unwrap();
 
@@ -871,7 +858,7 @@ async fn test_restore_database_tool() {
 
 #[tokio::test]
 async fn test_restore_database_tool_missing_backup_path() {
-    let server = create_test_mcp_server();
+    let server = create_test_mcp_server().await;
     let request = CallToolRequest {
         name: "restore_database".to_string(),
         arguments: None,
@@ -889,7 +876,7 @@ async fn test_restore_database_tool_missing_backup_path() {
 
 #[tokio::test]
 async fn test_tool_schemas_validation() {
-    let server = create_test_mcp_server();
+    let server = create_test_mcp_server().await;
     let result = server.list_tools().unwrap();
 
     // Check that required tools have proper schemas
@@ -945,7 +932,7 @@ async fn test_tool_schemas_validation() {
 
 #[tokio::test]
 async fn test_error_handling() {
-    let server = create_test_mcp_server();
+    let server = create_test_mcp_server().await;
 
     // Test with invalid JSON in arguments
     let request = CallToolRequest {
@@ -960,7 +947,7 @@ async fn test_error_handling() {
 
 #[tokio::test]
 async fn test_empty_arguments() {
-    let server = create_test_mcp_server();
+    let server = create_test_mcp_server().await;
 
     // Test with empty arguments object
     let request = CallToolRequest {
@@ -977,7 +964,7 @@ async fn test_empty_arguments() {
 
 #[tokio::test]
 async fn test_list_resources() {
-    let server = create_test_mcp_server();
+    let server = create_test_mcp_server().await;
 
     let result = server.list_resources().unwrap();
 
@@ -1006,7 +993,7 @@ async fn test_list_resources() {
 
 #[tokio::test]
 async fn test_read_inbox_resource() {
-    let server = create_test_mcp_server();
+    let server = create_test_mcp_server().await;
 
     let request = things3_cli::mcp::ReadResourceRequest {
         uri: "things://inbox".to_string(),
@@ -1026,7 +1013,7 @@ async fn test_read_inbox_resource() {
 
 #[tokio::test]
 async fn test_read_projects_resource() {
-    let server = create_test_mcp_server();
+    let server = create_test_mcp_server().await;
 
     let request = things3_cli::mcp::ReadResourceRequest {
         uri: "things://projects".to_string(),
@@ -1046,7 +1033,7 @@ async fn test_read_projects_resource() {
 
 #[tokio::test]
 async fn test_read_areas_resource() {
-    let server = create_test_mcp_server();
+    let server = create_test_mcp_server().await;
 
     let request = things3_cli::mcp::ReadResourceRequest {
         uri: "things://areas".to_string(),
@@ -1066,7 +1053,7 @@ async fn test_read_areas_resource() {
 
 #[tokio::test]
 async fn test_read_today_resource() {
-    let server = create_test_mcp_server();
+    let server = create_test_mcp_server().await;
 
     let request = things3_cli::mcp::ReadResourceRequest {
         uri: "things://today".to_string(),
@@ -1086,7 +1073,7 @@ async fn test_read_today_resource() {
 
 #[tokio::test]
 async fn test_read_unknown_resource() {
-    let server = create_test_mcp_server();
+    let server = create_test_mcp_server().await;
 
     let request = things3_cli::mcp::ReadResourceRequest {
         uri: "things://unknown".to_string(),
@@ -1108,7 +1095,7 @@ async fn test_read_unknown_resource() {
 
 #[tokio::test]
 async fn test_list_prompts() {
-    let server = create_test_mcp_server();
+    let server = create_test_mcp_server().await;
     let result = server.list_prompts().unwrap();
 
     // Should have 4 prompts
@@ -1131,7 +1118,7 @@ async fn test_list_prompts() {
 
 #[tokio::test]
 async fn test_prompt_schemas_validation() {
-    let server = create_test_mcp_server();
+    let server = create_test_mcp_server().await;
     let result = server.list_prompts().unwrap();
 
     // Check that each prompt has proper schema
@@ -1174,7 +1161,7 @@ async fn test_prompt_schemas_validation() {
 
 #[tokio::test]
 async fn test_task_review_prompt() {
-    let server = create_test_mcp_server();
+    let server = create_test_mcp_server().await;
     let request = things3_cli::mcp::GetPromptRequest {
         name: "task_review".to_string(),
         arguments: Some(json!({
@@ -1205,7 +1192,7 @@ async fn test_task_review_prompt() {
 
 #[tokio::test]
 async fn test_task_review_prompt_minimal_args() {
-    let server = create_test_mcp_server();
+    let server = create_test_mcp_server().await;
     let request = things3_cli::mcp::GetPromptRequest {
         name: "task_review".to_string(),
         arguments: Some(json!({
@@ -1228,7 +1215,7 @@ async fn test_task_review_prompt_minimal_args() {
 
 #[tokio::test]
 async fn test_task_review_prompt_missing_required() {
-    let server = create_test_mcp_server();
+    let server = create_test_mcp_server().await;
     let request = things3_cli::mcp::GetPromptRequest {
         name: "task_review".to_string(),
         arguments: Some(json!({
@@ -1248,7 +1235,7 @@ async fn test_task_review_prompt_missing_required() {
 
 #[tokio::test]
 async fn test_project_planning_prompt() {
-    let server = create_test_mcp_server();
+    let server = create_test_mcp_server().await;
     let request = things3_cli::mcp::GetPromptRequest {
         name: "project_planning".to_string(),
         arguments: Some(json!({
@@ -1281,7 +1268,7 @@ async fn test_project_planning_prompt() {
 
 #[tokio::test]
 async fn test_project_planning_prompt_minimal_args() {
-    let server = create_test_mcp_server();
+    let server = create_test_mcp_server().await;
     let request = things3_cli::mcp::GetPromptRequest {
         name: "project_planning".to_string(),
         arguments: Some(json!({
@@ -1305,7 +1292,7 @@ async fn test_project_planning_prompt_minimal_args() {
 
 #[tokio::test]
 async fn test_productivity_analysis_prompt() {
-    let server = create_test_mcp_server();
+    let server = create_test_mcp_server().await;
     let request = things3_cli::mcp::GetPromptRequest {
         name: "productivity_analysis".to_string(),
         arguments: Some(json!({
@@ -1338,7 +1325,7 @@ async fn test_productivity_analysis_prompt() {
 
 #[tokio::test]
 async fn test_productivity_analysis_prompt_no_recommendations() {
-    let server = create_test_mcp_server();
+    let server = create_test_mcp_server().await;
     let request = things3_cli::mcp::GetPromptRequest {
         name: "productivity_analysis".to_string(),
         arguments: Some(json!({
@@ -1363,7 +1350,7 @@ async fn test_productivity_analysis_prompt_no_recommendations() {
 
 #[tokio::test]
 async fn test_productivity_analysis_prompt_minimal_args() {
-    let server = create_test_mcp_server();
+    let server = create_test_mcp_server().await;
     let request = things3_cli::mcp::GetPromptRequest {
         name: "productivity_analysis".to_string(),
         arguments: Some(json!({
@@ -1386,7 +1373,7 @@ async fn test_productivity_analysis_prompt_minimal_args() {
 
 #[tokio::test]
 async fn test_backup_strategy_prompt() {
-    let server = create_test_mcp_server();
+    let server = create_test_mcp_server().await;
     let request = things3_cli::mcp::GetPromptRequest {
         name: "backup_strategy".to_string(),
         arguments: Some(json!({
@@ -1421,7 +1408,7 @@ async fn test_backup_strategy_prompt() {
 
 #[tokio::test]
 async fn test_backup_strategy_prompt_minimal_args() {
-    let server = create_test_mcp_server();
+    let server = create_test_mcp_server().await;
     let request = things3_cli::mcp::GetPromptRequest {
         name: "backup_strategy".to_string(),
         arguments: Some(json!({
@@ -1446,7 +1433,7 @@ async fn test_backup_strategy_prompt_minimal_args() {
 
 #[tokio::test]
 async fn test_backup_strategy_prompt_missing_required() {
-    let server = create_test_mcp_server();
+    let server = create_test_mcp_server().await;
     let request = things3_cli::mcp::GetPromptRequest {
         name: "backup_strategy".to_string(),
         arguments: Some(json!({
@@ -1466,7 +1453,7 @@ async fn test_backup_strategy_prompt_missing_required() {
 
 #[tokio::test]
 async fn test_unknown_prompt() {
-    let server = create_test_mcp_server();
+    let server = create_test_mcp_server().await;
     let request = things3_cli::mcp::GetPromptRequest {
         name: "unknown_prompt".to_string(),
         arguments: None,
@@ -1484,7 +1471,7 @@ async fn test_unknown_prompt() {
 
 #[tokio::test]
 async fn test_prompt_with_no_arguments() {
-    let server = create_test_mcp_server();
+    let server = create_test_mcp_server().await;
     let request = things3_cli::mcp::GetPromptRequest {
         name: "task_review".to_string(),
         arguments: None,
@@ -1502,7 +1489,7 @@ async fn test_prompt_with_no_arguments() {
 
 #[tokio::test]
 async fn test_prompt_context_awareness() {
-    let server = create_test_mcp_server();
+    let server = create_test_mcp_server().await;
 
     // Test that prompts include current data context
     let request = things3_cli::mcp::GetPromptRequest {
@@ -1528,7 +1515,7 @@ async fn test_prompt_context_awareness() {
 
 #[tokio::test]
 async fn test_prompt_error_handling() {
-    let server = create_test_mcp_server();
+    let server = create_test_mcp_server().await;
 
     // Test with invalid JSON in arguments
     let request = things3_cli::mcp::GetPromptRequest {
@@ -1549,7 +1536,7 @@ async fn test_prompt_error_handling() {
 
 #[tokio::test]
 async fn test_prompt_schema_enum_validation() {
-    let server = create_test_mcp_server();
+    let server = create_test_mcp_server().await;
     let result = server.list_prompts().unwrap();
 
     // Check that enum values are properly defined in schemas
@@ -1760,11 +1747,7 @@ async fn test_from_traits() {
 #[tokio::test]
 async fn test_from_traits_comprehensive() {
     // Test all ThingsError variants
-    let db_error = things3_core::ThingsError::Database(rusqlite::Error::InvalidColumnType(
-        0,
-        "TEXT".to_string(),
-        rusqlite::types::Type::Integer,
-    ));
+    let db_error = things3_core::ThingsError::Database("TypeNotFound: test_column".to_string());
     let mcp_error: McpError = db_error.into();
     assert!(
         matches!(mcp_error, McpError::DatabaseOperationFailed { operation, .. } if operation == "database operation")
@@ -1860,7 +1843,7 @@ async fn test_from_traits_comprehensive() {
 
 #[tokio::test]
 async fn test_fallback_error_handling() {
-    let server = create_test_mcp_server();
+    let server = create_test_mcp_server().await;
 
     // Test call_tool_with_fallback for unknown tool
     let request = CallToolRequest {
@@ -1880,7 +1863,7 @@ async fn test_fallback_error_handling() {
 
 #[tokio::test]
 async fn test_prompt_fallback_error_handling() {
-    let server = create_test_mcp_server();
+    let server = create_test_mcp_server().await;
 
     // Test get_prompt_with_fallback for unknown prompt
     let request = things3_cli::mcp::GetPromptRequest {
@@ -1900,7 +1883,7 @@ async fn test_prompt_fallback_error_handling() {
 
 #[tokio::test]
 async fn test_resource_fallback_error_handling() {
-    let server = create_test_mcp_server();
+    let server = create_test_mcp_server().await;
 
     // Test read_resource_with_fallback for unknown resource
     let request = things3_cli::mcp::ReadResourceRequest {
@@ -1918,7 +1901,7 @@ async fn test_resource_fallback_error_handling() {
 
 #[tokio::test]
 async fn test_specific_error_types_in_tool_handlers() {
-    let server = create_test_mcp_server();
+    let server = create_test_mcp_server().await;
 
     // Test missing parameter error
     let request = CallToolRequest {
@@ -1938,7 +1921,7 @@ async fn test_specific_error_types_in_tool_handlers() {
 
 #[tokio::test]
 async fn test_invalid_format_error() {
-    let server = create_test_mcp_server();
+    let server = create_test_mcp_server().await;
 
     // Test invalid format error
     let request = CallToolRequest {
@@ -1962,7 +1945,7 @@ async fn test_invalid_format_error() {
 
 #[tokio::test]
 async fn test_invalid_data_type_error() {
-    let server = create_test_mcp_server();
+    let server = create_test_mcp_server().await;
 
     // Test invalid data type error
     let request = CallToolRequest {
@@ -1989,7 +1972,7 @@ async fn test_invalid_data_type_error() {
 
 #[tokio::test]
 async fn test_tool_not_found_error() {
-    let server = create_test_mcp_server();
+    let server = create_test_mcp_server().await;
 
     // Test tool not found error
     let request = CallToolRequest {
@@ -2009,7 +1992,7 @@ async fn test_tool_not_found_error() {
 
 #[tokio::test]
 async fn test_prompt_not_found_error() {
-    let server = create_test_mcp_server();
+    let server = create_test_mcp_server().await;
 
     // Test prompt not found error
     let request = things3_cli::mcp::GetPromptRequest {
@@ -2029,7 +2012,7 @@ async fn test_prompt_not_found_error() {
 
 #[tokio::test]
 async fn test_resource_not_found_error() {
-    let server = create_test_mcp_server();
+    let server = create_test_mcp_server().await;
 
     // Test resource not found error
     let request = things3_cli::mcp::ReadResourceRequest {
@@ -2710,9 +2693,11 @@ async fn test_mcp_server_with_custom_middleware() {
 
     let temp_file = NamedTempFile::new().unwrap();
     let db_path = temp_file.path();
-    create_comprehensive_test_database(db_path);
+    things3_core::test_utils::create_test_database(db_path)
+        .await
+        .unwrap();
 
-    let db = ThingsDatabase::new(db_path).unwrap();
+    let db = ThingsDatabase::new(db_path).await.unwrap();
     let config = ThingsConfig::new(db_path, false);
     let middleware_config = MiddlewareConfig::default();
 
@@ -2722,7 +2707,7 @@ async fn test_mcp_server_with_custom_middleware() {
 
 #[tokio::test]
 async fn test_call_tool_with_fallback() {
-    let server = create_test_mcp_server();
+    let server = create_test_mcp_server().await;
 
     // Test with a valid tool
     let request = CallToolRequest {
@@ -2746,7 +2731,7 @@ async fn test_call_tool_with_fallback() {
 
 #[tokio::test]
 async fn test_read_resource_with_fallback() {
-    let server = create_test_mcp_server();
+    let server = create_test_mcp_server().await;
 
     // Test with a valid resource
     let request = things3_cli::mcp::ReadResourceRequest {
@@ -2770,7 +2755,7 @@ async fn test_read_resource_with_fallback() {
 
 #[tokio::test]
 async fn test_get_prompt_with_fallback() {
-    let server = create_test_mcp_server();
+    let server = create_test_mcp_server().await;
 
     // Test with a valid prompt
     let request = things3_cli::mcp::GetPromptRequest {

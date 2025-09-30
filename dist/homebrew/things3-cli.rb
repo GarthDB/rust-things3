@@ -1,10 +1,10 @@
 class Things3Cli < Formula
   desc "Command-line interface for Things 3 with integrated MCP server"
-  homepage "https://github.com/GarthDB/rust-things"
-  url "https://github.com/GarthDB/rust-things/archive/v0.1.0.tar.gz"
+  homepage "https://github.com/GarthDB/rust-things3"
+  url "https://github.com/GarthDB/rust-things3/archive/v0.1.0.tar.gz"
   sha256 "PLACEHOLDER_SHA256"
   license "MIT"
-  head "https://github.com/GarthDB/rust-things.git", branch: "main"
+  head "https://github.com/GarthDB/rust-things3.git", branch: "main"
 
   depends_on "rust" => :build
 

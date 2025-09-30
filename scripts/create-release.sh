@@ -5,7 +5,7 @@ set -e
 
 VERSION="0.1.0"
 TAG="v$VERSION"
-REPO="GarthDB/rust-things"
+REPO="GarthDB/rust-things3"
 
 echo "🚀 Creating release $TAG for $REPO"
 
@@ -33,8 +33,8 @@ Breaking Changes:
 
 Installation:
 - From crates.io: cargo install things3-cli
-- From Homebrew: brew install GarthDB/rust-things/things3-cli
-- From source: cargo install --git https://github.com/GarthDB/rust-things"
+- From Homebrew: brew install GarthDB/rust-things3/things3-cli
+- From source: cargo install --git https://github.com/GarthDB/rust-things3"
 
 git push origin "$TAG"
 
@@ -68,12 +68,12 @@ cargo install things3-cli
 
 ### From Homebrew
 \`\`\`bash
-brew install GarthDB/rust-things/things3-cli
+brew install GarthDB/rust-things3/things3-cli
 \`\`\`
 
 ### From source
 \`\`\`bash
-cargo install --git https://github.com/GarthDB/rust-things
+cargo install --git https://github.com/GarthDB/rust-things3
 \`\`\`
 
 ## 🎯 Usage

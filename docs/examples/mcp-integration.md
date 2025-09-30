@@ -17,7 +17,7 @@ This guide shows how to integrate the Rust Things MCP server with various AI/LLM
 
 1. **Install things-cli**:
    ```bash
-   cargo install --git https://github.com/GarthDB/rust-things
+   cargo install --git https://github.com/GarthDB/rust-things3
    ```
 
 2. **Create MCP configuration**:

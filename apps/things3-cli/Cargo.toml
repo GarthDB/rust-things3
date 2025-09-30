@@ -13,8 +13,8 @@ path = "src/main.rs"
 
 [dependencies]
 # Core
-things3-core = { version = "0.1.0", features = ["test-utils"] }
-things3-common = "0.1.0"
+things3-core = { path = "../../libs/things3-core", features = ["test-utils"] }
+things3-common = { path = "../../libs/things3-common" }
 
 # CLI
 clap.workspace = true
@@ -36,7 +36,26 @@ thiserror.workspace = true
 # Async traits
 async-trait = "0.1"
 
-# Logging
+# Logging and Observability
+tracing.workspace = true
+tracing-subscriber.workspace = true
+tracing-appender.workspace = true
+metrics.workspace = true
+metrics-exporter-prometheus.workspace = true
+metrics-exporter-tcp.workspace = true
+# OpenTelemetry dependencies temporarily disabled
+# opentelemetry.workspace = true
+# opentelemetry_sdk.workspace = true
+# opentelemetry-jaeger.workspace = true
+# opentelemetry-otlp.workspace = true
+# opentelemetry-semantic-conventions.workspace = true
+
+# Health checks
+axum.workspace = true
+tower.workspace = true
+tower-http.workspace = true
+
+# Legacy logging (for backward compatibility)
 env_logger = "0.10"
 log = "0.4"
 
@@ -74,7 +93,7 @@ nonzero_ext = "0.3"
 
 # Testing and utilities
 tempfile = "3.8"
-rusqlite = "0.31"
+sqlx = { version = "0.8", features = ["runtime-tokio-rustls", "sqlite", "chrono", "uuid", "json"], default-features = false }
 futures = "0.3"
 
 # Real-time updates and progress tracking

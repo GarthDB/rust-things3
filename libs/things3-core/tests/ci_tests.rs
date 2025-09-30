@@ -12,13 +12,13 @@ use things3_core::test_utils;
 async fn test_ci_mock_database() {
     // Create a temporary database with mock data
     let temp_file = NamedTempFile::new().unwrap();
-    let _db_path = temp_file.path();
+    let db_path = temp_file.path();
 
     // Create test database with mock data
-    let _conn = test_utils::create_test_database(_db_path).unwrap();
+    test_utils::create_test_database(db_path).await.unwrap();
 
     // Test that we can connect to the mock database
-    let db = ThingsDatabase::new(_db_path).unwrap();
+    let db = ThingsDatabase::new(db_path).await.unwrap();
 
     // Test all major functionality with mock data
     test_database_operations(&db);
@@ -40,9 +40,10 @@ fn test_database_operations(_db: &ThingsDatabase) {
 #[tokio::test]
 async fn test_fallback_to_mock_data() {
     // Try to connect to real database first
-    let real_db_path = ThingsDatabase::default_path();
+    // Use a test database path instead of trying to access the real Things 3 database
+    let real_db_path = std::path::Path::new("test_things.db");
 
-    if let Ok(db) = ThingsDatabase::new(&real_db_path) {
+    if let Ok(db) = ThingsDatabase::new(real_db_path).await {
         // Real database available, test with it
         println!("Using real Things 3 database for testing");
         test_database_operations(&db);
@@ -50,12 +51,12 @@ async fn test_fallback_to_mock_data() {
         // Real database not available, use mock data
         println!("Real database not available, using mock data for testing");
         let temp_file = NamedTempFile::new().unwrap();
-        let _db_path = temp_file.path();
+        let db_path = temp_file.path();
 
         #[cfg(feature = "test-utils")]
         {
-            let _conn = test_utils::create_test_database(_db_path).unwrap();
-            let db = ThingsDatabase::new(_db_path).unwrap();
+            test_utils::create_test_database(db_path).await.unwrap();
+            let db = ThingsDatabase::new(db_path).await.unwrap();
             test_database_operations(&db);
         }
 
@@ -76,14 +77,15 @@ async fn test_mock_data_validation() {
         // Test task creation
         let tasks = create_mock_tasks();
         assert_eq!(tasks.len(), 2);
-        assert_eq!(tasks[0].title, "Review quarterly reports");
-        assert_eq!(tasks[1].title, "Call dentist");
+        assert_eq!(tasks[0].title, "Research competitors");
+        assert_eq!(tasks[1].title, "Read Rust book");
 
         // Test project creation
         let projects = create_mock_projects();
-        assert_eq!(projects.len(), 1);
+        assert_eq!(projects.len(), 2);
         assert_eq!(projects[0].title, "Website Redesign");
-        assert!(projects[0].deadline.is_some());
+        assert_eq!(projects[1].title, "Learn Rust");
+        assert!(projects[0].deadline.is_none());
 
         // Test area creation
         let areas = create_mock_areas();

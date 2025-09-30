@@ -48,7 +48,7 @@ git tag -a v0.1.0 -m "Release v0.1.0"
 git push origin v0.1.0
 
 # Create GitHub release at:
-# https://github.com/GarthDB/rust-things/releases/new?tag=v0.1.0
+# https://github.com/GarthDB/rust-things3/releases/new?tag=v0.1.0
 ```
 
 ## Step 4: Update Homebrew Formula
@@ -57,7 +57,7 @@ After creating the release, update the SHA256:
 
 ```bash
 # Get the SHA256 of the release tarball
-curl -L https://github.com/GarthDB/rust-things/archive/v0.1.0.tar.gz | shasum -a 256
+curl -L https://github.com/GarthDB/rust-things3/archive/v0.1.0.tar.gz | shasum -a 256
 
 # Update the formula
 # Edit homebrew-tap/Formula/things3-cli.rb and replace PLACEHOLDER_SHA256
@@ -109,7 +109,7 @@ brew install GarthDB/tap/things3-cli
 
 ### From source
 ```bash
-cargo install --git https://github.com/GarthDB/rust-things
+cargo install --git https://github.com/GarthDB/rust-things3
 ```
 ```
 

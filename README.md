@@ -2,8 +2,8 @@
 
 A high-performance Rust library and CLI for Things 3 integration with integrated MCP (Model Context Protocol) server support for AI/LLM environments.
 
-[![CI](https://github.com/GarthDB/rust-things/workflows/CI/badge.svg)](https://github.com/GarthDB/rust-things/actions)
-[![codecov](https://codecov.io/gh/GarthDB/rust-things/branch/main/graph/badge.svg)](https://codecov.io/gh/GarthDB/rust-things)
+[![CI](https://github.com/GarthDB/rust-things3/workflows/CI/badge.svg)](https://github.com/GarthDB/rust-things3/actions)
+[![codecov](https://codecov.io/gh/GarthDB/rust-things3/branch/main/graph/badge.svg)](https://codecov.io/gh/GarthDB/rust-things3)
 [![Crates.io](https://img.shields.io/crates/v/things3-cli.svg)](https://crates.io/crates/things3-cli)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Rust](https://img.shields.io/badge/rust-1.70+-orange.svg)](https://www.rust-lang.org)
@@ -13,7 +13,7 @@ A high-performance Rust library and CLI for Things 3 integration with integrated
 - 🚀 **High Performance**: Built with Rust for maximum speed and reliability
 - 🔧 **CLI Tool**: Command-line interface for managing Things 3 data
 - 🤖 **MCP Integration**: Integrated MCP server for AI/LLM integration
-- 📊 **Comprehensive API**: Full access to Things 3 database with caching
+- 📊 **Comprehensive API**: Full access to Things 3 database with async SQLx
 - 🏗️ **Moon Workspace**: Organized monorepo with Moon build system
 - 🧪 **Well Tested**: Comprehensive test suite and benchmarks
 - 📈 **Performance Monitoring**: Built-in metrics and system monitoring
@@ -21,6 +21,8 @@ A high-performance Rust library and CLI for Things 3 integration with integrated
 - 🔄 **Backup & Restore**: Complete backup system with metadata
 - 📤 **Data Export**: Multiple formats (JSON, CSV, OPML, Markdown)
 - 🔧 **Advanced MCP Tools**: 17 tools for AI/LLM integration
+- ⚡ **Async Database**: SQLx-powered async database operations with thread safety
+- 🌐 **Web Servers**: Health check and monitoring dashboard servers
 
 ## 🚀 Installation
 
@@ -28,7 +30,7 @@ A high-performance Rust library and CLI for Things 3 integration with integrated
 
 ```bash
 # Add the tap (when available)
-brew tap GarthDB/rust-things
+brew tap GarthDB/rust-things3
 
 # Install
 brew install things3-cli
@@ -41,14 +43,14 @@ brew install things3-cli
 cargo install things3-cli
 
 # Or install from source
-cargo install --git https://github.com/GarthDB/rust-things
+cargo install --git https://github.com/GarthDB/rust-things3
 ```
 
 ### From Source
 
 ```bash
-git clone https://github.com/GarthDB/rust-things
-cd rust-things
+git clone https://github.com/GarthDB/rust-things3
+cd rust-things3
 cargo build --release
 
 # Add to PATH
@@ -62,8 +64,8 @@ export PATH="$PWD/target/release:$PATH"
 curl -fsSL https://moonrepo.dev/install | bash
 
 # Clone and setup
-git clone https://github.com/GarthDB/rust-things
-cd rust-things
+git clone https://github.com/GarthDB/rust-things3
+cd rust-things3
 moon run :dev-pipeline
 ```
 
@@ -99,6 +101,12 @@ things3 search "report" --limit 10
 
 # Start MCP server (for AI/LLM integration)
 things3 mcp
+
+# Start health check server
+things3 health-server --port 8080
+
+# Start monitoring dashboard
+things3 dashboard --port 8081
 ```
 
 ### Environment Variables
@@ -113,6 +121,38 @@ export THINGS_FALLBACK_TO_DEFAULT=true
 # Enable verbose logging
 export RUST_LOG=debug
 ```
+
+## 🌐 Web Servers
+
+The CLI includes built-in web servers for monitoring and health checks:
+
+### Health Check Server
+
+```bash
+# Start health check server
+things3 health-server --port 8080
+
+# Test health endpoint
+curl http://localhost:8080/health
+curl http://localhost:8080/ping
+```
+
+### Monitoring Dashboard
+
+```bash
+# Start monitoring dashboard
+things3 dashboard --port 8081
+
+# Access dashboard
+open http://localhost:8081
+```
+
+The dashboard provides:
+- Real-time metrics and statistics
+- Database health monitoring
+- Performance metrics
+- System resource usage
+- Task and project analytics
 
 ## 🤖 MCP Integration
 
@@ -204,8 +244,8 @@ The MCP (Model Context Protocol) server provides 17 tools for AI/LLM integration
 
 ```bash
 # Clone the repository
-git clone https://github.com/GarthDB/rust-things
-cd rust-things
+git clone https://github.com/GarthDB/rust-things3
+cd rust-things3
 
 # Install dependencies
 moon run :local-dev-setup
@@ -220,15 +260,15 @@ moon run :dev-pipeline
 ### Project Structure
 
 ```
-rust-things/
+rust-things3/
 ├── apps/
-│   └── things3/          # CLI application with MCP server
+│   └── things3-cli/       # CLI application with MCP server
 ├── libs/
-│   ├── things-core/         # Core library
-│   └── things-common/       # Shared utilities
+│   ├── things3-core/      # Core library
+│   └── things3-common/    # Shared utilities
 ├── tools/
-│   └── xtask/              # Development tools
-└── tests/                  # Integration tests
+│   └── xtask/             # Development tools
+└── tests/                 # Integration tests
 ```
 
 ## API Reference
@@ -243,8 +283,8 @@ use anyhow::Result;
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    // Create database connection
-    let db = ThingsDatabase::with_default_path()?;
+    // Create database connection with SQLx
+    let db = ThingsDatabase::new("/path/to/things.db").await?;
     
     // Get inbox tasks
     let tasks = db.get_inbox(Some(10)).await?;
@@ -253,10 +293,10 @@ async fn main() -> Result<()> {
     let today_tasks = db.get_today(None).await?;
     
     // Get all projects
-    let projects = db.get_projects(None, None).await?;
+    let projects = db.get_projects(None).await?;
     
     // Search tasks
-    let search_results = db.search_tasks("meeting", Some(5)).await?;
+    let search_results = db.search_tasks("meeting").await?;
     
     Ok(())
 }
@@ -266,18 +306,14 @@ async fn main() -> Result<()> {
 
 ```rust
 use things3_core::{ThingsDatabase, ThingsConfig};
-use std::path::PathBuf;
+use std::path::Path;
 
-// Custom database path
-let config = ThingsConfig::new(
-    PathBuf::from("/custom/path/to/things.db"),
-    true // fallback to default if custom path fails
-);
-let db = ThingsDatabase::with_config(config)?;
+// Custom database path with SQLx
+let db = ThingsDatabase::new(Path::new("/custom/path/to/things.db")).await?;
 
 // From environment variables
 let config = ThingsConfig::from_env();
-let db = ThingsDatabase::with_config(config)?;
+let db = ThingsDatabase::new(&config.database_path).await?;
 ```
 
 #### Error Handling
@@ -287,15 +323,12 @@ use things3_core::{ThingsDatabase, ThingsError};
 use anyhow::Result;
 
 async fn handle_errors() -> Result<()> {
-    let db = ThingsDatabase::with_default_path()?;
+    let db = ThingsDatabase::new("/path/to/things.db").await?;
     
     match db.get_inbox(Some(5)).await {
         Ok(tasks) => println!("Found {} tasks", tasks.len()),
-        Err(ThingsError::DatabaseNotFound) => {
-            eprintln!("Things 3 database not found");
-        }
-        Err(ThingsError::Database(e)) => {
-            eprintln!("Database error: {}", e);
+        Err(ThingsError::Database(msg)) => {
+            eprintln!("Database error: {}", msg);
         }
         Err(e) => {
             eprintln!("Other error: {}", e);

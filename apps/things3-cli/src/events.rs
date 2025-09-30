@@ -1748,13 +1748,13 @@ mod tests {
                         task_id: Uuid::new_v4(),
                     },
                     timestamp: Utc::now(),
-                    source: format!("test_{}", i),
+                    source: format!("test_{i}"),
                     data: None,
                 };
 
                 broadcaster_clone.broadcast(event.clone()).await.unwrap();
                 let received = subscriber.try_recv().unwrap();
-                assert_eq!(received.source, format!("test_{}", i));
+                assert_eq!(received.source, format!("test_{i}"));
             });
             handles.push(handle);
         }
@@ -1831,7 +1831,7 @@ mod tests {
                     task_id: Uuid::new_v4(),
                 },
                 timestamp: Utc::now(),
-                source: format!("test_{}", i),
+                source: format!("test_{i}"),
                 data: None,
             };
             broadcaster.broadcast(event).await.unwrap();
@@ -1860,7 +1860,7 @@ mod tests {
                 task_id: Uuid::new_v4(),
             },
             timestamp: Utc::now(),
-            source: "".to_string(),
+            source: String::new(),
             data: None,
         };
         broadcaster.broadcast(minimal_event.clone()).await.unwrap();

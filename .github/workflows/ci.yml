@@ -92,7 +92,9 @@ jobs:
       run: cargo install cargo-audit
     
     - name: Run security audit
-      run: cargo audit
+      # Ignore RUSTSEC-2023-0071 (RSA timing sidechannel vulnerability) as it's a transitive
+      # dependency through SQLx MySQL support with no fix available and we don't directly use MySQL
+      run: cargo audit --ignore RUSTSEC-2023-0071
 
   # Code coverage
   coverage:
@@ -134,10 +136,16 @@ jobs:
         echo "LLVM tools available:"
         rustup component list --installed | grep llvm || echo "No LLVM tools found"
         
+        # Set LLVM environment variables for cargo-llvm-cov
+        export LLVM_COV=$(find ~/.rustup -name "llvm-cov" -type f | head -1)
+        export LLVM_PROFDATA=$(find ~/.rustup -name "llvm-profdata" -type f | head -1)
+        echo "LLVM_COV: $LLVM_COV"
+        echo "LLVM_PROFDATA: $LLVM_PROFDATA"
+        
         # Clean previous coverage data
         cargo llvm-cov clean
         
-        # Generate LCOV report
+        # Generate LCOV report (required for Codecov)
         echo "Generating LCOV report..."
         cargo llvm-cov --workspace --features test-utils --lcov --output-path lcov.info
         
