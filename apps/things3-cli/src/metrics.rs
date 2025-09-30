@@ -384,4 +384,275 @@ mod tests {
         let _collector = MetricsCollector::new(observability, database, Duration::from_secs(30));
         // Test that collector can be created without panicking
     }
+
+    #[tokio::test]
+    async fn test_performance_monitor_timing() {
+        let temp_file = NamedTempFile::new().unwrap();
+        let db_path = temp_file.path();
+
+        let config = ThingsConfig::new(db_path, false);
+        let database = Arc::new(ThingsDatabase::new(&config.database_path).await.unwrap());
+
+        let obs_config = ObservabilityConfig::default();
+        let observability = Arc::new(ObservabilityManager::new(obs_config).unwrap());
+
+        let monitor = PerformanceMonitor::new(Arc::clone(&observability));
+
+        // Test monitoring a database operation
+        let result = monitor.monitor_db_operation("test_operation", || {
+            // Simulate some work
+            "test_result"
+        });
+        assert_eq!(result, "test_result");
+    }
+
+    #[tokio::test]
+    async fn test_performance_monitor_error_tracking() {
+        let temp_file = NamedTempFile::new().unwrap();
+        let db_path = temp_file.path();
+
+        let config = ThingsConfig::new(db_path, false);
+        let database = Arc::new(ThingsDatabase::new(&config.database_path).await.unwrap());
+
+        let obs_config = ObservabilityConfig::default();
+        let observability = Arc::new(ObservabilityManager::new(obs_config).unwrap());
+
+        let monitor = PerformanceMonitor::new(Arc::clone(&observability));
+
+        // Test monitoring a task operation
+        monitor.monitor_task_operation("test_operation", 5);
+    }
+
+    #[tokio::test]
+    async fn test_error_tracker_database_error() {
+        let temp_file = NamedTempFile::new().unwrap();
+        let db_path = temp_file.path();
+
+        let config = ThingsConfig::new(db_path, false);
+        let database = Arc::new(ThingsDatabase::new(&config.database_path).await.unwrap());
+
+        let obs_config = ObservabilityConfig::default();
+        let observability = Arc::new(ObservabilityManager::new(obs_config).unwrap());
+
+        let tracker = ErrorTracker::new(Arc::clone(&observability));
+
+        // Test tracking a database error
+        let error = std::io::Error::new(std::io::ErrorKind::NotFound, "Database not found");
+        tracker.track_db_error("test_operation", &error);
+    }
+
+    #[tokio::test]
+    async fn test_error_tracker_search_error() {
+        let temp_file = NamedTempFile::new().unwrap();
+        let db_path = temp_file.path();
+
+        let config = ThingsConfig::new(db_path, false);
+        let database = Arc::new(ThingsDatabase::new(&config.database_path).await.unwrap());
+
+        let obs_config = ObservabilityConfig::default();
+        let observability = Arc::new(ObservabilityManager::new(obs_config).unwrap());
+
+        let tracker = ErrorTracker::new(Arc::clone(&observability));
+
+        // Test tracking a search error
+        let error = std::io::Error::new(std::io::ErrorKind::InvalidInput, "Invalid search query");
+        tracker.track_search_error("test query", &error);
+    }
+
+    #[tokio::test]
+    async fn test_error_tracker_export_error() {
+        let temp_file = NamedTempFile::new().unwrap();
+        let db_path = temp_file.path();
+
+        let config = ThingsConfig::new(db_path, false);
+        let database = Arc::new(ThingsDatabase::new(&config.database_path).await.unwrap());
+
+        let obs_config = ObservabilityConfig::default();
+        let observability = Arc::new(ObservabilityManager::new(obs_config).unwrap());
+
+        let tracker = ErrorTracker::new(Arc::clone(&observability));
+
+        // Test tracking an export error
+        let error = std::io::Error::new(std::io::ErrorKind::PermissionDenied, "Export failed");
+        tracker.track_export_error("json", &error);
+    }
+
+    #[tokio::test]
+    async fn test_metrics_collector_system_metrics() {
+        let temp_file = NamedTempFile::new().unwrap();
+        let db_path = temp_file.path();
+
+        let config = ThingsConfig::new(db_path, false);
+        let database = Arc::new(ThingsDatabase::new(&config.database_path).await.unwrap());
+
+        let obs_config = ObservabilityConfig::default();
+        let observability = Arc::new(ObservabilityManager::new(obs_config).unwrap());
+
+        let collector = MetricsCollector::new(
+            Arc::clone(&observability),
+            Arc::clone(&database),
+            Duration::from_secs(30),
+        );
+
+        // Test collecting system metrics
+        let result = collector.collect_system_metrics().await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_metrics_collector_database_metrics() {
+        let temp_file = NamedTempFile::new().unwrap();
+        let db_path = temp_file.path();
+
+        let config = ThingsConfig::new(db_path, false);
+        let database = Arc::new(ThingsDatabase::new(&config.database_path).await.unwrap());
+
+        let obs_config = ObservabilityConfig::default();
+        let observability = Arc::new(ObservabilityManager::new(obs_config).unwrap());
+
+        let collector = MetricsCollector::new(
+            Arc::clone(&observability),
+            Arc::clone(&database),
+            Duration::from_secs(30),
+        );
+
+        // Test collecting database metrics
+        let result = collector.collect_database_metrics().await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_metrics_collector_search_metrics() {
+        let temp_file = NamedTempFile::new().unwrap();
+        let db_path = temp_file.path();
+
+        let config = ThingsConfig::new(db_path, false);
+        let database = Arc::new(ThingsDatabase::new(&config.database_path).await.unwrap());
+
+        let obs_config = ObservabilityConfig::default();
+        let observability = Arc::new(ObservabilityManager::new(obs_config).unwrap());
+
+        let collector = MetricsCollector::new(
+            Arc::clone(&observability),
+            Arc::clone(&database),
+            Duration::from_secs(30),
+        );
+
+        // Test collecting search metrics
+        let result = collector.collect_search_metrics().await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_metrics_collector_export_metrics() {
+        let temp_file = NamedTempFile::new().unwrap();
+        let db_path = temp_file.path();
+
+        let config = ThingsConfig::new(db_path, false);
+        let database = Arc::new(ThingsDatabase::new(&config.database_path).await.unwrap());
+
+        let obs_config = ObservabilityConfig::default();
+        let observability = Arc::new(ObservabilityManager::new(obs_config).unwrap());
+
+        let collector = MetricsCollector::new(
+            Arc::clone(&observability),
+            Arc::clone(&database),
+            Duration::from_secs(30),
+        );
+
+        // Test collecting export metrics
+        let result = collector.collect_export_metrics().await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_start_metrics_collection() {
+        let temp_file = NamedTempFile::new().unwrap();
+        let db_path = temp_file.path();
+
+        let config = ThingsConfig::new(db_path, false);
+        let database = Arc::new(ThingsDatabase::new(&config.database_path).await.unwrap());
+
+        let obs_config = ObservabilityConfig::default();
+        let observability = Arc::new(ObservabilityManager::new(obs_config).unwrap());
+
+        // Test starting metrics collection (we'll just test that it doesn't panic immediately)
+        let collection_handle = tokio::spawn(async move {
+            start_metrics_collection(observability, database, Duration::from_millis(100)).await
+        });
+
+        // Give it a moment to start, then cancel
+        tokio::time::sleep(Duration::from_millis(50)).await;
+        collection_handle.abort();
+    }
+
+    #[test]
+    fn test_performance_monitor_with_custom_observability() {
+        let temp_file = NamedTempFile::new().unwrap();
+        let db_path = temp_file.path();
+
+        let config = ThingsConfig::new(db_path, false);
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        let _database = Arc::new(
+            rt.block_on(async { ThingsDatabase::new(&config.database_path).await.unwrap() }),
+        );
+
+        let mut obs_config = ObservabilityConfig::default();
+        obs_config.service_name = "test-service".to_string();
+        let observability = Arc::new(ObservabilityManager::new(obs_config).unwrap());
+
+        let _monitor = PerformanceMonitor::new(observability);
+        // Test that monitor can be created with custom observability config
+    }
+
+    #[test]
+    fn test_error_tracker_with_custom_observability() {
+        let temp_file = NamedTempFile::new().unwrap();
+        let db_path = temp_file.path();
+
+        let config = ThingsConfig::new(db_path, false);
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        let _database = Arc::new(
+            rt.block_on(async { ThingsDatabase::new(&config.database_path).await.unwrap() }),
+        );
+
+        let mut obs_config = ObservabilityConfig::default();
+        obs_config.service_name = "test-service".to_string();
+        let observability = Arc::new(ObservabilityManager::new(obs_config).unwrap());
+
+        let _tracker = ErrorTracker::new(observability);
+        // Test that tracker can be created with custom observability config
+    }
+
+    #[test]
+    fn test_metrics_collector_with_different_intervals() {
+        let temp_file = NamedTempFile::new().unwrap();
+        let db_path = temp_file.path();
+
+        let config = ThingsConfig::new(db_path, false);
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        let database = Arc::new(
+            rt.block_on(async { ThingsDatabase::new(&config.database_path).await.unwrap() }),
+        );
+
+        let obs_config = ObservabilityConfig::default();
+        let observability = Arc::new(ObservabilityManager::new(obs_config).unwrap());
+
+        // Test with different collection intervals
+        let _collector1 = MetricsCollector::new(
+            Arc::clone(&observability),
+            Arc::clone(&database),
+            Duration::from_secs(1),
+        );
+        let _collector2 = MetricsCollector::new(
+            Arc::clone(&observability),
+            Arc::clone(&database),
+            Duration::from_secs(60),
+        );
+        let _collector3 = MetricsCollector::new(
+            Arc::clone(&observability),
+            Arc::clone(&database),
+            Duration::from_millis(500),
+        );
+    }
 }

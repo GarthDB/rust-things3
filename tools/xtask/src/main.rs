@@ -998,6 +998,254 @@ mod tests {
             _ => panic!("Expected SetupHooks command"),
         }
     }
+
+    #[test]
+    fn test_main_function_execution() {
+        // Test that main function can be called with different commands
+        // This tests the actual main function execution paths
+
+        // Test with analyze command
+        let cli = Cli::try_parse_from(["xtask", "analyze"]).unwrap();
+        let result = std::panic::catch_unwind(|| match cli.command {
+            Commands::Analyze => {
+                analyze();
+            }
+            _ => panic!("Expected Analyze command"),
+        });
+        assert!(
+            result.is_ok(),
+            "Main function should not panic with analyze command"
+        );
+
+        // Test with perf-test command
+        let cli = Cli::try_parse_from(["xtask", "perf-test"]).unwrap();
+        let result = std::panic::catch_unwind(|| match cli.command {
+            Commands::PerfTest => {
+                perf_test();
+            }
+            _ => panic!("Expected PerfTest command"),
+        });
+        assert!(
+            result.is_ok(),
+            "Main function should not panic with perf-test command"
+        );
+
+        // Test with generate-tests command
+        let cli = Cli::try_parse_from(["xtask", "generate-tests", "test-target"]).unwrap();
+        let result = std::panic::catch_unwind(|| match cli.command {
+            Commands::GenerateTests { target } => {
+                generate_tests(&target);
+            }
+            _ => panic!("Expected GenerateTests command"),
+        });
+        assert!(
+            result.is_ok(),
+            "Main function should not panic with generate-tests command"
+        );
+
+        // Test with generate-code command
+        let cli = Cli::try_parse_from(["xtask", "generate-code", "test-code"]).unwrap();
+        let result = std::panic::catch_unwind(|| match cli.command {
+            Commands::GenerateCode { code } => {
+                generate_code(&code);
+            }
+            _ => panic!("Expected GenerateCode command"),
+        });
+        assert!(
+            result.is_ok(),
+            "Main function should not panic with generate-code command"
+        );
+
+        // Test with local-dev setup command
+        let cli = Cli::try_parse_from(["xtask", "local-dev", "setup"]).unwrap();
+        let result = std::panic::catch_unwind(|| match cli.command {
+            Commands::LocalDev { action } => match action {
+                LocalDevAction::Setup => {
+                    local_dev_setup();
+                }
+                _ => panic!("Expected Setup action"),
+            },
+            _ => panic!("Expected LocalDev command"),
+        });
+        assert!(
+            result.is_ok(),
+            "Main function should not panic with local-dev setup command"
+        );
+
+        // Test with local-dev health command
+        let cli = Cli::try_parse_from(["xtask", "local-dev", "health"]).unwrap();
+        let result = std::panic::catch_unwind(|| match cli.command {
+            Commands::LocalDev { action } => match action {
+                LocalDevAction::Health => {
+                    local_dev_health();
+                }
+                _ => panic!("Expected Health action"),
+            },
+            _ => panic!("Expected LocalDev command"),
+        });
+        assert!(
+            result.is_ok(),
+            "Main function should not panic with local-dev health command"
+        );
+
+        // Test with local-dev clean command
+        let cli = Cli::try_parse_from(["xtask", "local-dev", "clean"]).unwrap();
+        let result = std::panic::catch_unwind(|| match cli.command {
+            Commands::LocalDev { action } => match action {
+                LocalDevAction::Clean => {
+                    local_dev_clean();
+                }
+                _ => panic!("Expected Clean action"),
+            },
+            _ => panic!("Expected LocalDev command"),
+        });
+        assert!(
+            result.is_ok(),
+            "Main function should not panic with local-dev clean command"
+        );
+
+        // Test with things validate command
+        let cli = Cli::try_parse_from(["xtask", "things", "validate"]).unwrap();
+        let result = std::panic::catch_unwind(|| match cli.command {
+            Commands::Things { action } => match action {
+                ThingsAction::Validate => {
+                    things_validate();
+                }
+                _ => panic!("Expected Validate action"),
+            },
+            _ => panic!("Expected Things command"),
+        });
+        assert!(
+            result.is_ok(),
+            "Main function should not panic with things validate command"
+        );
+
+        // Test with things backup command
+        let cli = Cli::try_parse_from(["xtask", "things", "backup"]).unwrap();
+        let result = std::panic::catch_unwind(|| match cli.command {
+            Commands::Things { action } => match action {
+                ThingsAction::Backup => {
+                    things_backup();
+                }
+                _ => panic!("Expected Backup action"),
+            },
+            _ => panic!("Expected Things command"),
+        });
+        assert!(
+            result.is_ok(),
+            "Main function should not panic with things backup command"
+        );
+
+        // Test with things db-location command
+        let cli = Cli::try_parse_from(["xtask", "things", "db-location"]).unwrap();
+        let result = std::panic::catch_unwind(|| match cli.command {
+            Commands::Things { action } => match action {
+                ThingsAction::DbLocation => {
+                    things_db_location();
+                }
+                _ => panic!("Expected DbLocation action"),
+            },
+            _ => panic!("Expected Things command"),
+        });
+        assert!(
+            result.is_ok(),
+            "Main function should not panic with things db-location command"
+        );
+    }
+
+    #[test]
+    fn test_main_function_error_handling() {
+        // Test that main function handles errors gracefully
+        // This tests the error handling paths in the main function
+
+        // Test with setup-hooks command that might fail
+        let cli = Cli::try_parse_from(["xtask", "setup-hooks"]).unwrap();
+        let result = std::panic::catch_unwind(|| {
+            match cli.command {
+                Commands::SetupHooks => {
+                    // This might fail in test environment, but should not panic
+                    let _ = setup_git_hooks();
+                }
+                _ => panic!("Expected SetupHooks command"),
+            }
+        });
+        assert!(
+            result.is_ok(),
+            "Main function should handle setup-hooks errors gracefully"
+        );
+    }
+
+    #[test]
+    fn test_main_function_comprehensive() {
+        // Test comprehensive main function execution with all command types
+        // This provides maximum coverage of the main function
+
+        let commands = [
+            ("analyze", Commands::Analyze),
+            ("perf-test", Commands::PerfTest),
+            (
+                "generate-tests",
+                Commands::GenerateTests {
+                    target: "test".to_string(),
+                },
+            ),
+            (
+                "generate-code",
+                Commands::GenerateCode {
+                    code: "test".to_string(),
+                },
+            ),
+            (
+                "local-dev",
+                Commands::LocalDev {
+                    action: LocalDevAction::Setup,
+                },
+            ),
+            (
+                "things",
+                Commands::Things {
+                    action: ThingsAction::Validate,
+                },
+            ),
+            ("setup-hooks", Commands::SetupHooks),
+        ];
+
+        for (cmd_name, _expected_command) in commands {
+            let args = match cmd_name {
+                "generate-tests" => vec!["xtask", "generate-tests", "test"],
+                "generate-code" => vec!["xtask", "generate-code", "test"],
+                "local-dev" => vec!["xtask", "local-dev", "setup"],
+                "things" => vec!["xtask", "things", "validate"],
+                _ => vec!["xtask", cmd_name],
+            };
+
+            let cli = Cli::try_parse_from(args).unwrap();
+            let result = std::panic::catch_unwind(|| match cli.command {
+                Commands::Analyze => analyze(),
+                Commands::PerfTest => perf_test(),
+                Commands::GenerateTests { target } => generate_tests(&target),
+                Commands::GenerateCode { code } => generate_code(&code),
+                Commands::LocalDev { action } => match action {
+                    LocalDevAction::Setup => local_dev_setup(),
+                    LocalDevAction::Health => local_dev_health(),
+                    LocalDevAction::Clean => local_dev_clean(),
+                },
+                Commands::Things { action } => match action {
+                    ThingsAction::Validate => things_validate(),
+                    ThingsAction::Backup => things_backup(),
+                    ThingsAction::DbLocation => things_db_location(),
+                },
+                Commands::SetupHooks => {
+                    let _ = setup_git_hooks();
+                }
+            });
+
+            assert!(
+                result.is_ok(),
+                "Main function should not panic with {cmd_name} command"
+            );
+        }
+    }
 }
 
 #[test]

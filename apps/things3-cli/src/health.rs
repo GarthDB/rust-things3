@@ -198,4 +198,288 @@ mod tests {
         assert_eq!(response.status, "healthy");
         assert_eq!(response.version, "1.0.0");
     }
+
+    #[test]
+    fn test_health_response_with_checks() {
+        let mut checks = std::collections::HashMap::new();
+        checks.insert(
+            "database".to_string(),
+            CheckResponse {
+                status: "healthy".to_string(),
+                message: Some("Connection successful".to_string()),
+                duration_ms: 5,
+            },
+        );
+        checks.insert(
+            "cache".to_string(),
+            CheckResponse {
+                status: "unhealthy".to_string(),
+                message: Some("Connection failed".to_string()),
+                duration_ms: 100,
+            },
+        );
+
+        let response = HealthResponse {
+            status: "degraded".to_string(),
+            timestamp: "2024-01-01T00:00:00Z".to_string(),
+            uptime: std::time::Duration::from_secs(7200),
+            version: "2.0.0".to_string(),
+            environment: "staging".to_string(),
+            checks,
+        };
+
+        assert_eq!(response.status, "degraded");
+        assert_eq!(response.version, "2.0.0");
+        assert_eq!(response.environment, "staging");
+        assert_eq!(response.checks.len(), 2);
+        assert_eq!(response.uptime.as_secs(), 7200);
+    }
+
+    #[test]
+    fn test_check_response() {
+        let check = CheckResponse {
+            status: "healthy".to_string(),
+            message: Some("All systems operational".to_string()),
+            duration_ms: 10,
+        };
+
+        assert_eq!(check.status, "healthy");
+        assert_eq!(check.message, Some("All systems operational".to_string()));
+        assert_eq!(check.duration_ms, 10);
+    }
+
+    #[test]
+    fn test_check_response_without_message() {
+        let check = CheckResponse {
+            status: "unhealthy".to_string(),
+            message: None,
+            duration_ms: 500,
+        };
+
+        assert_eq!(check.status, "unhealthy");
+        assert_eq!(check.message, None);
+        assert_eq!(check.duration_ms, 500);
+    }
+
+    #[test]
+    fn test_app_state_creation() {
+        let temp_file = NamedTempFile::new().unwrap();
+        let db_path = temp_file.path();
+
+        let config = things3_core::ThingsConfig::new(db_path, false);
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        let database = Arc::new(
+            rt.block_on(async { ThingsDatabase::new(&config.database_path).await.unwrap() }),
+        );
+
+        let observability = Arc::new(
+            things3_core::ObservabilityManager::new(things3_core::ObservabilityConfig::default())
+                .unwrap(),
+        );
+
+        let state = AppState {
+            observability: Arc::clone(&observability),
+            database: Arc::clone(&database),
+        };
+
+        // Test that state can be created and cloned
+        let _cloned_state = state.clone();
+    }
+
+    #[test]
+    fn test_health_server_with_different_ports() {
+        let temp_file = NamedTempFile::new().unwrap();
+        let db_path = temp_file.path();
+
+        let config = things3_core::ThingsConfig::new(db_path, false);
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        let database = Arc::new(
+            rt.block_on(async { ThingsDatabase::new(&config.database_path).await.unwrap() }),
+        );
+
+        let observability = Arc::new(
+            things3_core::ObservabilityManager::new(things3_core::ObservabilityConfig::default())
+                .unwrap(),
+        );
+
+        // Test with different ports
+        let server1 = HealthServer::new(8080, Arc::clone(&observability), Arc::clone(&database));
+        let server2 = HealthServer::new(9090, Arc::clone(&observability), Arc::clone(&database));
+        let server3 = HealthServer::new(3000, Arc::clone(&observability), Arc::clone(&database));
+
+        assert_eq!(server1.port, 8080);
+        assert_eq!(server2.port, 9090);
+        assert_eq!(server3.port, 3000);
+    }
+
+    #[test]
+    fn test_health_response_serialization() {
+        let response = HealthResponse {
+            status: "healthy".to_string(),
+            timestamp: "2024-01-01T00:00:00Z".to_string(),
+            uptime: std::time::Duration::from_secs(3600),
+            version: "1.0.0".to_string(),
+            environment: "test".to_string(),
+            checks: std::collections::HashMap::new(),
+        };
+
+        // Test serialization
+        let json = serde_json::to_string(&response).unwrap();
+        assert!(json.contains("healthy"));
+        assert!(json.contains("1.0.0"));
+
+        // Test deserialization
+        let deserialized: HealthResponse = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized.status, response.status);
+        assert_eq!(deserialized.version, response.version);
+    }
+
+    #[test]
+    fn test_check_response_serialization() {
+        let check = CheckResponse {
+            status: "healthy".to_string(),
+            message: Some("All systems operational".to_string()),
+            duration_ms: 10,
+        };
+
+        // Test serialization
+        let json = serde_json::to_string(&check).unwrap();
+        assert!(json.contains("healthy"));
+        assert!(json.contains("All systems operational"));
+
+        // Test deserialization
+        let deserialized: CheckResponse = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized.status, check.status);
+        assert_eq!(deserialized.message, check.message);
+        assert_eq!(deserialized.duration_ms, check.duration_ms);
+    }
+
+    #[test]
+    fn test_health_response_debug_formatting() {
+        let response = HealthResponse {
+            status: "healthy".to_string(),
+            timestamp: "2024-01-01T00:00:00Z".to_string(),
+            uptime: std::time::Duration::from_secs(3600),
+            version: "1.0.0".to_string(),
+            environment: "test".to_string(),
+            checks: std::collections::HashMap::new(),
+        };
+
+        let debug_str = format!("{response:?}");
+        assert!(debug_str.contains("healthy"));
+        assert!(debug_str.contains("1.0.0"));
+    }
+
+    #[test]
+    fn test_check_response_debug_formatting() {
+        let check = CheckResponse {
+            status: "unhealthy".to_string(),
+            message: Some("Connection failed".to_string()),
+            duration_ms: 100,
+        };
+
+        let debug_str = format!("{check:?}");
+        assert!(debug_str.contains("unhealthy"));
+        assert!(debug_str.contains("Connection failed"));
+    }
+
+    #[test]
+    fn test_health_response_clone() {
+        let mut checks = std::collections::HashMap::new();
+        checks.insert(
+            "database".to_string(),
+            CheckResponse {
+                status: "healthy".to_string(),
+                message: Some("OK".to_string()),
+                duration_ms: 5,
+            },
+        );
+
+        let response = HealthResponse {
+            status: "healthy".to_string(),
+            timestamp: "2024-01-01T00:00:00Z".to_string(),
+            uptime: std::time::Duration::from_secs(3600),
+            version: "1.0.0".to_string(),
+            environment: "test".to_string(),
+            checks,
+        };
+
+        let cloned = response.clone();
+        assert_eq!(cloned.status, response.status);
+        assert_eq!(cloned.version, response.version);
+        assert_eq!(cloned.checks.len(), response.checks.len());
+    }
+
+    #[test]
+    fn test_check_response_clone() {
+        let check = CheckResponse {
+            status: "healthy".to_string(),
+            message: Some("OK".to_string()),
+            duration_ms: 5,
+        };
+
+        let cloned = check.clone();
+        assert_eq!(cloned.status, check.status);
+        assert_eq!(cloned.message, check.message);
+        assert_eq!(cloned.duration_ms, check.duration_ms);
+    }
+
+    #[test]
+    fn test_health_response_with_empty_checks() {
+        let response = HealthResponse {
+            status: "healthy".to_string(),
+            timestamp: "2024-01-01T00:00:00Z".to_string(),
+            uptime: std::time::Duration::from_secs(0),
+            version: "0.1.0".to_string(),
+            environment: "development".to_string(),
+            checks: std::collections::HashMap::new(),
+        };
+
+        assert_eq!(response.status, "healthy");
+        assert_eq!(response.uptime.as_secs(), 0);
+        assert_eq!(response.checks.len(), 0);
+    }
+
+    #[test]
+    fn test_health_response_with_multiple_checks() {
+        let mut checks = std::collections::HashMap::new();
+        checks.insert(
+            "database".to_string(),
+            CheckResponse {
+                status: "healthy".to_string(),
+                message: Some("Connection OK".to_string()),
+                duration_ms: 2,
+            },
+        );
+        checks.insert(
+            "redis".to_string(),
+            CheckResponse {
+                status: "healthy".to_string(),
+                message: Some("Cache OK".to_string()),
+                duration_ms: 1,
+            },
+        );
+        checks.insert(
+            "api".to_string(),
+            CheckResponse {
+                status: "unhealthy".to_string(),
+                message: Some("Service down".to_string()),
+                duration_ms: 1000,
+            },
+        );
+
+        let response = HealthResponse {
+            status: "degraded".to_string(),
+            timestamp: "2024-01-01T00:00:00Z".to_string(),
+            uptime: std::time::Duration::from_secs(86400), // 24 hours
+            version: "3.0.0".to_string(),
+            environment: "production".to_string(),
+            checks,
+        };
+
+        assert_eq!(response.status, "degraded");
+        assert_eq!(response.checks.len(), 3);
+        assert_eq!(response.uptime.as_secs(), 86400);
+        assert_eq!(response.environment, "production");
+    }
 }

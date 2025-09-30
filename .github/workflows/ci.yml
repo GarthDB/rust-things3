@@ -145,7 +145,7 @@ jobs:
         # Clean previous coverage data
         cargo llvm-cov clean
         
-        # Generate LCOV report
+        # Generate LCOV report (required for Codecov)
         echo "Generating LCOV report..."
         cargo llvm-cov --workspace --features test-utils --lcov --output-path lcov.info
         
