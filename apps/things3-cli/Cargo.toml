@@ -93,7 +93,7 @@ nonzero_ext = "0.3"
 
 # Testing and utilities
 tempfile = "3.8"
-sqlx = { version = "0.8", features = ["runtime-tokio-rustls", "sqlite", "chrono", "uuid", "json"] }
+sqlx = { version = "0.8", features = ["runtime-tokio-rustls", "sqlite", "chrono", "uuid", "json"], default-features = false }
 futures = "0.3"
 
 # Real-time updates and progress tracking

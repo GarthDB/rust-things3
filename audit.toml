@@ -1,0 +1,5 @@
+[advisories]
+# Allow RSA timing sidechannel vulnerability (RUSTSEC-2023-0071)
+# This is a known issue with no fix available and is a transitive dependency
+# through SQLx MySQL support, which we don't directly use
+ignore = ["RUSTSEC-2023-0071"]
