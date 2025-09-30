@@ -798,11 +798,22 @@ mod tests {
             // If it fails due to permission issues, that's okay for testing
             println!("setup_git_hooks failed (expected in test environment): {result:?}");
             // In CI environments, the function might fail due to permissions
-            // We'll just log this and not assert anything
-            println!("Skipping directory existence check due to function failure");
+            // We'll check if the directory was created before the failure
+            if std::path::Path::new(".git/hooks").exists() {
+                println!("Directory was created before function failure - test passes");
+            } else {
+                println!(
+                    "Directory was not created - this might be due to early permission failure"
+                );
+                // In some environments, the function might fail before creating the directory
+                // This is acceptable for the test as long as the function handles the error gracefully
+            }
         } else {
-            // Only verify hooks directory was created if the function succeeded
-            assert!(std::path::Path::new(".git/hooks").exists());
+            // Function succeeded, verify the directory was created
+            assert!(
+                std::path::Path::new(".git/hooks").exists(),
+                "Expected .git/hooks directory to be created, but it doesn't exist"
+            );
         }
 
         // Restore original directory - handle potential errors gracefully
