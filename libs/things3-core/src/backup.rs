@@ -44,8 +44,8 @@ impl BackupManager {
 
         if !source_path.exists() {
             return Err(anyhow::anyhow!(
-                "Source database does not exist: {:?}",
-                source_path
+                "Source database does not exist: {}",
+                source_path.display()
             ));
         }
 
@@ -89,8 +89,8 @@ impl BackupManager {
     pub fn restore_backup(&self, backup_path: &Path) -> Result<()> {
         if !backup_path.exists() {
             return Err(anyhow::anyhow!(
-                "Backup file does not exist: {:?}",
-                backup_path
+                "Backup file does not exist: {}",
+                backup_path.display()
             ));
         }
 
@@ -149,8 +149,8 @@ impl BackupManager {
         let metadata_path = backup_path.with_extension("json");
         if !metadata_path.exists() {
             return Err(anyhow::anyhow!(
-                "Backup metadata not found: {:?}",
-                metadata_path
+                "Backup metadata not found: {}",
+                metadata_path.display()
             ));
         }
 

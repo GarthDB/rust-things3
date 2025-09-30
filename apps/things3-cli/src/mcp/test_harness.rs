@@ -109,6 +109,10 @@ impl McpTestHarness {
     }
 
     /// Read a resource and return the result or error
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the resource cannot be read or if the MCP server is not available.
     pub async fn read_resource_result(&self, uri: &str) -> Result<ReadResourceResult, McpError> {
         let request = ReadResourceRequest {
             uri: uri.to_string(),
@@ -137,6 +141,10 @@ impl McpTestHarness {
     }
 
     /// Get a prompt and return the result or error
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the prompt cannot be retrieved or if the MCP server is not available.
     pub async fn get_prompt_result(
         &self,
         name: &str,

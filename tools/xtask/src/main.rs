@@ -416,20 +416,20 @@ mod tests {
         let original_dir = match std::env::current_dir() {
             Ok(dir) => dir,
             Err(e) => {
-                println!("Warning: Failed to get current directory: {:?}", e);
+                println!("Warning: Failed to get current directory: {e:?}");
                 return;
             }
         };
 
         // Change to temp directory - handle potential errors gracefully
         if let Err(e) = std::env::set_current_dir(temp_dir.path()) {
-            println!("Warning: Failed to change to temp directory: {:?}", e);
+            println!("Warning: Failed to change to temp directory: {e:?}");
             return;
         }
 
         // Create .git directory
         if let Err(e) = std::fs::create_dir_all(".git/hooks") {
-            println!("Warning: Failed to create .git/hooks directory: {:?}", e);
+            println!("Warning: Failed to create .git/hooks directory: {e:?}");
             return;
         }
 
@@ -438,10 +438,7 @@ mod tests {
         if result.is_err() {
             // If it fails due to permission issues, that's okay for testing
             // The important thing is that the function doesn't panic
-            println!(
-                "setup_git_hooks failed (expected in test environment): {:?}",
-                result
-            );
+            println!("setup_git_hooks failed (expected in test environment): {result:?}");
         } else {
             // Verify hooks were created (only if they exist)
             // In CI environments, the function might succeed but hooks might not be created
@@ -463,7 +460,7 @@ mod tests {
 
         // Restore original directory - handle potential errors gracefully
         if let Err(e) = std::env::set_current_dir(&original_dir) {
-            println!("Warning: Failed to restore original directory: {:?}", e);
+            println!("Warning: Failed to restore original directory: {e:?}");
         }
     }
 
@@ -474,20 +471,20 @@ mod tests {
         let original_dir = match std::env::current_dir() {
             Ok(dir) => dir,
             Err(e) => {
-                println!("Warning: Failed to get current directory: {:?}", e);
+                println!("Warning: Failed to get current directory: {e:?}");
                 return;
             }
         };
 
         // Change to temp directory - handle potential errors gracefully
         if let Err(e) = std::env::set_current_dir(temp_dir.path()) {
-            println!("Warning: Failed to change to temp directory: {:?}", e);
+            println!("Warning: Failed to change to temp directory: {e:?}");
             return;
         }
 
         // Create .git directory first
         if let Err(e) = std::fs::create_dir_all(".git") {
-            println!("Warning: Failed to create .git directory: {:?}", e);
+            println!("Warning: Failed to create .git directory: {e:?}");
             return;
         }
 
@@ -496,7 +493,7 @@ mod tests {
 
         // Check the result and verify directory creation BEFORE changing back
         match result {
-            Ok(_) => {
+            Ok(()) => {
                 // Function succeeded, verify directory was created in temp directory
                 let current_dir =
                     std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
@@ -509,7 +506,7 @@ mod tests {
 
                 if !hooks_exists {
                     // Debug information
-                    println!("Current working directory: {:?}", current_dir);
+                    println!("Current working directory: {current_dir:?}");
                     println!(".git exists: {}", git_path.exists());
                     println!("Checking if .git/hooks exists: {}", hooks_path.exists());
                     println!(
@@ -533,10 +530,7 @@ mod tests {
             }
             Err(e) => {
                 // Function failed, which might be expected in CI environment
-                println!(
-                    "setup_git_hooks failed (expected in test environment): {:?}",
-                    e
-                );
+                println!("setup_git_hooks failed (expected in test environment): {e:?}");
                 // In CI environments, this might fail due to permissions or other issues
                 // We'll just log the error and continue
             }
@@ -544,7 +538,7 @@ mod tests {
 
         // Always restore original directory last
         if let Err(e) = std::env::set_current_dir(&original_dir) {
-            println!("Warning: Failed to restore original directory: {:?}", e);
+            println!("Warning: Failed to restore original directory: {e:?}");
         }
     }
 
@@ -619,7 +613,7 @@ mod tests {
             if let Commands::LocalDev { action } = cli.command {
                 assert!(matches!(action, _expected_action));
             } else {
-                panic!("Expected LocalDev command for action: {}", action_name);
+                panic!("Expected LocalDev command for action: {action_name}");
             }
         }
     }
@@ -638,7 +632,7 @@ mod tests {
             if let Commands::Things { action } = cli.command {
                 assert!(matches!(action, _expected_action));
             } else {
-                panic!("Expected Things command for action: {}", action_name);
+                panic!("Expected Things command for action: {action_name}");
             }
         }
     }
@@ -650,20 +644,20 @@ mod tests {
         let original_dir = match std::env::current_dir() {
             Ok(dir) => dir,
             Err(e) => {
-                println!("Warning: Failed to get current directory: {:?}", e);
+                println!("Warning: Failed to get current directory: {e:?}");
                 return;
             }
         };
 
         // Change to temp directory - handle potential errors gracefully
         if let Err(e) = std::env::set_current_dir(temp_dir.path()) {
-            println!("Warning: Failed to change to temp directory: {:?}", e);
+            println!("Warning: Failed to change to temp directory: {e:?}");
             return;
         }
 
         // Create .git directory
         if let Err(e) = std::fs::create_dir_all(".git/hooks") {
-            println!("Warning: Failed to create .git/hooks directory: {:?}", e);
+            println!("Warning: Failed to create .git/hooks directory: {e:?}");
             return;
         }
 
@@ -671,10 +665,7 @@ mod tests {
         let result = setup_git_hooks();
         if result.is_err() {
             // If it fails due to permission issues, that's okay for testing
-            println!(
-                "setup_git_hooks failed (expected in test environment): {:?}",
-                result
-            );
+            println!("setup_git_hooks failed (expected in test environment): {result:?}");
             // Skip content verification if the function failed
             println!("Skipping hook content verification due to function failure");
         } else {
@@ -699,7 +690,7 @@ mod tests {
 
         // Restore original directory - handle potential errors gracefully
         if let Err(e) = std::env::set_current_dir(&original_dir) {
-            println!("Warning: Failed to restore original directory: {:?}", e);
+            println!("Warning: Failed to restore original directory: {e:?}");
         }
     }
 
@@ -710,20 +701,20 @@ mod tests {
         let original_dir = match std::env::current_dir() {
             Ok(dir) => dir,
             Err(e) => {
-                println!("Warning: Failed to get current directory: {:?}", e);
+                println!("Warning: Failed to get current directory: {e:?}");
                 return;
             }
         };
 
         // Change to temp directory - handle potential errors gracefully
         if let Err(e) = std::env::set_current_dir(temp_dir.path()) {
-            println!("Warning: Failed to change to temp directory: {:?}", e);
+            println!("Warning: Failed to change to temp directory: {e:?}");
             return;
         }
 
         // Create .git directory
         if let Err(e) = std::fs::create_dir_all(".git/hooks") {
-            println!("Warning: Failed to create .git/hooks directory: {:?}", e);
+            println!("Warning: Failed to create .git/hooks directory: {e:?}");
             return;
         }
 
@@ -731,10 +722,7 @@ mod tests {
         let result = setup_git_hooks();
         if result.is_err() {
             // If it fails due to permission issues, that's okay for testing
-            println!(
-                "setup_git_hooks failed (expected in test environment): {:?}",
-                result
-            );
+            println!("setup_git_hooks failed (expected in test environment): {result:?}");
         } else {
             // Check permissions - only if files exist
             if std::path::Path::new(".git/hooks/pre-commit").exists() {
@@ -776,7 +764,7 @@ mod tests {
 
         // Restore original directory - handle potential errors gracefully
         if let Err(e) = std::env::set_current_dir(&original_dir) {
-            println!("Warning: Failed to restore original directory: {:?}", e);
+            println!("Warning: Failed to restore original directory: {e:?}");
         }
     }
 
@@ -787,20 +775,20 @@ mod tests {
         let original_dir = match std::env::current_dir() {
             Ok(dir) => dir,
             Err(e) => {
-                println!("Warning: Failed to get current directory: {:?}", e);
+                println!("Warning: Failed to get current directory: {e:?}");
                 return;
             }
         };
 
         // Change to temp directory - handle potential errors gracefully
         if let Err(e) = std::env::set_current_dir(temp_dir.path()) {
-            println!("Warning: Failed to change to temp directory: {:?}", e);
+            println!("Warning: Failed to change to temp directory: {e:?}");
             return;
         }
 
         // Only create .git directory, not .git/hooks
         if let Err(e) = std::fs::create_dir_all(".git") {
-            println!("Warning: Failed to create .git directory: {:?}", e);
+            println!("Warning: Failed to create .git directory: {e:?}");
             return;
         }
 
@@ -808,10 +796,7 @@ mod tests {
         let result = setup_git_hooks();
         if result.is_err() {
             // If it fails due to permission issues, that's okay for testing
-            println!(
-                "setup_git_hooks failed (expected in test environment): {:?}",
-                result
-            );
+            println!("setup_git_hooks failed (expected in test environment): {result:?}");
             // In CI environments, the function might fail due to permissions
             // We'll just log this and not assert anything
             println!("Skipping directory existence check due to function failure");
@@ -822,7 +807,7 @@ mod tests {
 
         // Restore original directory - handle potential errors gracefully
         if let Err(e) = std::env::set_current_dir(&original_dir) {
-            println!("Warning: Failed to restore original directory: {:?}", e);
+            println!("Warning: Failed to restore original directory: {e:?}");
         }
     }
 
@@ -850,20 +835,20 @@ mod tests {
         let original_dir = match std::env::current_dir() {
             Ok(dir) => dir,
             Err(e) => {
-                println!("Warning: Failed to get current directory: {:?}", e);
+                println!("Warning: Failed to get current directory: {e:?}");
                 return;
             }
         };
 
         // Change to temp directory - handle potential errors gracefully
         if let Err(e) = std::env::set_current_dir(temp_dir.path()) {
-            println!("Warning: Failed to change to temp directory: {:?}", e);
+            println!("Warning: Failed to change to temp directory: {e:?}");
             return;
         }
 
         // Create .git directory
         if let Err(e) = std::fs::create_dir_all(".git/hooks") {
-            println!("Warning: Failed to create .git/hooks directory: {:?}", e);
+            println!("Warning: Failed to create .git/hooks directory: {e:?}");
             return;
         }
 
@@ -906,12 +891,12 @@ mod tests {
                 println!("Warning: Pre-push hook file does not exist");
             }
         } else {
-            println!("Warning: setup_git_hooks failed: {:?}", result);
+            println!("Warning: setup_git_hooks failed: {result:?}");
         }
 
         // Restore original directory - handle potential errors gracefully
         if let Err(e) = std::env::set_current_dir(&original_dir) {
-            println!("Warning: Failed to restore original directory: {:?}", e);
+            println!("Warning: Failed to restore original directory: {e:?}");
         }
     }
 
@@ -922,20 +907,20 @@ mod tests {
         let original_dir = match std::env::current_dir() {
             Ok(dir) => dir,
             Err(e) => {
-                println!("Warning: Failed to get current directory: {:?}", e);
+                println!("Warning: Failed to get current directory: {e:?}");
                 return;
             }
         };
 
         // Change to temp directory - handle potential errors gracefully
         if let Err(e) = std::env::set_current_dir(temp_dir.path()) {
-            println!("Warning: Failed to change to temp directory: {:?}", e);
+            println!("Warning: Failed to change to temp directory: {e:?}");
             return;
         }
 
         // Create .git directory
         if let Err(e) = std::fs::create_dir_all(".git/hooks") {
-            println!("Warning: Failed to create .git/hooks directory: {:?}", e);
+            println!("Warning: Failed to create .git/hooks directory: {e:?}");
             return;
         }
 
@@ -943,15 +928,12 @@ mod tests {
         let result = setup_git_hooks();
         if result.is_err() {
             // This should trigger the error handling path in the test
-            println!(
-                "setup_git_hooks failed (expected in test environment): {:?}",
-                result
-            );
+            println!("setup_git_hooks failed (expected in test environment): {result:?}");
         }
 
         // Restore original directory - handle potential errors gracefully
         if let Err(e) = std::env::set_current_dir(&original_dir) {
-            println!("Warning: Failed to restore original directory: {:?}", e);
+            println!("Warning: Failed to restore original directory: {e:?}");
         }
     }
 
@@ -962,20 +944,20 @@ mod tests {
         let original_dir = match std::env::current_dir() {
             Ok(dir) => dir,
             Err(e) => {
-                println!("Warning: Failed to get current directory: {:?}", e);
+                println!("Warning: Failed to get current directory: {e:?}");
                 return;
             }
         };
 
         // Change to temp directory - handle potential errors gracefully
         if let Err(e) = std::env::set_current_dir(temp_dir.path()) {
-            println!("Warning: Failed to change to temp directory: {:?}", e);
+            println!("Warning: Failed to change to temp directory: {e:?}");
             return;
         }
 
         // Create .git directory but make it read-only to force errors
         if let Err(e) = std::fs::create_dir_all(".git/hooks") {
-            println!("Warning: Failed to create .git/hooks directory: {:?}", e);
+            println!("Warning: Failed to create .git/hooks directory: {e:?}");
             return;
         }
 
@@ -994,12 +976,12 @@ mod tests {
         let result = setup_git_hooks();
         if result.is_err() {
             // This should trigger the error handling paths in the function
-            println!("setup_git_hooks failed as expected: {:?}", result);
+            println!("setup_git_hooks failed as expected: {result:?}");
         }
 
         // Restore original directory - handle potential errors gracefully
         if let Err(e) = std::env::set_current_dir(&original_dir) {
-            println!("Warning: Failed to restore original directory: {:?}", e);
+            println!("Warning: Failed to restore original directory: {e:?}");
         }
     }
 

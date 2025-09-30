@@ -12,13 +12,13 @@ use things3_core::test_utils;
 async fn test_ci_mock_database() {
     // Create a temporary database with mock data
     let temp_file = NamedTempFile::new().unwrap();
-    let _db_path = temp_file.path();
+    let db_path = temp_file.path();
 
     // Create test database with mock data
-    let _conn = test_utils::create_test_database(_db_path).await.unwrap();
+    test_utils::create_test_database(db_path).await.unwrap();
 
     // Test that we can connect to the mock database
-    let db = ThingsDatabase::new(_db_path).await.unwrap();
+    let db = ThingsDatabase::new(db_path).await.unwrap();
 
     // Test all major functionality with mock data
     test_database_operations(&db);
@@ -51,12 +51,12 @@ async fn test_fallback_to_mock_data() {
         // Real database not available, use mock data
         println!("Real database not available, using mock data for testing");
         let temp_file = NamedTempFile::new().unwrap();
-        let _db_path = temp_file.path();
+        let db_path = temp_file.path();
 
         #[cfg(feature = "test-utils")]
         {
-            let _conn = test_utils::create_test_database(_db_path).await.unwrap();
-            let db = ThingsDatabase::new(_db_path).await.unwrap();
+            test_utils::create_test_database(db_path).await.unwrap();
+            let db = ThingsDatabase::new(db_path).await.unwrap();
             test_database_operations(&db);
         }
 

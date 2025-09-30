@@ -8,9 +8,8 @@ use things3_core::{
 use uuid::Uuid;
 
 #[cfg(feature = "test-utils")]
-use things3_core::test_utils::create_test_database;
-
 // Helper function to create test schema and data
+#[allow(clippy::too_many_lines)]
 async fn create_test_schema(db: &ThingsDatabase) -> Result<(), Box<dyn std::error::Error>> {
     let pool = db.pool();
 
@@ -313,11 +312,11 @@ async fn test_database_connection_persistence() {
     create_test_schema(&db2).await.unwrap();
 
     // Both should work independently
-    let inbox1 = db.get_inbox(None).await.unwrap();
-    let inbox2 = db2.get_inbox(None).await.unwrap();
+    let _inbox1 = db.get_inbox(None).await.unwrap();
+    let _inbox2 = db2.get_inbox(None).await.unwrap();
     // In-memory databases are independent, so they may have different data
-    assert!(inbox1.len() >= 0);
-    assert!(inbox2.len() >= 0);
+    // Both databases should have non-negative lengths (always true for usize)
+    // This test verifies that both databases are independent and functional
 }
 
 #[tokio::test]
@@ -411,7 +410,7 @@ async fn test_database_date_filtering() {
 #[tokio::test]
 async fn test_database_error_recovery() {
     let temp_dir = tempdir().unwrap();
-    let db_path = temp_dir.path().join("test.db");
+    let _db_path = temp_dir.path().join("test.db");
 
     // Create a valid database first
     let db = ThingsDatabase::from_connection_string("sqlite::memory:")
@@ -433,7 +432,7 @@ async fn test_database_error_recovery() {
 #[tokio::test]
 async fn test_database_concurrent_access() {
     let temp_dir = tempdir().unwrap();
-    let db_path = temp_dir.path().join("test.db");
+    let _db_path = temp_dir.path().join("test.db");
 
     // Create multiple database connections
     let db1 = ThingsDatabase::from_connection_string("sqlite::memory:")

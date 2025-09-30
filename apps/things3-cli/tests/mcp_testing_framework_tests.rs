@@ -2,9 +2,7 @@
 
 use serde_json::json;
 use things3_cli::mcp::{
-    test_harness::{
-        McpIntegrationTest, McpPerformanceTest, McpTestHarness, McpTestUtils, MockDatabase,
-    },
+    test_harness::{McpIntegrationTest, McpPerformanceTest, McpTestHarness, McpTestUtils},
     McpError,
 };
 

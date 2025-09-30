@@ -25,7 +25,7 @@ impl std::str::FromStr for ExportFormat {
             "csv" => Ok(Self::Csv),
             "opml" => Ok(Self::Opml),
             "markdown" | "md" => Ok(Self::Markdown),
-            _ => Err(anyhow::anyhow!("Unsupported export format: {}", s)),
+            _ => Err(anyhow::anyhow!("Unsupported export format: {s}")),
         }
     }
 }
