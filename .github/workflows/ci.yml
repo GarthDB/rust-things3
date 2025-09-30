@@ -136,6 +136,12 @@ jobs:
         echo "LLVM tools available:"
         rustup component list --installed | grep llvm || echo "No LLVM tools found"
         
+        # Set LLVM environment variables for cargo-llvm-cov
+        export LLVM_COV=$(find ~/.rustup -name "llvm-cov" -type f | head -1)
+        export LLVM_PROFDATA=$(find ~/.rustup -name "llvm-profdata" -type f | head -1)
+        echo "LLVM_COV: $LLVM_COV"
+        echo "LLVM_PROFDATA: $LLVM_PROFDATA"
+        
         # Clean previous coverage data
         cargo llvm-cov clean
         
