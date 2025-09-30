@@ -6,11 +6,11 @@ pub mod dashboard;
 pub mod events;
 pub mod health;
 pub mod logging;
-pub mod metrics;
 pub mod mcp;
+pub mod metrics;
 pub mod monitoring;
 pub mod progress;
-pub mod thread_safe_db;
+// pub mod thread_safe_db; // Removed - ThingsDatabase is now Send + Sync
 pub mod websocket;
 
 use crate::events::EventBroadcaster;
@@ -19,7 +19,7 @@ use clap::{Parser, Subcommand};
 use std::io::Write;
 use std::path::PathBuf;
 use std::sync::Arc;
-use things3_core::{Result, ThingsConfig, ThingsDatabase};
+use things3_core::{Result, ThingsDatabase};
 
 #[derive(Parser, Debug)]
 #[command(name = "things3")]
@@ -232,42 +232,38 @@ pub fn print_areas<W: Write>(
 ///
 /// # Errors
 /// Returns an error if the database is not accessible
-pub fn health_check(db: &ThingsDatabase) -> Result<()> {
+pub async fn health_check(db: &ThingsDatabase) -> Result<()> {
     println!("🔍 Checking Things 3 database connection...");
 
-    // Try to get a small sample of tasks to verify connection
-    let tasks = db.get_inbox(Some(1))?;
+    // Check if database is connected
+    if !db.is_connected().await {
+        return Err(things3_core::ThingsError::unknown(
+            "Database is not connected".to_string(),
+        ));
+    }
+
+    // Get database statistics
+    let stats = db.get_stats().await?;
     println!("✅ Database connection successful!");
-    println!("   Found {} tasks in inbox", tasks.len());
-
-    // Try to get projects
-    let projects = db.get_projects(None)?;
-    println!("   Found {} projects", projects.len());
-
-    // Try to get areas
-    let areas = db.get_areas()?;
-    println!("   Found {} areas", areas.len());
+    println!(
+        "   Found {} tasks, {} projects, {} areas",
+        stats.task_count, stats.project_count, stats.area_count
+    );
 
     println!("🎉 All systems operational!");
     Ok(())
 }
 
-/// Start the MCP server
-///
-/// # Errors
-/// Returns an error if the server fails to start
-pub fn start_mcp_server(db: Arc<ThingsDatabase>, config: ThingsConfig) -> Result<()> {
-    println!("🚀 Starting MCP server...");
-
-    let _server = mcp::ThingsMcpServer::new(Arc::clone(&db), config);
-
-    // In a real implementation, this would start the MCP server
-    // For now, we'll just print that it would start
-    println!("✅ MCP server would start here");
-    println!("   (This is a placeholder - actual MCP server implementation would go here)");
-
-    Ok(())
-}
+// Temporarily disabled during SQLx migration
+// /// Start the MCP server
+// ///
+// /// # Errors
+// /// Returns an error if the server fails to start
+// pub fn start_mcp_server(db: Arc<SqlxThingsDatabase>, config: ThingsConfig) -> Result<()> {
+//     println!("🚀 Starting MCP server...");
+//     println!("🚧 MCP server is temporarily disabled during SQLx migration");
+//     Err(things3_core::ThingsError::unknown("MCP server temporarily disabled".to_string()))
+// }
 
 /// Start the WebSocket server for real-time updates
 ///
@@ -306,26 +302,30 @@ pub fn watch_updates(url: &str) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::mcp::start_mcp_server;
     use things3_core::test_utils::create_test_database;
+    use tokio::runtime::Runtime;
 
     #[test]
     fn test_health_check() {
         let temp_file = tempfile::NamedTempFile::new().unwrap();
         let db_path = temp_file.path();
-        let _conn = create_test_database(db_path).unwrap();
-        let db = ThingsDatabase::new(db_path).unwrap();
-        let result = health_check(&db);
+        let rt = Runtime::new().unwrap();
+        rt.block_on(async { create_test_database(db_path).await.unwrap() });
+        let db = rt.block_on(async { ThingsDatabase::new(db_path).await.unwrap() });
+        let result = rt.block_on(async { health_check(&db).await });
         assert!(result.is_ok());
     }
 
     #[test]
     fn test_start_mcp_server() {
+        let rt = Runtime::new().unwrap();
         let temp_file = tempfile::NamedTempFile::new().unwrap();
         let db_path = temp_file.path();
-        let _conn = create_test_database(db_path).unwrap();
-        let db = ThingsDatabase::new(db_path).unwrap();
-        let config = ThingsConfig::default();
-        let result = start_mcp_server(db, config);
+        rt.block_on(async { create_test_database(db_path).await.unwrap() });
+        let db = rt.block_on(async { ThingsDatabase::new(db_path).await.unwrap() });
+        let config = things3_core::ThingsConfig::default();
+        let result = rt.block_on(async { start_mcp_server(db.into(), config) });
         assert!(result.is_ok());
     }
 

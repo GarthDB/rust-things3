@@ -13,7 +13,6 @@ pub mod models;
 pub mod observability;
 pub mod performance;
 pub mod query;
-pub mod sqlx_database;
 
 #[cfg(any(test, feature = "test-utils"))]
 pub mod test_utils;
@@ -21,7 +20,7 @@ pub mod test_utils;
 pub use backup::{BackupManager, BackupMetadata, BackupStats};
 pub use cache::{CacheConfig, CacheStats, ThingsCache};
 pub use config::ThingsConfig;
-pub use database::ThingsDatabase;
+pub use database::{DatabaseStats, ThingsDatabase};
 pub use error::{Result, ThingsError};
 pub use export::{DataExporter, ExportConfig, ExportData, ExportFormat};
 pub use models::*;
@@ -30,7 +29,6 @@ pub use observability::{
     ThingsMetrics,
 };
 pub use performance::{OperationMetrics, PerformanceMonitor, PerformanceStats, PerformanceSummary};
-pub use sqlx_database::{DatabaseStats, SqlxThingsDatabase};
 
 /// Re-export commonly used types
 pub use chrono::{DateTime, NaiveDate, Utc};

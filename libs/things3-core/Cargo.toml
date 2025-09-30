@@ -20,7 +20,6 @@ thiserror.workspace = true
 anyhow.workspace = true
 
 # Database
-rusqlite.workspace = true
 sqlx = { version = "0.8", features = ["runtime-tokio-rustls", "sqlite", "chrono", "uuid", "json"] }
 
 # Async

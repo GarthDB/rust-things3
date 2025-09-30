@@ -30,13 +30,13 @@ async fn test_mcp_test_harness_tool_calls() {
     let harness = McpTestHarness::new();
 
     // Test successful tool calls
-    let result = harness.assert_tool_success("get_inbox", None).await;
+    let result = harness.assert_tool_succeeds("get_inbox", None).await;
     assert!(!result.is_error);
     assert!(!result.content.is_empty());
 
     // Test tool call with arguments
     let result = harness
-        .assert_tool_success("get_inbox", Some(json!({"limit": 3})))
+        .assert_tool_succeeds("get_inbox", Some(json!({"limit": 3})))
         .await;
     assert!(!result.is_error);
 
@@ -50,7 +50,7 @@ async fn test_mcp_test_harness_resource_calls() {
     let harness = McpTestHarness::new();
 
     // Test successful resource reads
-    let result = harness.assert_resource_success("things://inbox").await;
+    let result = harness.assert_resource_succeeds("things://inbox").await;
     assert!(!result.contents.is_empty());
 
     // Test resource read with JSON assertion
@@ -64,7 +64,7 @@ async fn test_mcp_test_harness_prompt_calls() {
 
     // Test successful prompt calls
     let result = harness
-        .assert_prompt_success("task_review", Some(json!({"task_title": "Test Task"})))
+        .assert_prompt_succeeds("task_review", Some(json!({"task_title": "Test Task"})))
         .await;
     assert!(!result.is_error);
     assert!(!result.content.is_empty());
@@ -83,28 +83,28 @@ async fn test_mcp_test_harness_error_handling() {
 
     // Test tool not found error
     harness
-        .assert_tool_error("unknown_tool", None, |e| {
+        .assert_tool_fails_with("unknown_tool", None, |e| {
             matches!(e, McpError::ToolNotFound { .. })
         })
         .await;
 
     // Test resource not found error
     harness
-        .assert_resource_error("things://unknown", |e| {
+        .assert_resource_fails_with("things://unknown", |e| {
             matches!(e, McpError::ResourceNotFound { .. })
         })
         .await;
 
     // Test prompt not found error
     harness
-        .assert_prompt_error("unknown_prompt", None, |e| {
+        .assert_prompt_fails_with("unknown_prompt", None, |e| {
             matches!(e, McpError::PromptNotFound { .. })
         })
         .await;
 
     // Test missing parameter error
     harness
-        .assert_tool_error("search_tasks", Some(json!({})), |e| {
+        .assert_tool_fails_with("search_tasks", Some(json!({})), |e| {
             matches!(e, McpError::MissingParameter { .. })
         })
         .await;
@@ -173,7 +173,6 @@ async fn test_mock_database_functionality() {
     db.add_task(things3_cli::mcp::test_harness::MockTask {
         uuid: "new-task".to_string(),
         title: "New Task".to_string(),
-        notes: Some("New notes".to_string()),
         status: "incomplete".to_string(),
         project_uuid: Some("project-1".to_string()),
         area_uuid: Some("area-1".to_string()),
@@ -334,14 +333,14 @@ async fn test_mcp_test_utils_assertions() {
     let harness = McpTestHarness::new();
 
     // Test tool result assertions
-    let result = harness.call_tool("get_inbox", None).await.unwrap();
+    let result = harness.call_tool("get_inbox", None).await;
     McpTestUtils::assert_tool_result_contains(&result, "uuid");
 
     let json_result = McpTestUtils::assert_tool_result_is_json(&result);
     assert!(json_result.is_array());
 
     // Test resource result assertions
-    let result = harness.read_resource("things://inbox").await.unwrap();
+    let result = harness.read_resource("things://inbox").await;
     McpTestUtils::assert_resource_result_contains(&result, "uuid");
 
     let json_result = McpTestUtils::assert_resource_result_is_json(&result);
@@ -350,8 +349,7 @@ async fn test_mcp_test_utils_assertions() {
     // Test prompt result assertions
     let result = harness
         .get_prompt("task_review", Some(json!({"task_title": "Test Task"})))
-        .await
-        .unwrap();
+        .await;
     McpTestUtils::assert_prompt_result_contains(&result, "Test Task");
     McpTestUtils::assert_prompt_result_contains(&result, "Task Review");
 }
@@ -364,7 +362,7 @@ async fn test_mcp_test_harness_with_middleware() {
     let harness = McpTestHarness::with_middleware_config(middleware_config);
 
     // Test that it works with middleware
-    let result = harness.assert_tool_success("get_inbox", None).await;
+    let result = harness.assert_tool_succeeds("get_inbox", None).await;
     assert!(!result.is_error);
 }
 
@@ -427,17 +425,17 @@ async fn test_mcp_test_harness_comprehensive_workflow() {
 
     // 5. Test error handling
     harness
-        .assert_tool_error("unknown_tool", None, |e| {
+        .assert_tool_fails_with("unknown_tool", None, |e| {
             matches!(e, McpError::ToolNotFound { .. })
         })
         .await;
     harness
-        .assert_resource_error("things://unknown", |e| {
+        .assert_resource_fails_with("things://unknown", |e| {
             matches!(e, McpError::ResourceNotFound { .. })
         })
         .await;
     harness
-        .assert_prompt_error("unknown_prompt", None, |e| {
+        .assert_prompt_fails_with("unknown_prompt", None, |e| {
             matches!(e, McpError::PromptNotFound { .. })
         })
         .await;
@@ -449,18 +447,17 @@ async fn test_mcp_test_harness_performance_benchmarks() {
 
     // Test performance of various operations
     let perf_test = McpPerformanceTest::new();
-    let _result = harness.call_tool("get_inbox", None).await.unwrap();
+    let _result = harness.call_tool("get_inbox", None).await;
     perf_test.assert_under_ms(1000);
 
     let perf_test = McpPerformanceTest::new();
-    let _result = harness.read_resource("things://inbox").await.unwrap();
+    let _result = harness.read_resource("things://inbox").await;
     perf_test.assert_under_ms(1000);
 
     let perf_test = McpPerformanceTest::new();
     let _result = harness
         .get_prompt("task_review", Some(json!({"task_title": "Test"})))
-        .await
-        .unwrap();
+        .await;
     perf_test.assert_under_ms(1000);
 }
 
@@ -470,17 +467,17 @@ async fn test_mcp_test_harness_error_scenarios() {
 
     // Test various error scenarios
     harness
-        .assert_tool_error("unknown_tool", None, |e| {
+        .assert_tool_fails_with("unknown_tool", None, |e| {
             matches!(e, McpError::ToolNotFound { .. })
         })
         .await;
     harness
-        .assert_tool_error("search_tasks", Some(json!({})), |e| {
+        .assert_tool_fails_with("search_tasks", Some(json!({})), |e| {
             matches!(e, McpError::MissingParameter { .. })
         })
         .await;
     harness
-        .assert_tool_error(
+        .assert_tool_fails_with(
             "export_data",
             Some(json!({"format": "invalid", "data_type": "tasks"})),
             |e| matches!(e, McpError::InvalidFormat { .. }),
@@ -535,31 +532,16 @@ async fn test_mcp_test_harness_concurrent_operations() {
 
     // All tool operations should succeed
     for result in tool_results {
-        match result {
-            Ok(_) => {
-                // Tool results are already handled by the harness
-            }
-            Err(e) => panic!("Concurrent tool operation failed: {e:?}"),
-        }
+        assert!(!result.is_error);
     }
 
     // All resource operations should succeed
     for result in resource_results {
-        match result {
-            Ok(_) => {
-                // Resource results are already handled by the harness
-            }
-            Err(e) => panic!("Concurrent resource operation failed: {e:?}"),
-        }
+        assert!(!result.contents.is_empty());
     }
 
     // All prompt operations should succeed
     for result in prompt_results {
-        match result {
-            Ok(_) => {
-                // Prompt results are already handled by the harness
-            }
-            Err(e) => panic!("Concurrent prompt operation failed: {e:?}"),
-        }
+        assert!(!result.is_error);
     }
 }

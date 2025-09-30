@@ -44,7 +44,7 @@ things-cli [OPTIONS] <COMMAND>
 Show tasks from the inbox.
 
 ```bash
-things-cli inbox [OPTIONS]
+things3 inbox [OPTIONS]
 ```
 
 **Options:**
@@ -351,15 +351,75 @@ things-cli --database "/path/to/things.sqlite" --fallback-to-default inbox
 Use the `--verbose` flag to enable debug logging:
 
 ```bash
-things-cli --verbose health
+things3 --verbose health
 ```
+
+### 8. Health Server
+
+Start a health check web server.
+
+```bash
+things3 health-server [OPTIONS]
+```
+
+**Options:**
+- `-p, --port <PORT>`: Port number (default: 8080)
+
+**Example:**
+```bash
+# Start health server on default port 8080
+things3 health-server
+
+# Start health server on custom port
+things3 health-server --port 9090
+
+# Test health endpoints
+curl http://localhost:8080/health
+curl http://localhost:8080/ping
+```
+
+**Endpoints:**
+- `GET /health`: Comprehensive health check
+- `GET /ping`: Simple ping endpoint
+- `GET /ready`: Readiness check
+- `GET /live`: Liveness check
+
+### 9. Dashboard
+
+Start a monitoring dashboard web server.
+
+```bash
+things3 dashboard [OPTIONS]
+```
+
+**Options:**
+- `-p, --port <PORT>`: Port number (default: 8081)
+
+**Example:**
+```bash
+# Start dashboard on default port 8081
+things3 dashboard
+
+# Start dashboard on custom port
+things3 dashboard --port 9091
+
+# Access dashboard
+open http://localhost:8081
+```
+
+**Features:**
+- Real-time metrics and statistics
+- Database health monitoring
+- Performance metrics
+- System resource usage
+- Task and project analytics
 
 ### Logging
 
 Set the `RUST_LOG` environment variable for more detailed logging:
 
 ```bash
-RUST_LOG=debug things-cli health
+RUST_LOG=debug things3 health
 ```
 
 ## Development

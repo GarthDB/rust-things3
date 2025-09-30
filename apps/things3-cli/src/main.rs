@@ -2,11 +2,9 @@
 
 use clap::Parser;
 use std::sync::Arc;
-use things3_cli::bulk_operations::BulkOperationsManager;
-use things3_cli::{
-    health_check, print_areas, print_projects, print_tasks, start_mcp_server,
-    start_websocket_server, watch_updates, BulkOperation, Cli, Commands,
-};
+// use things3_cli::bulk_operations::BulkOperationsManager; // Temporarily disabled
+use things3_cli::mcp::start_mcp_server;
+use things3_cli::{health_check, start_websocket_server, watch_updates, Cli, Commands};
 use things3_core::{
     ObservabilityConfig, ObservabilityManager, Result, ThingsConfig, ThingsDatabase,
 };
@@ -19,7 +17,11 @@ async fn main() -> Result<()> {
 
     // Initialize observability
     let obs_config = ObservabilityConfig {
-        log_level: if cli.verbose { "debug".to_string() } else { "info".to_string() },
+        log_level: if cli.verbose {
+            "debug".to_string()
+        } else {
+            "info".to_string()
+        },
         json_logs: std::env::var("THINGS3_JSON_LOGS").unwrap_or_default() == "true",
         enable_tracing: true,
         jaeger_endpoint: std::env::var("JAEGER_ENDPOINT").ok(),
@@ -33,7 +35,8 @@ async fn main() -> Result<()> {
 
     let mut observability = ObservabilityManager::new(obs_config)
         .map_err(|e| things3_core::ThingsError::unknown(e.to_string()))?;
-    observability.initialize()
+    observability
+        .initialize()
         .map_err(|e| things3_core::ThingsError::unknown(e.to_string()))?;
     let observability = Arc::new(observability);
 
@@ -47,74 +50,71 @@ async fn main() -> Result<()> {
     };
 
     // Create database connection
-    let db = ThingsDatabase::with_config(&config)?;
+    let db = ThingsDatabase::new(&config.database_path).await?;
     let db = Arc::new(db);
 
     match cli.command {
-        Commands::Inbox { limit } => {
-            observability.record_db_operation("get_inbox", || {
-                let tasks = db.get_inbox(limit)?;
-                print_tasks(&db, &tasks, &mut std::io::stdout())?;
-                Ok(())
-            })?;
+        Commands::Inbox { limit: _ } => {
+            error!("Inbox command is temporarily disabled during SQLx migration");
+            println!("🚧 Inbox command is temporarily disabled");
+            println!("   This feature is being migrated to use SQLx for better async support");
+            return Err(things3_core::ThingsError::unknown(
+                "Inbox command temporarily disabled".to_string(),
+            ));
         }
-        Commands::Today { limit } => {
-            observability.record_db_operation("get_today", || {
-                let tasks = db.get_today(limit)?;
-                print_tasks(&db, &tasks, &mut std::io::stdout())?;
-                Ok(())
-            })?;
+        Commands::Today { limit: _ } => {
+            error!("Today command is temporarily disabled during SQLx migration");
+            println!("🚧 Today command is temporarily disabled");
+            println!("   This feature is being migrated to use SQLx for better async support");
+            return Err(things3_core::ThingsError::unknown(
+                "Today command temporarily disabled".to_string(),
+            ));
         }
-        Commands::Projects { area, limit } => {
-            observability.record_db_operation("get_projects", || {
-                let area_uuid = area.and_then(|a| uuid::Uuid::parse_str(&a).ok());
-                let projects = db.get_projects(area_uuid)?;
-                let projects = if let Some(limit) = limit {
-                    projects.into_iter().take(limit).collect::<Vec<_>>()
-                } else {
-                    projects
-                };
-                print_projects(&db, &projects, &mut std::io::stdout())?;
-                Ok(())
-            })?;
+        Commands::Projects { area: _, limit: _ } => {
+            error!("Projects command is temporarily disabled during SQLx migration");
+            println!("🚧 Projects command is temporarily disabled");
+            println!("   This feature is being migrated to use SQLx for better async support");
+            return Err(things3_core::ThingsError::unknown(
+                "Projects command temporarily disabled".to_string(),
+            ));
         }
-        Commands::Areas { limit } => {
-            observability.record_db_operation("get_areas", || {
-                let areas = db.get_areas()?;
-                let areas = if let Some(limit) = limit {
-                    areas.into_iter().take(limit).collect::<Vec<_>>()
-                } else {
-                    areas
-                };
-                print_areas(&db, &areas, &mut std::io::stdout())?;
-                Ok(())
-            })?;
+        Commands::Areas { limit: _ } => {
+            error!("Areas command is temporarily disabled during SQLx migration");
+            println!("🚧 Areas command is temporarily disabled");
+            println!("   This feature is being migrated to use SQLx for better async support");
+            return Err(things3_core::ThingsError::unknown(
+                "Areas command temporarily disabled".to_string(),
+            ));
         }
-        Commands::Search { query, limit } => {
-            observability.record_search_operation(&query, || {
-                let tasks = db.search_tasks(&query, limit)?;
-                print_tasks(&db, &tasks, &mut std::io::stdout())?;
-                Ok(())
-            })?;
+        Commands::Search { query: _, limit: _ } => {
+            error!("Search command is temporarily disabled during SQLx migration");
+            println!("🚧 Search command is temporarily disabled");
+            println!("   This feature is being migrated to use SQLx for better async support");
+            return Err(things3_core::ThingsError::unknown(
+                "Search command temporarily disabled".to_string(),
+            ));
         }
         Commands::Mcp => {
-            info!("Starting MCP server");
+            info!("Starting MCP server...");
             start_mcp_server(Arc::clone(&db), config)?;
+            info!("MCP server started successfully");
         }
         Commands::Health => {
             info!("Performing health check");
-            health_check(&db)?;
+            health_check(&db).await?;
         }
-            Commands::HealthServer { port } => {
-                info!("Health check server functionality temporarily disabled due to thread safety issues");
-                println!("🚧 Health check server on port {} is temporarily disabled", port);
-                println!("   This feature requires thread-safe database access which needs to be implemented");
-            }
-            Commands::Dashboard { port } => {
-                info!("Dashboard functionality temporarily disabled due to thread safety issues");
-                println!("🚧 Monitoring dashboard on port {} is temporarily disabled", port);
-                println!("   This feature requires thread-safe database access which needs to be implemented");
-            }
+        Commands::HealthServer { port } => {
+            info!("Starting health check server on port {}", port);
+            things3_cli::health::start_health_server(port, observability, Arc::clone(&db))
+                .await
+                .map_err(|e| things3_core::ThingsError::unknown(e.to_string()))?;
+        }
+        Commands::Dashboard { port } => {
+            info!("Starting monitoring dashboard on port {}", port);
+            things3_cli::dashboard::start_dashboard_server(port, observability, Arc::clone(&db))
+                .await
+                .map_err(|e| things3_core::ThingsError::unknown(e.to_string()))?;
+        }
         Commands::Server { port } => {
             info!("Starting WebSocket server on port {}", port);
             start_websocket_server(port).await?;
@@ -129,56 +129,13 @@ async fn main() -> Result<()> {
             // TODO: Implement validation logic
             println!("✅ Real-time features validation completed");
         }
-        Commands::Bulk { operation } => {
-            let bulk_manager = BulkOperationsManager::new();
-
-            match operation {
-                BulkOperation::Export { format } => {
-                    info!("Starting bulk export in {} format", format);
-                    println!("🚀 Starting bulk export in {format} format...");
-                    let tasks = bulk_manager.export_all_tasks(&db, &format).await?;
-                    observability.record_task_operation("exported", tasks.len() as u64);
-                    println!("✅ Exported {} tasks successfully", tasks.len());
-                }
-                BulkOperation::UpdateStatus { task_ids, status } => {
-                    info!("Starting bulk status update for {} tasks", task_ids.split(',').count());
-                    println!("🚀 Starting bulk status update...");
-                    let ids: Vec<uuid::Uuid> = task_ids
-                        .split(',')
-                        .filter_map(|id| uuid::Uuid::parse_str(id.trim()).ok())
-                        .collect();
-
-                    let task_status = match status.as_str() {
-                        "completed" => things3_core::TaskStatus::Completed,
-                        "cancelled" => things3_core::TaskStatus::Canceled,
-                        "trashed" => things3_core::TaskStatus::Trashed,
-                        "incomplete" => things3_core::TaskStatus::Incomplete,
-                        _ => {
-                            error!("Invalid status: {}. Use: completed, cancelled, trashed, or incomplete", status);
-                            eprintln!("❌ Invalid status: {status}. Use: completed, cancelled, trashed, or incomplete");
-                            return Ok(());
-                        }
-                    };
-
-                    let updated_count = bulk_manager
-                        .bulk_update_task_status(&db, ids, task_status)
-                        .await?;
-                    observability.record_task_operation("updated", updated_count as u64);
-                    println!("✅ Updated {updated_count} tasks successfully");
-                }
-                BulkOperation::SearchAndProcess { query } => {
-                    info!("Starting search and process for: {}", query);
-                    println!("🚀 Starting search and process for: {query}");
-                    let tasks = bulk_manager
-                        .search_and_process_tasks(&db, &query, |task| {
-                            println!("  Processing: {}", task.title);
-                            Ok(())
-                        })
-                        .await?;
-                    observability.record_task_operation("processed", tasks.len() as u64);
-                    println!("✅ Processed {} tasks successfully", tasks.len());
-                }
-            }
+        Commands::Bulk { operation: _ } => {
+            error!("Bulk operations are temporarily disabled during SQLx migration");
+            println!("🚧 Bulk operations are temporarily disabled");
+            println!("   This feature is being migrated to use SQLx for better async support");
+            return Err(things3_core::ThingsError::unknown(
+                "Bulk operations temporarily disabled".to_string(),
+            ));
         }
     }
 
@@ -190,6 +147,7 @@ mod tests {
     use super::*;
     use std::io::Cursor;
     use tempfile::NamedTempFile;
+    use things3_cli::{print_areas, print_projects, print_tasks, BulkOperation};
     use things3_core::test_utils::create_test_database;
 
     /// Test the main function with various command combinations
@@ -197,16 +155,16 @@ mod tests {
     async fn test_main_inbox_command() {
         let temp_file = NamedTempFile::new().unwrap();
         let db_path = temp_file.path();
-        create_test_database(db_path).unwrap();
+        create_test_database(db_path).await.unwrap();
 
         let config = ThingsConfig::new(db_path, false);
-        let db = ThingsDatabase::with_config(&config).unwrap();
+        let db = ThingsDatabase::new(&config.database_path).await.unwrap();
 
         // Test inbox command
         let cli = Cli::try_parse_from(["things-cli", "inbox"]).unwrap();
         let result = match cli.command {
             Commands::Inbox { limit } => {
-                let tasks = db.get_inbox(limit).unwrap();
+                let tasks = db.get_inbox(limit).await.unwrap();
                 let mut output = Cursor::new(Vec::new());
                 print_tasks(&db, &tasks, &mut output).unwrap();
                 String::from_utf8(output.into_inner()).unwrap()
@@ -220,16 +178,16 @@ mod tests {
     async fn test_main_today_command() {
         let temp_file = NamedTempFile::new().unwrap();
         let db_path = temp_file.path();
-        create_test_database(db_path).unwrap();
+        create_test_database(db_path).await.unwrap();
 
         let config = ThingsConfig::new(db_path, false);
-        let db = ThingsDatabase::with_config(&config).unwrap();
+        let db = ThingsDatabase::new(&config.database_path).await.unwrap();
 
         // Test today command
         let cli = Cli::try_parse_from(["things-cli", "today"]).unwrap();
         let result = match cli.command {
             Commands::Today { limit } => {
-                let tasks = db.get_today(limit).unwrap();
+                let tasks = db.get_today(limit).await.unwrap();
                 let mut output = Cursor::new(Vec::new());
                 print_tasks(&db, &tasks, &mut output).unwrap();
                 String::from_utf8(output.into_inner()).unwrap()
@@ -243,17 +201,17 @@ mod tests {
     async fn test_main_projects_command() {
         let temp_file = NamedTempFile::new().unwrap();
         let db_path = temp_file.path();
-        create_test_database(db_path).unwrap();
+        create_test_database(db_path).await.unwrap();
 
         let config = ThingsConfig::new(db_path, false);
-        let db = ThingsDatabase::with_config(&config).unwrap();
+        let db = ThingsDatabase::new(&config.database_path).await.unwrap();
 
         // Test projects command
         let cli = Cli::try_parse_from(["things-cli", "projects"]).unwrap();
         let result = match cli.command {
             Commands::Projects { area, limit } => {
-                let area_uuid = area.and_then(|a| uuid::Uuid::parse_str(&a).ok());
-                let projects = db.get_projects(area_uuid).unwrap();
+                let _area_uuid = area.and_then(|a| uuid::Uuid::parse_str(&a).ok());
+                let projects = db.get_projects(None).await.unwrap();
                 let projects = if let Some(limit) = limit {
                     projects.into_iter().take(limit).collect::<Vec<_>>()
                 } else {
@@ -272,16 +230,16 @@ mod tests {
     async fn test_main_areas_command() {
         let temp_file = NamedTempFile::new().unwrap();
         let db_path = temp_file.path();
-        create_test_database(db_path).unwrap();
+        create_test_database(db_path).await.unwrap();
 
         let config = ThingsConfig::new(db_path, false);
-        let db = ThingsDatabase::with_config(&config).unwrap();
+        let db = ThingsDatabase::new(&config.database_path).await.unwrap();
 
         // Test areas command
         let cli = Cli::try_parse_from(["things-cli", "areas"]).unwrap();
         let result = match cli.command {
             Commands::Areas { limit } => {
-                let areas = db.get_areas().unwrap();
+                let areas = db.get_areas().await.unwrap();
                 let areas = if let Some(limit) = limit {
                     areas.into_iter().take(limit).collect::<Vec<_>>()
                 } else {
@@ -300,16 +258,16 @@ mod tests {
     async fn test_main_search_command() {
         let temp_file = NamedTempFile::new().unwrap();
         let db_path = temp_file.path();
-        create_test_database(db_path).unwrap();
+        create_test_database(db_path).await.unwrap();
 
         let config = ThingsConfig::new(db_path, false);
-        let db = ThingsDatabase::with_config(&config).unwrap();
+        let db = ThingsDatabase::new(&config.database_path).await.unwrap();
 
         // Test search command
         let cli = Cli::try_parse_from(["things-cli", "search", "test"]).unwrap();
         let result = match cli.command {
-            Commands::Search { query, limit } => {
-                let tasks = db.search_tasks(&query, limit).unwrap();
+            Commands::Search { query, limit: _ } => {
+                let tasks = db.search_tasks(&query).await.unwrap();
                 let mut output = Cursor::new(Vec::new());
                 print_tasks(&db, &tasks, &mut output).unwrap();
                 String::from_utf8(output.into_inner()).unwrap()
@@ -323,16 +281,16 @@ mod tests {
     async fn test_main_health_command() {
         let temp_file = NamedTempFile::new().unwrap();
         let db_path = temp_file.path();
-        create_test_database(db_path).unwrap();
+        create_test_database(db_path).await.unwrap();
 
         let config = ThingsConfig::new(db_path, false);
-        let db = ThingsDatabase::with_config(&config).unwrap();
+        let db = ThingsDatabase::new(&config.database_path).await.unwrap();
 
         // Test health command
         let cli = Cli::try_parse_from(["things-cli", "health"]).unwrap();
         match cli.command {
             Commands::Health => {
-                health_check(&db).unwrap();
+                health_check(&db).await.unwrap();
             }
             _ => panic!("Expected health command"),
         }
@@ -342,16 +300,16 @@ mod tests {
     async fn test_main_mcp_command() {
         let temp_file = NamedTempFile::new().unwrap();
         let db_path = temp_file.path();
-        create_test_database(db_path).unwrap();
+        create_test_database(db_path).await.unwrap();
 
         let config = ThingsConfig::new(db_path, false);
-        let db = ThingsDatabase::with_config(&config).unwrap();
+        let db = ThingsDatabase::new(&config.database_path).await.unwrap();
 
         // Test MCP command
         let cli = Cli::try_parse_from(["things-cli", "mcp"]).unwrap();
         match cli.command {
             Commands::Mcp => {
-                start_mcp_server(db, config).unwrap();
+                start_mcp_server(db.into(), config).unwrap();
             }
             _ => panic!("Expected MCP command"),
         }
@@ -361,10 +319,10 @@ mod tests {
     async fn test_main_with_verbose_flag() {
         let temp_file = NamedTempFile::new().unwrap();
         let db_path = temp_file.path();
-        create_test_database(db_path).unwrap();
+        create_test_database(db_path).await.unwrap();
 
         let config = ThingsConfig::new(db_path, false);
-        let db = ThingsDatabase::with_config(&config).unwrap();
+        let db = ThingsDatabase::new(&config.database_path).await.unwrap();
 
         // Test with verbose flag
         let cli = Cli::try_parse_from(["things-cli", "--verbose", "inbox"]).unwrap();
@@ -372,7 +330,7 @@ mod tests {
 
         match cli.command {
             Commands::Inbox { limit } => {
-                let tasks = db.get_inbox(limit).unwrap();
+                let tasks = db.get_inbox(limit).await.unwrap();
                 let mut output = Cursor::new(Vec::new());
                 print_tasks(&db, &tasks, &mut output).unwrap();
                 let result = String::from_utf8(output.into_inner()).unwrap();
@@ -386,7 +344,7 @@ mod tests {
     async fn test_main_with_database_path() {
         let temp_file = NamedTempFile::new().unwrap();
         let db_path = temp_file.path();
-        create_test_database(db_path).unwrap();
+        create_test_database(db_path).await.unwrap();
 
         // Test with database path
         let cli = Cli::try_parse_from([
@@ -399,11 +357,11 @@ mod tests {
         assert_eq!(cli.database, Some(db_path.to_path_buf()));
 
         let config = ThingsConfig::new(db_path, false);
-        let db = ThingsDatabase::with_config(&config).unwrap();
+        let db = ThingsDatabase::new(&config.database_path).await.unwrap();
 
         match cli.command {
             Commands::Inbox { limit } => {
-                let tasks = db.get_inbox(limit).unwrap();
+                let tasks = db.get_inbox(limit).await.unwrap();
                 let mut output = Cursor::new(Vec::new());
                 print_tasks(&db, &tasks, &mut output).unwrap();
                 let result = String::from_utf8(output.into_inner()).unwrap();
@@ -417,18 +375,18 @@ mod tests {
     async fn test_main_with_fallback_flag() {
         let temp_file = NamedTempFile::new().unwrap();
         let db_path = temp_file.path();
-        create_test_database(db_path).unwrap();
+        create_test_database(db_path).await.unwrap();
 
         // Test with fallback flag
         let cli = Cli::try_parse_from(["things-cli", "--fallback-to-default", "inbox"]).unwrap();
         assert!(cli.fallback_to_default);
 
         let config = ThingsConfig::new(db_path, false);
-        let db = ThingsDatabase::with_config(&config).unwrap();
+        let db = ThingsDatabase::new(&config.database_path).await.unwrap();
 
         match cli.command {
             Commands::Inbox { limit } => {
-                let tasks = db.get_inbox(limit).unwrap();
+                let tasks = db.get_inbox(limit).await.unwrap();
                 let mut output = Cursor::new(Vec::new());
                 print_tasks(&db, &tasks, &mut output).unwrap();
                 let result = String::from_utf8(output.into_inner()).unwrap();
@@ -442,17 +400,17 @@ mod tests {
     async fn test_main_with_limit() {
         let temp_file = NamedTempFile::new().unwrap();
         let db_path = temp_file.path();
-        create_test_database(db_path).unwrap();
+        create_test_database(db_path).await.unwrap();
 
         let config = ThingsConfig::new(db_path, false);
-        let db = ThingsDatabase::with_config(&config).unwrap();
+        let db = ThingsDatabase::new(&config.database_path).await.unwrap();
 
         // Test with limit
         let cli = Cli::try_parse_from(["things-cli", "inbox", "--limit", "5"]).unwrap();
         match cli.command {
             Commands::Inbox { limit } => {
                 assert_eq!(limit, Some(5));
-                let tasks = db.get_inbox(limit).unwrap();
+                let tasks = db.get_inbox(limit).await.unwrap();
                 let mut output = Cursor::new(Vec::new());
                 print_tasks(&db, &tasks, &mut output).unwrap();
                 let result = String::from_utf8(output.into_inner()).unwrap();

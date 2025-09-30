@@ -36,7 +36,7 @@ impl BulkOperationsManager {
         tracker.set_message("Fetching tasks from database...".to_string());
 
         // Get all tasks
-        let tasks = db.search_tasks("", None)?;
+        let tasks = db.search_tasks("").await?;
 
         tracker.set_message(format!(
             "Found {} tasks, exporting to {}...",
@@ -148,7 +148,7 @@ impl BulkOperationsManager {
         tracker.set_message("Searching tasks...".to_string());
 
         // Search tasks
-        let tasks = db.search_tasks(query, None)?;
+        let tasks = db.search_tasks(query).await?;
 
         tracker.set_message(format!("Found {} tasks, processing...", tasks.len()));
 
@@ -252,8 +252,8 @@ mod tests {
         let manager = BulkOperationsManager::new();
         let temp_file = tempfile::NamedTempFile::new().unwrap();
         let db_path = temp_file.path();
-        let _conn = create_test_database(db_path).unwrap();
-        let db = ThingsDatabase::new(db_path).unwrap();
+        create_test_database(db_path).await.unwrap();
+        let db = ThingsDatabase::new(db_path).await.unwrap();
 
         // Note: Progress manager is not started in tests to avoid hanging
         // In real usage, the progress manager would be started separately
@@ -279,8 +279,8 @@ mod tests {
         let manager = BulkOperationsManager::new();
         let temp_file = tempfile::NamedTempFile::new().unwrap();
         let db_path = temp_file.path();
-        let _conn = create_test_database(db_path).unwrap();
-        let db = ThingsDatabase::new(db_path).unwrap();
+        create_test_database(db_path).await.unwrap();
+        let db = ThingsDatabase::new(db_path).await.unwrap();
 
         // Note: Progress manager is not started in tests to avoid hanging
         // In real usage, the progress manager would be started separately
@@ -299,8 +299,8 @@ mod tests {
         let manager = BulkOperationsManager::new();
         let temp_file = tempfile::NamedTempFile::new().unwrap();
         let db_path = temp_file.path();
-        let _conn = create_test_database(db_path).unwrap();
-        let db = ThingsDatabase::new(db_path).unwrap();
+        create_test_database(db_path).await.unwrap();
+        let db = ThingsDatabase::new(db_path).await.unwrap();
 
         // Note: Progress manager is not started in tests to avoid hanging
         // In real usage, the progress manager would be started separately
@@ -321,8 +321,8 @@ mod tests {
         let manager = BulkOperationsManager::new();
         let temp_file = tempfile::NamedTempFile::new().unwrap();
         let db_path = temp_file.path();
-        let _conn = create_test_database(db_path).unwrap();
-        let db = ThingsDatabase::new(db_path).unwrap();
+        create_test_database(db_path).await.unwrap();
+        let db = ThingsDatabase::new(db_path).await.unwrap();
 
         // Note: Progress manager is not started in tests to avoid hanging
         // In real usage, the progress manager would be started separately
@@ -344,8 +344,8 @@ mod tests {
         let manager = BulkOperationsManager::new();
         let temp_file = tempfile::NamedTempFile::new().unwrap();
         let db_path = temp_file.path();
-        let _conn = create_test_database(db_path).unwrap();
-        let db = ThingsDatabase::new(db_path).unwrap();
+        create_test_database(db_path).await.unwrap();
+        let db = ThingsDatabase::new(db_path).await.unwrap();
 
         let task_ids = vec![];
         let statuses = vec![
@@ -370,8 +370,8 @@ mod tests {
         let manager = BulkOperationsManager::new();
         let temp_file = tempfile::NamedTempFile::new().unwrap();
         let db_path = temp_file.path();
-        let _conn = create_test_database(db_path).unwrap();
-        let db = ThingsDatabase::new(db_path).unwrap();
+        create_test_database(db_path).await.unwrap();
+        let db = ThingsDatabase::new(db_path).await.unwrap();
 
         // Note: Progress manager is not started in tests to avoid hanging
         // In real usage, the progress manager would be started separately
@@ -392,8 +392,8 @@ mod tests {
         let manager = BulkOperationsManager::new();
         let temp_file = tempfile::NamedTempFile::new().unwrap();
         let db_path = temp_file.path();
-        let _conn = create_test_database(db_path).unwrap();
-        let db = ThingsDatabase::new(db_path).unwrap();
+        create_test_database(db_path).await.unwrap();
+        let db = ThingsDatabase::new(db_path).await.unwrap();
 
         // Note: Progress manager is not started in tests to avoid hanging
         // In real usage, the progress manager would be started separately
@@ -414,8 +414,8 @@ mod tests {
         let manager = BulkOperationsManager::new();
         let temp_file = tempfile::NamedTempFile::new().unwrap();
         let db_path = temp_file.path();
-        let _conn = create_test_database(db_path).unwrap();
-        let db = ThingsDatabase::new(db_path).unwrap();
+        create_test_database(db_path).await.unwrap();
+        let db = ThingsDatabase::new(db_path).await.unwrap();
 
         let limits = vec![1, 5, 10, 100];
 
@@ -492,8 +492,8 @@ mod tests {
         let manager = BulkOperationsManager::new();
         let temp_file = tempfile::NamedTempFile::new().unwrap();
         let db_path = temp_file.path();
-        let _conn = create_test_database(db_path).unwrap();
-        let db = ThingsDatabase::new(db_path).unwrap();
+        create_test_database(db_path).await.unwrap();
+        let db = ThingsDatabase::new(db_path).await.unwrap();
 
         // Note: Progress manager is not started in tests to avoid hanging
         // In real usage, the progress manager would be started separately
@@ -512,8 +512,8 @@ mod tests {
         let manager = BulkOperationsManager::new();
         let temp_file = tempfile::NamedTempFile::new().unwrap();
         let db_path = temp_file.path();
-        let _conn = create_test_database(db_path).unwrap();
-        let db = ThingsDatabase::new(db_path).unwrap();
+        create_test_database(db_path).await.unwrap();
+        let db = ThingsDatabase::new(db_path).await.unwrap();
 
         // Note: Progress manager is not started in tests to avoid hanging
         // In real usage, the progress manager would be started separately
@@ -534,8 +534,8 @@ mod tests {
         let manager = BulkOperationsManager::new();
         let temp_file = tempfile::NamedTempFile::new().unwrap();
         let db_path = temp_file.path();
-        let _conn = create_test_database(db_path).unwrap();
-        let db = ThingsDatabase::new(db_path).unwrap();
+        create_test_database(db_path).await.unwrap();
+        let db = ThingsDatabase::new(db_path).await.unwrap();
 
         // Note: Progress manager is not started in tests to avoid hanging
         // In real usage, the progress manager would be started separately
@@ -556,8 +556,8 @@ mod tests {
         let manager = BulkOperationsManager::new();
         let temp_file = tempfile::NamedTempFile::new().unwrap();
         let db_path = temp_file.path();
-        let _conn = create_test_database(db_path).unwrap();
-        let db = ThingsDatabase::new(db_path).unwrap();
+        create_test_database(db_path).await.unwrap();
+        let db = ThingsDatabase::new(db_path).await.unwrap();
 
         // Note: Progress manager is not started in tests to avoid hanging
         // In real usage, the progress manager would be started separately
@@ -574,8 +574,8 @@ mod tests {
         let manager = BulkOperationsManager::new();
         let temp_file = tempfile::NamedTempFile::new().unwrap();
         let db_path = temp_file.path();
-        let _conn = create_test_database(db_path).unwrap();
-        let _db = ThingsDatabase::new(db_path).unwrap();
+        create_test_database(db_path).await.unwrap();
+        let _db = ThingsDatabase::new(db_path).await.unwrap();
 
         // Note: Progress manager is not started in tests to avoid hanging
         // In real usage, the progress manager would be started separately
@@ -617,12 +617,12 @@ mod tests {
     async fn test_export_all_tasks() {
         let temp_file = NamedTempFile::new().unwrap();
         let db_path = temp_file.path();
-        create_test_database(db_path).unwrap();
+        create_test_database(db_path).await.unwrap();
 
-        let db = ThingsDatabase::new(db_path).unwrap();
+        let db = ThingsDatabase::new(db_path).await.unwrap();
 
         // Test direct database query without progress tracking
-        let tasks = db.get_inbox(None).unwrap();
+        let tasks = db.get_inbox(None).await.unwrap();
         assert!(!tasks.is_empty());
 
         // Test that we can serialize the tasks to JSON
@@ -634,12 +634,12 @@ mod tests {
     async fn test_bulk_update_task_status() {
         let temp_file = NamedTempFile::new().unwrap();
         let db_path = temp_file.path();
-        create_test_database(db_path).unwrap();
+        create_test_database(db_path).await.unwrap();
 
-        let db = ThingsDatabase::new(db_path).unwrap();
+        let db = ThingsDatabase::new(db_path).await.unwrap();
 
         // Test the core functionality without the progress manager
-        let tasks = db.get_inbox(Some(5)).unwrap();
+        let tasks = db.get_inbox(Some(5)).await.unwrap();
         let task_ids: Vec<uuid::Uuid> = tasks.iter().map(|t| t.uuid).collect();
 
         if !task_ids.is_empty() {
@@ -657,9 +657,9 @@ mod tests {
     async fn test_search_and_process_tasks() {
         let temp_file = NamedTempFile::new().unwrap();
         let db_path = temp_file.path();
-        create_test_database(db_path).unwrap();
+        create_test_database(db_path).await.unwrap();
 
-        let db = ThingsDatabase::new(db_path).unwrap();
+        let db = ThingsDatabase::new(db_path).await.unwrap();
         let manager = BulkOperationsManager::new();
 
         let result = manager

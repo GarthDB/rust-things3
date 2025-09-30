@@ -662,7 +662,7 @@ mod tests {
         // Test with None values
         let update_none = ProgressUpdate {
             operation_id: Uuid::new_v4(),
-            operation_name: "".to_string(),
+            operation_name: String::new(),
             current: 0,
             total: None,
             message: None,

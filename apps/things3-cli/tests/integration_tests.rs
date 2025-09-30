@@ -7,15 +7,15 @@ use things3_core::{
 };
 
 /// Test the `print_tasks` function with various inputs
-#[test]
-fn test_print_tasks_integration() {
+#[tokio::test]
+async fn test_print_tasks_integration() {
     // Create a test database
     let temp_file = NamedTempFile::new().unwrap();
     let db_path = temp_file.path();
-    create_test_database(db_path).unwrap();
+    create_test_database(db_path).await.unwrap();
 
     let config = ThingsConfig::new(db_path, false);
-    let db = ThingsDatabase::with_config(&config).unwrap();
+    let db = ThingsDatabase::new(&config.database_path).await.unwrap();
 
     // Test with empty tasks
     let mut output = Cursor::new(Vec::new());
@@ -24,7 +24,7 @@ fn test_print_tasks_integration() {
     assert!(result.contains("No tasks found"));
 
     // Test with some tasks
-    let tasks = db.get_inbox(None).unwrap();
+    let tasks = db.get_inbox(None).await.unwrap();
     let mut output = Cursor::new(Vec::new());
     things3_cli::print_tasks(&db, &tasks, &mut output).unwrap();
     let result = String::from_utf8(output.into_inner()).unwrap();
@@ -32,15 +32,15 @@ fn test_print_tasks_integration() {
 }
 
 /// Test the `print_projects` function with various inputs
-#[test]
-fn test_print_projects_integration() {
+#[tokio::test]
+async fn test_print_projects_integration() {
     // Create a test database
     let temp_file = NamedTempFile::new().unwrap();
     let db_path = temp_file.path();
-    create_test_database(db_path).unwrap();
+    create_test_database(db_path).await.unwrap();
 
     let config = ThingsConfig::new(db_path, false);
-    let db = ThingsDatabase::with_config(&config).unwrap();
+    let db = ThingsDatabase::new(&config.database_path).await.unwrap();
 
     // Test with empty projects
     let mut output = Cursor::new(Vec::new());
@@ -49,7 +49,7 @@ fn test_print_projects_integration() {
     assert!(result.contains("No projects found"));
 
     // Test with some projects
-    let projects = db.get_projects(None).unwrap();
+    let projects = db.get_projects(None).await.unwrap();
     let mut output = Cursor::new(Vec::new());
     things3_cli::print_projects(&db, &projects, &mut output).unwrap();
     let result = String::from_utf8(output.into_inner()).unwrap();
@@ -57,15 +57,15 @@ fn test_print_projects_integration() {
 }
 
 /// Test the `print_areas` function with various inputs
-#[test]
-fn test_print_areas_integration() {
+#[tokio::test]
+async fn test_print_areas_integration() {
     // Create a test database
     let temp_file = NamedTempFile::new().unwrap();
     let db_path = temp_file.path();
-    create_test_database(db_path).unwrap();
+    create_test_database(db_path).await.unwrap();
 
     let config = ThingsConfig::new(db_path, false);
-    let db = ThingsDatabase::with_config(&config).unwrap();
+    let db = ThingsDatabase::new(&config.database_path).await.unwrap();
 
     // Test with empty areas
     let mut output = Cursor::new(Vec::new());
@@ -74,7 +74,7 @@ fn test_print_areas_integration() {
     assert!(result.contains("No areas found"));
 
     // Test with some areas
-    let areas = db.get_areas().unwrap();
+    let areas = db.get_areas().await.unwrap();
     let mut output = Cursor::new(Vec::new());
     things3_cli::print_areas(&db, &areas, &mut output).unwrap();
     let result = String::from_utf8(output.into_inner()).unwrap();
@@ -82,25 +82,25 @@ fn test_print_areas_integration() {
 }
 
 /// Test the `health_check` function
-#[test]
-fn test_health_check_integration() {
+#[tokio::test]
+async fn test_health_check_integration() {
     // Create a test database
     let temp_file = NamedTempFile::new().unwrap();
     let db_path = temp_file.path();
-    create_test_database(db_path).unwrap();
+    create_test_database(db_path).await.unwrap();
 
     let config = ThingsConfig::new(db_path, false);
-    let db = ThingsDatabase::with_config(&config).unwrap();
+    let db = ThingsDatabase::new(&config.database_path).await.unwrap();
 
     // Test successful health check
-    let result = things3_cli::health_check(&db);
+    let result = things3_cli::health_check(&db).await;
     assert!(result.is_ok());
 
     // Test health check with invalid database
     let invalid_config = ThingsConfig::new("/nonexistent/path", false);
-    let invalid_db = ThingsDatabase::with_config(&invalid_config);
+    let invalid_db = ThingsDatabase::new(&invalid_config.database_path).await;
     if let Ok(db) = invalid_db {
-        let result = things3_cli::health_check(&db);
+        let result = things3_cli::health_check(&db).await;
         // This might succeed or fail depending on the database state
         let _ = result; // Just ensure it doesn't panic
     }
@@ -112,13 +112,13 @@ async fn test_mcp_server_integration() {
     // Create a test database
     let temp_file = NamedTempFile::new().unwrap();
     let db_path = temp_file.path();
-    create_test_database(db_path).unwrap();
+    create_test_database(db_path).await.unwrap();
 
     let config = ThingsConfig::new(db_path, false);
-    let db = ThingsDatabase::with_config(&config).unwrap();
+    let db = ThingsDatabase::new(&config.database_path).await.unwrap();
 
     // Test MCP server creation
-    let server = things3_cli::mcp::ThingsMcpServer::new(db, config);
+    let server = things3_cli::mcp::ThingsMcpServer::new(db.into(), config);
 
     // Test tool listing
     let tools = server.list_tools().unwrap();
@@ -159,18 +159,18 @@ fn test_cli_parsing_integration() {
 }
 
 /// Test error handling in CLI functions
-#[test]
-fn test_cli_error_handling_integration() {
+#[tokio::test]
+async fn test_cli_error_handling_integration() {
     // Test with nonexistent database
     let config = ThingsConfig::new("/nonexistent/path", false);
-    let db_result = ThingsDatabase::with_config(&config);
+    let db_result = ThingsDatabase::new(&config.database_path).await;
 
     // This should fail
     assert!(db_result.is_err());
 
-    // Test with malformed database path
-    let config = ThingsConfig::new("", false);
-    let db_result = ThingsDatabase::with_config(&config);
+    // Test with malformed database path (invalid characters)
+    let config = ThingsConfig::new("/invalid/path/with/invalid/chars/\0", false);
+    let db_result = ThingsDatabase::new(&config.database_path).await;
 
     // This should also fail
     assert!(db_result.is_err());

@@ -15,10 +15,10 @@ async fn test_ci_mock_database() {
     let _db_path = temp_file.path();
 
     // Create test database with mock data
-    let _conn = test_utils::create_test_database(_db_path).unwrap();
+    let _conn = test_utils::create_test_database(_db_path).await.unwrap();
 
     // Test that we can connect to the mock database
-    let db = ThingsDatabase::new(_db_path).unwrap();
+    let db = ThingsDatabase::new(_db_path).await.unwrap();
 
     // Test all major functionality with mock data
     test_database_operations(&db);
@@ -40,9 +40,10 @@ fn test_database_operations(_db: &ThingsDatabase) {
 #[tokio::test]
 async fn test_fallback_to_mock_data() {
     // Try to connect to real database first
-    let real_db_path = ThingsDatabase::default_path();
+    // Use a test database path instead of trying to access the real Things 3 database
+    let real_db_path = std::path::Path::new("test_things.db");
 
-    if let Ok(db) = ThingsDatabase::new(&real_db_path) {
+    if let Ok(db) = ThingsDatabase::new(real_db_path).await {
         // Real database available, test with it
         println!("Using real Things 3 database for testing");
         test_database_operations(&db);
@@ -54,8 +55,8 @@ async fn test_fallback_to_mock_data() {
 
         #[cfg(feature = "test-utils")]
         {
-            let _conn = test_utils::create_test_database(_db_path).unwrap();
-            let db = ThingsDatabase::new(_db_path).unwrap();
+            let _conn = test_utils::create_test_database(_db_path).await.unwrap();
+            let db = ThingsDatabase::new(_db_path).await.unwrap();
             test_database_operations(&db);
         }
 

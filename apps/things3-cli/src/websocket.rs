@@ -1070,7 +1070,7 @@ mod tests {
 
         // Test with empty strings
         let error_empty = WebSocketMessage::Error {
-            message: "".to_string(),
+            message: String::new(),
         };
         let json = serde_json::to_string(&error_empty).unwrap();
         let deserialized: WebSocketMessage = serde_json::from_str(&json).unwrap();
@@ -1270,7 +1270,7 @@ mod tests {
         assert!(result.is_err());
 
         // Test that server can handle empty JSON
-        let empty_json = r#"{}"#;
+        let empty_json = r"{}";
         let result: Result<WebSocketMessage, _> = serde_json::from_str(empty_json);
         assert!(result.is_err());
     }
