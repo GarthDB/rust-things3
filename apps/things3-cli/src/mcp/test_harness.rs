@@ -108,6 +108,14 @@ impl McpTestHarness {
         self.server.read_resource(request).await.unwrap()
     }
 
+    /// Read a resource and return the result or error
+    pub async fn read_resource_result(&self, uri: &str) -> Result<ReadResourceResult, McpError> {
+        let request = ReadResourceRequest {
+            uri: uri.to_string(),
+        };
+        self.server.read_resource(request).await
+    }
+
     /// Read a resource with fallback error handling
     pub async fn read_resource_with_fallback(&self, uri: &str) -> ReadResourceResult {
         let request = ReadResourceRequest {
@@ -126,6 +134,19 @@ impl McpTestHarness {
             arguments,
         };
         self.server.get_prompt(request).await.unwrap()
+    }
+
+    /// Get a prompt and return the result or error
+    pub async fn get_prompt_result(
+        &self,
+        name: &str,
+        arguments: Option<Value>,
+    ) -> Result<GetPromptResult, McpError> {
+        let request = GetPromptRequest {
+            name: name.to_string(),
+            arguments,
+        };
+        self.server.get_prompt(request).await
     }
 
     /// Get a prompt with fallback error handling
@@ -194,16 +215,18 @@ impl McpTestHarness {
     ///
     /// # Panics
     /// Panics if the resource read succeeds when it should fail
-    pub async fn assert_resource_fails_with<F>(&self, uri: &str, _expected_error: F)
+    pub async fn assert_resource_fails_with<F>(&self, uri: &str, expected_error: F)
     where
         F: FnOnce(&McpError) -> bool,
     {
-        // For now, just check that the resource read doesn't return content
-        let result = self.read_resource(uri).await;
-        assert!(
-            result.contents.is_empty(),
-            "Resource read '{uri}' should fail but succeeded"
-        );
+        let result = self.read_resource_result(uri).await;
+        match result {
+            Ok(_) => panic!("Resource read '{uri}' should fail but succeeded"),
+            Err(e) => assert!(
+                expected_error(&e),
+                "Resource read '{uri}' failed with unexpected error: {e:?}"
+            ),
+        }
     }
 
     /// Assert that a prompt succeeds
@@ -231,12 +254,18 @@ impl McpTestHarness {
         &self,
         name: &str,
         arguments: Option<Value>,
-        _expected_error: F,
+        expected_error: F,
     ) where
         F: FnOnce(&McpError) -> bool,
     {
-        let result = self.get_prompt(name, arguments).await;
-        assert!(result.is_error, "Prompt '{name}' should fail but succeeded");
+        let result = self.get_prompt_result(name, arguments).await;
+        match result {
+            Ok(_) => panic!("Prompt '{name}' should fail but succeeded"),
+            Err(e) => assert!(
+                expected_error(&e),
+                "Prompt '{name}' failed with unexpected error: {e:?}"
+            ),
+        }
     }
 
     /// Assert that a tool call returns valid JSON
@@ -716,7 +745,7 @@ impl McpTestUtils {
     /// Create test data for various scenarios
     #[must_use]
     pub fn create_test_data() -> MockDatabase {
-        MockDatabase::new()
+        Self::create_test_data_with_scenarios()
     }
 
     /// Create test data with specific scenarios
@@ -747,9 +776,16 @@ impl McpTestUtils {
 
         db.add_project(MockProject {
             uuid: "project-2".to_string(),
-            title: "Learn Rust".to_string(),
+            title: "Another Project".to_string(),
             area_uuid: Some("area-2".to_string()),
             status: "incomplete".to_string(),
+        });
+
+        // Add test areas
+        db.add_area(MockArea {
+            uuid: "area-3".to_string(),
+            title: "Health".to_string(),
+            visible: true,
         });
 
         // Add test tasks
@@ -758,6 +794,22 @@ impl McpTestUtils {
             title: "Research competitors".to_string(),
             status: "incomplete".to_string(),
             project_uuid: Some("project-1".to_string()),
+            area_uuid: None,
+        });
+
+        db.add_task(MockTask {
+            uuid: "task-urgent".to_string(),
+            title: "Urgent Task".to_string(),
+            status: "incomplete".to_string(),
+            project_uuid: Some("project-1".to_string()),
+            area_uuid: None,
+        });
+
+        db.add_task(MockTask {
+            uuid: "task-completed".to_string(),
+            title: "Completed Task".to_string(),
+            status: "completed".to_string(),
+            project_uuid: Some("project-2".to_string()),
             area_uuid: None,
         });
 

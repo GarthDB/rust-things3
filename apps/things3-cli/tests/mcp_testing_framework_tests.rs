@@ -162,12 +162,12 @@ async fn test_mcp_test_harness_fallback_methods() {
 
 #[tokio::test]
 async fn test_mock_database_functionality() {
-    let mut db = MockDatabase::new();
+    let mut db = McpTestUtils::create_test_data();
 
     // Test initial state
-    assert_eq!(db.tasks.len(), 2);
-    assert_eq!(db.projects.len(), 1);
-    assert_eq!(db.areas.len(), 2);
+    assert_eq!(db.tasks.len(), 4);
+    assert_eq!(db.projects.len(), 2);
+    assert_eq!(db.areas.len(), 3);
 
     // Test adding new data
     db.add_task(things3_cli::mcp::test_harness::MockTask {
@@ -177,31 +177,32 @@ async fn test_mock_database_functionality() {
         project_uuid: Some("project-1".to_string()),
         area_uuid: Some("area-1".to_string()),
     });
-    assert_eq!(db.tasks.len(), 3);
+    assert_eq!(db.tasks.len(), 5);
 
     // Test querying data
     let task = db.get_task("task-1").unwrap();
-    assert_eq!(task.title, "Test Task 1");
+    assert_eq!(task.title, "Research competitors");
     assert_eq!(task.status, "incomplete");
 
     let project = db.get_project("project-1").unwrap();
-    assert_eq!(project.title, "Test Project");
+    assert_eq!(project.title, "Website Redesign");
 
     let area = db.get_area("area-1").unwrap();
     assert_eq!(area.title, "Work");
 
     // Test filtering by status
     let completed_tasks = db.get_tasks_by_status("completed");
-    assert_eq!(completed_tasks.len(), 1);
-    assert_eq!(completed_tasks[0].title, "Test Task 2");
+    assert_eq!(completed_tasks.len(), 2); // task-2 and task-completed
+    assert!(completed_tasks.iter().any(|t| t.title == "Read Rust book"));
+    assert!(completed_tasks.iter().any(|t| t.title == "Completed Task"));
 
     // Test filtering by project
     let project_tasks = db.get_tasks_by_project("project-1");
-    assert_eq!(project_tasks.len(), 2); // task-2 and new-task
+    assert_eq!(project_tasks.len(), 3); // task-1, task-urgent, and new-task
 
     // Test filtering by area
     let area_tasks = db.get_tasks_by_area("area-1");
-    assert_eq!(area_tasks.len(), 2); // task-2 and new-task
+    assert_eq!(area_tasks.len(), 1); // new-task
 }
 
 #[tokio::test]

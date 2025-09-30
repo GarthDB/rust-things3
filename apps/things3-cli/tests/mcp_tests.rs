@@ -1,22 +1,166 @@
 //! Comprehensive tests for MCP server functionality
 
 use serde_json::json;
+use sqlx::SqlitePool;
 use tempfile::NamedTempFile;
 use things3_cli::mcp::{CallToolRequest, Content, McpError, ThingsMcpServer};
 use things3_core::{config::ThingsConfig, database::ThingsDatabase};
 
 /// Create a test MCP server with mock database
 async fn create_test_mcp_server() -> ThingsMcpServer {
-    let temp_file = NamedTempFile::new().unwrap();
-    let db_path = temp_file.path();
-    things3_core::test_utils::create_test_database(db_path)
+    // Use in-memory database for testing
+    let db = ThingsDatabase::from_connection_string("sqlite::memory:")
         .await
         .unwrap();
 
-    let db = ThingsDatabase::new(db_path).await.unwrap();
-    let config = ThingsConfig::new(db_path, false);
+    // Create the database schema
+    create_test_schema(&db).await.unwrap();
 
+    let config = ThingsConfig::for_testing().unwrap();
     ThingsMcpServer::new(db.into(), config)
+}
+
+/// Create the test database schema
+async fn create_test_schema(db: &ThingsDatabase) -> Result<(), Box<dyn std::error::Error>> {
+    let pool = db.pool();
+
+    // Create the Things 3 schema
+    sqlx::query(
+        r"
+        -- TMTask table (main tasks table) - matches real Things 3 schema
+        CREATE TABLE IF NOT EXISTS TMTask (
+            uuid TEXT PRIMARY KEY,
+            title TEXT NOT NULL,
+            type INTEGER NOT NULL DEFAULT 0,
+            status INTEGER NOT NULL DEFAULT 0,
+            notes TEXT,
+            start_date TEXT,
+            due_date TEXT,
+            created TEXT NOT NULL,
+            modified TEXT NOT NULL,
+            project_uuid TEXT,
+            area_uuid TEXT,
+            parent_uuid TEXT,
+            tags TEXT DEFAULT '[]'
+        )
+        ",
+    )
+    .execute(pool)
+    .await?;
+
+    sqlx::query(
+        r"
+        -- TMProject table (projects table)
+        CREATE TABLE IF NOT EXISTS TMProject (
+            uuid TEXT PRIMARY KEY,
+            title TEXT NOT NULL,
+            type INTEGER NOT NULL DEFAULT 1,
+            status INTEGER NOT NULL DEFAULT 0,
+            notes TEXT,
+            start_date TEXT,
+            due_date TEXT,
+            created TEXT NOT NULL,
+            modified TEXT NOT NULL,
+            area_uuid TEXT,
+            parent_uuid TEXT,
+            tags TEXT DEFAULT '[]'
+        )
+        ",
+    )
+    .execute(pool)
+    .await?;
+
+    sqlx::query(
+        r"
+        -- TMArea table (areas table)
+        CREATE TABLE IF NOT EXISTS TMArea (
+            uuid TEXT PRIMARY KEY,
+            title TEXT NOT NULL,
+            type INTEGER NOT NULL DEFAULT 3,
+            status INTEGER NOT NULL DEFAULT 0,
+            notes TEXT,
+            start_date TEXT,
+            due_date TEXT,
+            created TEXT NOT NULL,
+            modified TEXT NOT NULL,
+            parent_uuid TEXT,
+            tags TEXT DEFAULT '[]'
+        )
+        ",
+    )
+    .execute(pool)
+    .await?;
+
+    // Insert test data
+    insert_test_data(pool).await?;
+
+    Ok(())
+}
+
+/// Insert test data into the database
+async fn insert_test_data(pool: &SqlitePool) -> Result<(), Box<dyn std::error::Error>> {
+    use chrono::Utc;
+    use uuid::Uuid;
+
+    let now = Utc::now().to_rfc3339();
+
+    // Generate valid UUIDs for test data
+    let area_uuid = Uuid::new_v4().to_string();
+    let project_uuid = Uuid::new_v4().to_string();
+    let task_uuid = Uuid::new_v4().to_string();
+
+    // Insert test areas
+    sqlx::query(
+        "INSERT INTO TMArea (uuid, title, type, status, created, modified) VALUES (?, ?, ?, ?, ?, ?)"
+    )
+    .bind(&area_uuid)
+    .bind("Work")
+    .bind(3) // Area type
+    .bind(0) // Incomplete
+    .bind(&now)
+    .bind(&now)
+    .execute(pool).await?;
+
+    // Insert test projects
+    sqlx::query(
+        "INSERT INTO TMProject (uuid, title, type, status, area_uuid, created, modified) VALUES (?, ?, ?, ?, ?, ?, ?)"
+    )
+    .bind(&project_uuid)
+    .bind("Website Redesign")
+    .bind(1) // Project type
+    .bind(0) // Incomplete
+    .bind(&area_uuid)
+    .bind(&now)
+    .bind(&now)
+    .execute(pool).await?;
+
+    // Insert test tasks - one in inbox (no project), one in project
+    let inbox_task_uuid = Uuid::new_v4().to_string();
+    sqlx::query(
+        "INSERT INTO TMTask (uuid, title, type, status, project_uuid, created, modified) VALUES (?, ?, ?, ?, ?, ?, ?)"
+    )
+    .bind(&inbox_task_uuid)
+    .bind("Inbox Task")
+    .bind(0) // Todo type
+    .bind(0) // Incomplete
+    .bind::<Option<String>>(None) // No project (inbox) - use NULL instead of empty string
+    .bind(&now)
+    .bind(&now)
+    .execute(pool).await?;
+
+    sqlx::query(
+        "INSERT INTO TMTask (uuid, title, type, status, project_uuid, created, modified) VALUES (?, ?, ?, ?, ?, ?, ?)"
+    )
+    .bind(&task_uuid)
+    .bind("Research competitors")
+    .bind(0) // Todo type
+    .bind(0) // Incomplete
+    .bind(&project_uuid)
+    .bind(&now)
+    .bind(&now)
+    .execute(pool).await?;
+
+    Ok(())
 }
 
 #[tokio::test]
