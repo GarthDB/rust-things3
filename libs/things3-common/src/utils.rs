@@ -362,7 +362,20 @@ mod tests {
             );
         } else {
             // In environments where HOME cannot be removed, just verify the path is valid
+            // and contains expected components regardless of the environment
             assert!(!path_str.is_empty(), "Path should not be empty");
+            assert!(
+                path_str.contains("Library"),
+                "Path should contain Library directory"
+            );
+            assert!(
+                path_str.contains("Group Containers"),
+                "Path should contain Group Containers"
+            );
+            assert!(
+                path_str.contains("Things Database.thingsdatabase"),
+                "Path should contain database file"
+            );
         }
 
         // Restore original HOME if it existed
