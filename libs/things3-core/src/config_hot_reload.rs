@@ -128,7 +128,11 @@ impl ConfigHotReloader {
     ///
     /// This will spawn a background task that periodically checks for configuration changes
     /// and reloads the configuration if changes are detected.
-    pub async fn start(&self) -> Result<()> {
+    ///
+    /// # Errors
+    /// Returns an error if the configuration cannot be loaded or if there are issues
+    /// with the file system operations.
+    pub fn start(&self) -> Result<()> {
         if !self.enabled {
             debug!("Hot reloading is disabled, not starting reloader task");
             return Ok(());
@@ -377,9 +381,9 @@ impl ConfigHotReloaderWithHandler {
     ///
     /// # Errors
     /// Returns an error if the hot reloader cannot be started
-    pub async fn start_with_handler(&self) -> Result<()> {
+    pub fn start_with_handler(&self) -> Result<()> {
         // Start the base reloader
-        self.reloader.start().await?;
+        self.reloader.start()?;
 
         // Start the change handler task
         let mut change_rx = self.reloader.subscribe_to_changes();

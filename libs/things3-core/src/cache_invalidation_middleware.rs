@@ -226,6 +226,7 @@ impl CacheInvalidationMiddleware {
         }
 
         // Update statistics
+        #[allow(clippy::cast_precision_loss)]
         let processing_time = start_time.elapsed().as_millis().min(u128::from(u64::MAX)) as f64;
         {
             let mut stats = self.stats.write();
@@ -494,6 +495,7 @@ impl CacheInvalidationMiddleware {
         let mut stats = self.stats.write();
 
         // Update running average
+        #[allow(clippy::cast_precision_loss)]
         let total_events = stats.total_events as f64;
         stats.average_processing_time_ms =
             (stats.average_processing_time_ms * (total_events - 1.0) + processing_time)
@@ -818,7 +820,7 @@ mod tests {
             let event = InvalidationEvent {
                 event_id: Uuid::new_v4(),
                 event_type: InvalidationEventType::Created,
-                entity_type: format!("task_{}", i),
+                entity_type: format!("task_{i}"),
                 entity_id: Some(Uuid::new_v4()),
                 operation: "created".to_string(),
                 timestamp: Utc::now(),

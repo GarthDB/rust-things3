@@ -187,10 +187,11 @@ impl QueryCache {
         // Execute the query
         let start_time = std::time::Instant::now();
         let data = fetcher().await?;
+        #[allow(clippy::cast_possible_truncation)]
         let execution_time = start_time.elapsed().as_millis() as u64;
 
         // Check if result is too large to cache
-        let result_size = self.calculate_result_size(&data);
+        let result_size = Self::calculate_result_size(&data);
         if result_size > self.config.max_result_size {
             warn!("Query result too large to cache: {} bytes", result_size);
             self.record_miss();
@@ -198,7 +199,7 @@ impl QueryCache {
         }
 
         // Create dependencies for smart invalidation
-        let dependencies = self.create_task_dependencies(&data);
+        let dependencies = Self::create_task_dependencies(&data);
 
         // Create cached result
         let cached_result = CachedQueryResult {
@@ -259,10 +260,11 @@ impl QueryCache {
         // Execute the query
         let start_time = std::time::Instant::now();
         let data = fetcher().await?;
+        #[allow(clippy::cast_possible_truncation)]
         let execution_time = start_time.elapsed().as_millis() as u64;
 
         // Check if result is too large to cache
-        let result_size = self.calculate_result_size(&data);
+        let result_size = Self::calculate_result_size(&data);
         if result_size > self.config.max_result_size {
             warn!("Query result too large to cache: {} bytes", result_size);
             self.record_miss();
@@ -270,7 +272,7 @@ impl QueryCache {
         }
 
         // Create dependencies for smart invalidation
-        let dependencies = self.create_project_dependencies(&data);
+        let dependencies = Self::create_project_dependencies(&data);
 
         // Create cached result
         let cached_result = CachedQueryResult {
@@ -331,10 +333,11 @@ impl QueryCache {
         // Execute the query
         let start_time = std::time::Instant::now();
         let data = fetcher().await?;
+        #[allow(clippy::cast_possible_truncation)]
         let execution_time = start_time.elapsed().as_millis() as u64;
 
         // Check if result is too large to cache
-        let result_size = self.calculate_result_size(&data);
+        let result_size = Self::calculate_result_size(&data);
         if result_size > self.config.max_result_size {
             warn!("Query result too large to cache: {} bytes", result_size);
             self.record_miss();
@@ -342,7 +345,7 @@ impl QueryCache {
         }
 
         // Create dependencies for smart invalidation
-        let dependencies = self.create_area_dependencies(&data);
+        let dependencies = Self::create_area_dependencies(&data);
 
         // Create cached result
         let cached_result = CachedQueryResult {
@@ -403,10 +406,11 @@ impl QueryCache {
         // Execute the query
         let start_time = std::time::Instant::now();
         let data = fetcher().await?;
+        #[allow(clippy::cast_possible_truncation)]
         let execution_time = start_time.elapsed().as_millis() as u64;
 
         // Check if result is too large to cache
-        let result_size = self.calculate_result_size(&data);
+        let result_size = Self::calculate_result_size(&data);
         if result_size > self.config.max_result_size {
             warn!("Query result too large to cache: {} bytes", result_size);
             self.record_miss();
@@ -414,7 +418,7 @@ impl QueryCache {
         }
 
         // Create dependencies for smart invalidation
-        let dependencies = self.create_task_dependencies(&data);
+        let dependencies = Self::create_task_dependencies(&data);
 
         // Create cached result
         let cached_result = CachedQueryResult {
@@ -494,6 +498,7 @@ impl QueryCache {
     }
 
     /// Get query cache statistics
+    #[must_use]
     pub fn get_stats(&self) -> QueryCacheStats {
         let mut stats = self.stats.read().clone();
         stats.calculate_hit_rate();
@@ -501,7 +506,7 @@ impl QueryCache {
     }
 
     /// Calculate the size of a query result
-    fn calculate_result_size<T>(&self, data: &T) -> usize
+    fn calculate_result_size<T>(data: &T) -> usize
     where
         T: Serialize,
     {
@@ -510,7 +515,7 @@ impl QueryCache {
     }
 
     /// Create dependencies for task data
-    fn create_task_dependencies(&self, tasks: &[Task]) -> Vec<QueryDependency> {
+    fn create_task_dependencies(tasks: &[Task]) -> Vec<QueryDependency> {
         let mut dependencies = Vec::new();
 
         // Add table dependency
@@ -566,7 +571,7 @@ impl QueryCache {
     }
 
     /// Create dependencies for project data
-    fn create_project_dependencies(&self, projects: &[Project]) -> Vec<QueryDependency> {
+    fn create_project_dependencies(projects: &[Project]) -> Vec<QueryDependency> {
         let mut dependencies = Vec::new();
 
         // Add table dependency
@@ -608,7 +613,7 @@ impl QueryCache {
     }
 
     /// Create dependencies for area data
-    fn create_area_dependencies(&self, areas: &[Area]) -> Vec<QueryDependency> {
+    fn create_area_dependencies(areas: &[Area]) -> Vec<QueryDependency> {
         let mut dependencies = Vec::new();
 
         // Add table dependency
@@ -650,6 +655,7 @@ impl QueryCache {
     }
 
     /// Update cache statistics
+    #[allow(clippy::cast_precision_loss)]
     fn update_stats(&self, result_size: usize, execution_time_ms: u64, compressed: bool) {
         let mut stats = self.stats.write();
         stats.total_queries += 1;
@@ -748,10 +754,10 @@ mod tests {
 
     #[tokio::test]
     async fn test_query_cache_dependencies() {
-        let cache = QueryCache::new_default();
+        let _cache = QueryCache::new_default();
 
         let tasks = create_mock_tasks();
-        let dependencies = cache.create_task_dependencies(&tasks);
+        let dependencies = QueryCache::create_task_dependencies(&tasks);
 
         assert!(!dependencies.is_empty());
         assert!(dependencies.iter().any(|dep| dep.table == "TMTask"));

@@ -1020,11 +1020,7 @@ mod tests {
     }
 
     #[test]
-    fn test_main_function_execution() {
-        // Test that main function can be called with different commands
-        // This tests the actual main function execution paths
-
-        // Test with analyze command
+    fn test_analyze_command_execution() {
         let cli = Cli::try_parse_from(["xtask", "analyze"]).unwrap();
         let result = std::panic::catch_unwind(|| match cli.command {
             Commands::Analyze => {
@@ -1036,8 +1032,10 @@ mod tests {
             result.is_ok(),
             "Main function should not panic with analyze command"
         );
+    }
 
-        // Test with perf-test command
+    #[test]
+    fn test_perf_test_command_execution() {
         let cli = Cli::try_parse_from(["xtask", "perf-test"]).unwrap();
         let result = std::panic::catch_unwind(|| match cli.command {
             Commands::PerfTest => {
@@ -1049,8 +1047,10 @@ mod tests {
             result.is_ok(),
             "Main function should not panic with perf-test command"
         );
+    }
 
-        // Test with generate-tests command
+    #[test]
+    fn test_generate_tests_command_execution() {
         let cli = Cli::try_parse_from(["xtask", "generate-tests", "test-target"]).unwrap();
         let result = std::panic::catch_unwind(|| match cli.command {
             Commands::GenerateTests { target } => {
@@ -1062,8 +1062,10 @@ mod tests {
             result.is_ok(),
             "Main function should not panic with generate-tests command"
         );
+    }
 
-        // Test with generate-code command
+    #[test]
+    fn test_generate_code_command_execution() {
         let cli = Cli::try_parse_from(["xtask", "generate-code", "test-code"]).unwrap();
         let result = std::panic::catch_unwind(|| match cli.command {
             Commands::GenerateCode { code } => {
@@ -1075,7 +1077,10 @@ mod tests {
             result.is_ok(),
             "Main function should not panic with generate-code command"
         );
+    }
 
+    #[test]
+    fn test_local_dev_commands_execution() {
         // Test with local-dev setup command
         let cli = Cli::try_parse_from(["xtask", "local-dev", "setup"]).unwrap();
         let result = std::panic::catch_unwind(|| match cli.command {
@@ -1123,7 +1128,10 @@ mod tests {
             result.is_ok(),
             "Main function should not panic with local-dev clean command"
         );
+    }
 
+    #[test]
+    fn test_things_commands_execution() {
         // Test with things validate command
         let cli = Cli::try_parse_from(["xtask", "things", "validate"]).unwrap();
         let result = std::panic::catch_unwind(|| match cli.command {

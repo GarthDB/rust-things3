@@ -336,8 +336,7 @@ mod tests {
         if home_after_removal.is_err() {
             assert!(
                 path_str.starts_with('~'),
-                "Path should start with ~ when HOME is not set, but got: {}",
-                path_str
+                "Path should start with ~ when HOME is not set, but got: {path_str}"
             );
         } else {
             // In environments where HOME cannot be removed, just verify the path is valid
@@ -372,8 +371,7 @@ mod tests {
         if home_after_removal.is_err() {
             assert!(
                 path_str.starts_with('~'),
-                "Path should start with ~ when HOME is not set, but got: {}",
-                path_str
+                "Path should start with ~ when HOME is not set, but got: {path_str}"
             );
         } else {
             // In environments where HOME cannot be removed, just verify the path is valid
@@ -409,8 +407,7 @@ mod tests {
         if home_after_removal.is_err() {
             assert!(
                 path_str.starts_with('~'),
-                "Path should start with ~ when HOME is not set, but got: {}",
-                path_str
+                "Path should start with ~ when HOME is not set, but got: {path_str}"
             );
         } else {
             // In environments where HOME cannot be removed, just verify the path is valid

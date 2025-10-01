@@ -198,6 +198,7 @@ where
     }
 
     /// Get a cached result without executing the tool
+    #[must_use]
     pub fn get_cached_result(
         &self,
         tool_name: &str,
@@ -259,6 +260,8 @@ where
     }
 
     /// Get cache utilization percentage
+    #[must_use]
+    #[allow(clippy::cast_precision_loss)]
     pub fn get_utilization(&self) -> f64 {
         let current_size = self.get_cache_size();
         let max_size = self.config.max_entries * self.config.max_result_size;

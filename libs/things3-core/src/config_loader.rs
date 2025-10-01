@@ -33,18 +33,21 @@ impl ConfigLoader {
     }
 
     /// Set the base configuration
+    #[must_use]
     pub fn with_base_config(mut self, config: McpServerConfig) -> Self {
         self.base_config = config;
         self
     }
 
     /// Add a configuration file path
+    #[must_use]
     pub fn add_config_path<P: AsRef<Path>>(mut self, path: P) -> Self {
         self.config_paths.push(path.as_ref().to_path_buf());
         self
     }
 
     /// Set configuration file paths
+    #[must_use]
     pub fn with_config_paths<P: AsRef<Path>>(mut self, paths: Vec<P>) -> Self {
         self.config_paths = paths
             .into_iter()
@@ -54,18 +57,21 @@ impl ConfigLoader {
     }
 
     /// Disable loading from environment variables
+    #[must_use]
     pub fn without_env_loading(mut self) -> Self {
         self.load_from_env = false;
         self
     }
 
     /// Enable or disable loading from environment variables
+    #[must_use]
     pub fn with_env_loading(mut self, enabled: bool) -> Self {
         self.load_from_env = enabled;
         self
     }
 
     /// Enable or disable configuration validation
+    #[must_use]
     pub fn with_validation(mut self, enabled: bool) -> Self {
         self.validate = enabled;
         self
@@ -205,8 +211,7 @@ impl ConfigLoader {
         let user_config_dir = Self::get_user_config_dir();
         std::fs::create_dir_all(&user_config_dir).map_err(|e| {
             ThingsError::Io(std::io::Error::other(format!(
-                "Failed to create user config directory: {}",
-                e
+                "Failed to create user config directory: {e}"
             )))
         })?;
 

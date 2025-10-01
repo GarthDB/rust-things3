@@ -188,6 +188,7 @@ impl DiskCache {
     fn cleanup_expired_entries(config: &DiskCacheConfig) -> Result<()> {
         let conn = Connection::open(&config.db_path)?;
         let now = Utc::now().timestamp();
+        #[allow(clippy::cast_possible_wrap)]
         let ttl_seconds = config.ttl.as_secs() as i64;
 
         let deleted = conn.execute(
@@ -203,6 +204,7 @@ impl DiskCache {
     }
 
     /// Cleanup oversized entries
+    #[allow(clippy::cast_sign_loss)]
     fn cleanup_oversized_entries(config: &DiskCacheConfig) -> Result<()> {
         let conn = Connection::open(&config.db_path)?;
 
@@ -213,14 +215,21 @@ impl DiskCache {
             |row| row.get(0),
         )?;
 
+        #[allow(clippy::cast_sign_loss)]
         if total_size as u64 <= config.max_size {
             return Ok(());
         }
 
         // Remove oldest entries until we're under the size limit
         let mut deleted = 0;
+        #[allow(
+            clippy::cast_possible_truncation,
+            clippy::cast_sign_loss,
+            clippy::cast_precision_loss
+        )]
         let target_size = (config.max_size as f64 * 0.8) as u64; // Remove to 80% of max size
 
+        #[allow(clippy::cast_sign_loss)]
         let mut current_size = total_size as u64;
         while current_size > target_size {
             let result = conn.execute(
@@ -293,6 +302,7 @@ impl DiskCache {
 
         let conn = Connection::open(&self.config.db_path)?;
         let _now = Utc::now().timestamp();
+        #[allow(clippy::cast_possible_wrap)]
         let ttl_seconds = self.config.ttl.as_secs() as i64;
 
         conn.execute(
@@ -454,10 +464,13 @@ impl DiskCache {
         let uncompressed_entries = total_entries - compressed_entries;
 
         let mut stats = self.stats.write().await;
-        stats.total_entries = total_entries as u64;
-        stats.total_size_bytes = total_size as u64;
-        stats.compressed_entries = compressed_entries as u64;
-        stats.uncompressed_entries = uncompressed_entries as u64;
+        #[allow(clippy::cast_sign_loss)]
+        {
+            stats.total_entries = total_entries as u64;
+            stats.total_size_bytes = total_size as u64;
+            stats.compressed_entries = compressed_entries as u64;
+            stats.uncompressed_entries = uncompressed_entries as u64;
+        }
 
         Ok(())
     }
@@ -477,6 +490,7 @@ impl DiskCache {
             |row| row.get(0),
         )?;
 
+        #[allow(clippy::cast_sign_loss)]
         Ok(size as u64)
     }
 
@@ -497,6 +511,7 @@ impl DiskCache {
     /// This function will return an error if database operations fail
     pub fn get_utilization(&self) -> Result<f64> {
         let current_size = self.get_size()?;
+        #[allow(clippy::cast_precision_loss)]
         Ok((current_size as f64 / self.config.max_size as f64) * 100.0)
     }
 }
@@ -737,7 +752,7 @@ mod tests {
         // Store data until full
         for i in 0..10 {
             let data = vec![format!("data_{}", i); 100]; // Large data
-            cache.store(&format!("key{}", i), &data, "test").unwrap();
+            cache.store(&format!("key{i}"), &data, "test").unwrap();
         }
 
         // Should be full now
@@ -763,7 +778,7 @@ mod tests {
 
         // Initially 0% utilization
         let initial_utilization = cache.get_utilization().unwrap();
-        assert_eq!(initial_utilization, 0.0);
+        assert!((initial_utilization - 0.0).abs() < f64::EPSILON);
 
         // Store some data
         cache.store("key1", &vec!["data1"], "test").unwrap();
@@ -915,7 +930,7 @@ mod tests {
 
         // Test sequential operations
         for i in 0..5 {
-            let key = format!("key_{}", i);
+            let key = format!("key_{i}");
             let data = vec![format!("data_{}", i)];
 
             // Store data

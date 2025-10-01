@@ -369,6 +369,7 @@ impl PerformanceMonitor {
     }
 
     /// Calculate comprehensive health score including cache and query performance
+    #[allow(clippy::cast_precision_loss)]
     fn calculate_comprehensive_health_score(
         operation_stats: &HashMap<String, PerformanceStats>,
         cache_metrics: &HashMap<String, CacheMetrics>,
@@ -805,9 +806,9 @@ mod tests {
         };
         monitor.record_operation(&metric2);
 
-        let metrics = monitor.get_metrics();
-        assert_eq!(metrics.len(), 2);
-        assert!(metrics.iter().any(|m| m.operation_name == "test_op"));
-        assert!(metrics.iter().any(|m| m.operation_name == "test_op2"));
+        let all_metrics = monitor.get_metrics();
+        assert_eq!(all_metrics.len(), 2);
+        assert!(all_metrics.iter().any(|m| m.operation_name == "test_op"));
+        assert!(all_metrics.iter().any(|m| m.operation_name == "test_op2"));
     }
 }

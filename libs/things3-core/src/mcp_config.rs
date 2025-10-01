@@ -275,6 +275,7 @@ pub struct MonitoringConfig {
 
 /// Feature flags
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[allow(clippy::struct_excessive_bools)]
 pub struct FeatureFlags {
     /// Enable real-time updates
     pub real_time_updates: bool,
@@ -303,6 +304,7 @@ impl McpServerConfig {
     ///
     /// # Errors
     /// Returns an error if environment variables contain invalid values
+    #[allow(clippy::too_many_lines)]
     pub fn from_env() -> Result<Self> {
         let mut config = Self::default();
 
@@ -460,11 +462,11 @@ impl McpServerConfig {
             || path.extension().and_then(|s| s.to_str()) == Some("yml")
         {
             serde_yaml::from_str(&content).map_err(|e| {
-                ThingsError::configuration(format!("Failed to parse YAML config: {}", e))
+                ThingsError::configuration(format!("Failed to parse YAML config: {e}"))
             })?
         } else {
             serde_json::from_str(&content).map_err(|e| {
-                ThingsError::configuration(format!("Failed to parse JSON config: {}", e))
+                ThingsError::configuration(format!("Failed to parse JSON config: {e}"))
             })?
         };
 
@@ -483,15 +485,14 @@ impl McpServerConfig {
         let path = path.as_ref();
         let content = match format {
             "yaml" | "yml" => serde_yaml::to_string(self).map_err(|e| {
-                ThingsError::configuration(format!("Failed to serialize YAML: {}", e))
+                ThingsError::configuration(format!("Failed to serialize YAML: {e}"))
             })?,
             "json" => serde_json::to_string_pretty(self).map_err(|e| {
-                ThingsError::configuration(format!("Failed to serialize JSON: {}", e))
+                ThingsError::configuration(format!("Failed to serialize JSON: {e}"))
             })?,
             _ => {
                 return Err(ThingsError::configuration(format!(
-                    "Unsupported format: {}",
-                    format
+                    "Unsupported format: {format}"
                 )))
             }
         };
@@ -582,13 +583,15 @@ impl McpServerConfig {
     pub fn merge_with(&mut self, other: &McpServerConfig) {
         // Merge server config
         if !other.server.name.is_empty() {
-            self.server.name = other.server.name.clone();
+            self.server.name.clone_from(&other.server.name);
         }
         if !other.server.version.is_empty() {
-            self.server.version = other.server.version.clone();
+            self.server.version.clone_from(&other.server.version);
         }
         if !other.server.description.is_empty() {
-            self.server.description = other.server.description.clone();
+            self.server
+                .description
+                .clone_from(&other.server.description);
         }
         if other.server.max_connections > 0 {
             self.server.max_connections = other.server.max_connections;
@@ -602,7 +605,7 @@ impl McpServerConfig {
 
         // Merge database config
         if other.database.path != PathBuf::new() {
-            self.database.path = other.database.path.clone();
+            self.database.path.clone_from(&other.database.path);
         }
         if other.database.pool_size > 0 {
             self.database.pool_size = other.database.pool_size;
@@ -610,10 +613,10 @@ impl McpServerConfig {
 
         // Merge logging config
         if !other.logging.level.is_empty() {
-            self.logging.level = other.logging.level.clone();
+            self.logging.level.clone_from(&other.logging.level);
         }
         if other.logging.log_file.is_some() {
-            self.logging.log_file = other.logging.log_file.clone();
+            self.logging.log_file.clone_from(&other.logging.log_file);
         }
 
         // Merge performance config
@@ -626,8 +629,10 @@ impl McpServerConfig {
         // Merge security config
         self.security.authentication.enabled = other.security.authentication.enabled;
         if !other.security.authentication.jwt_secret.is_empty() {
-            self.security.authentication.jwt_secret =
-                other.security.authentication.jwt_secret.clone();
+            self.security
+                .authentication
+                .jwt_secret
+                .clone_from(&other.security.authentication.jwt_secret);
         }
         self.security.rate_limiting.enabled = other.security.rate_limiting.enabled;
         if other.security.rate_limiting.requests_per_minute > 0 {
@@ -700,6 +705,7 @@ impl McpServerConfig {
 }
 
 impl Default for McpServerConfig {
+    #[allow(clippy::too_many_lines)]
     fn default() -> Self {
         Self {
             server: ServerConfig {
