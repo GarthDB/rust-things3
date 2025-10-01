@@ -679,6 +679,7 @@ impl<T> CachedQueryResult<T> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::models::TaskStatus;
     use crate::test_utils::create_mock_tasks;
 
     #[tokio::test]
