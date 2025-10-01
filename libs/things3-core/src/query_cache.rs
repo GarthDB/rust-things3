@@ -766,11 +766,12 @@ mod tests {
             area_uuid: Some(Uuid::new_v4()),
             created: Utc::now(),
             modified: Utc::now(),
-            status: "active".to_string(),
+            status: TaskStatus::Incomplete,
             notes: Some("Notes".to_string()),
             deadline: None,
             start_date: None,
             tags: vec![],
+            tasks: vec![],
         }];
 
         let query_key = "test_projects_query";

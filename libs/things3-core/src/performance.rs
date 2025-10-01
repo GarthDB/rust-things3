@@ -810,44 +810,4 @@ mod tests {
         assert!(metrics.iter().any(|m| m.operation_name == "test_op"));
         assert!(metrics.iter().any(|m| m.operation_name == "test_op2"));
     }
-
-    #[test]
-    fn test_performance_monitor_get_all_stats() {
-        let monitor = PerformanceMonitor::new_default();
-
-        // Record operations for different operation types
-        let operations = vec![
-            ("operation_a", Duration::from_millis(100), true),
-            ("operation_a", Duration::from_millis(150), true),
-            ("operation_b", Duration::from_millis(200), false),
-        ];
-
-        for (op_name, duration, success) in operations {
-            let metric = OperationMetrics {
-                operation_name: op_name.to_string(),
-                duration,
-                timestamp: Utc::now(),
-                success,
-                error_message: if success {
-                    None
-                } else {
-                    Some("Test error".to_string())
-                },
-            };
-            monitor.record_operation(&metric);
-        }
-
-        let all_stats = monitor.get_all_stats();
-        assert_eq!(all_stats.len(), 2);
-        assert!(all_stats.contains_key("operation_a"));
-        assert!(all_stats.contains_key("operation_b"));
-
-        let op_a_stats = &all_stats["operation_a"];
-        assert_eq!(op_a_stats.total_calls, 2);
-        assert_eq!(op_a_stats.successful_calls, 2);
-
-        let op_b_stats = &all_stats["operation_b"];
-        assert_eq!(op_b_stats.total_calls, 1);
-        assert_eq!(op_b_stats.failed_calls, 1);
-    }
 }

@@ -388,11 +388,11 @@ impl CacheInvalidationMiddleware {
             let dependent_event = InvalidationEvent {
                 event_id: Uuid::new_v4(),
                 event_type: InvalidationEventType::CascadeInvalidation,
-                entity_type: dependent_entity.entity_type,
+                entity_type: dependent_entity.entity_type.clone(),
                 entity_id: dependent_entity.entity_id,
                 operation: "cascade_invalidation".to_string(),
                 timestamp: Utc::now(),
-                affected_caches: dependent_entity.affected_caches,
+                affected_caches: dependent_entity.affected_caches.clone(),
                 metadata: HashMap::new(),
             };
 
@@ -687,11 +687,13 @@ mod tests {
     #[tokio::test]
     async fn test_invalidation_middleware_with_config() {
         let config = InvalidationConfig {
-            enable_cascade_invalidation: true,
-            max_events_stored: 1000,
-            event_retention_duration: Duration::from_secs(3600),
-            batch_processing_size: 10,
-            processing_timeout: Duration::from_secs(30),
+            enable_cascade: true,
+            max_events: 1000,
+            event_retention: Duration::from_secs(3600),
+            batch_size: 10,
+            batch_timeout: Duration::from_secs(30),
+            cascade_depth: 3,
+            enable_batching: true,
         };
 
         let middleware = CacheInvalidationMiddleware::new(config);
@@ -705,10 +707,15 @@ mod tests {
         let middleware = CacheInvalidationMiddleware::new_default();
 
         let rule = InvalidationRule {
+            rule_id: Uuid::new_v4(),
             name: "test_rule".to_string(),
             description: "Test rule".to_string(),
+            entity_type: "task".to_string(),
+            operations: vec!["updated".to_string()],
             affected_cache_types: vec!["task_cache".to_string()],
-            invalidation_strategy: "immediate".to_string(),
+            invalidation_strategy: InvalidationStrategy::InvalidateAll,
+            enabled: true,
+            created_at: Utc::now(),
             updated_at: Utc::now(),
         };
 
@@ -733,17 +740,56 @@ mod tests {
     async fn test_process_event_with_handler() {
         let middleware = CacheInvalidationMiddleware::new_default();
         let handler = Box::new(MockCacheHandler::new("test_cache"));
+        let l1_handler = Box::new(MockCacheHandler::new("l1"));
+        let l2_handler = Box::new(MockCacheHandler::new("l2"));
 
         middleware.register_handler(handler);
+        middleware.register_handler(l1_handler);
+        middleware.register_handler(l2_handler);
 
         let rule = InvalidationRule {
+            rule_id: Uuid::new_v4(),
             name: "test_rule".to_string(),
             description: "Test rule".to_string(),
+            entity_type: "task".to_string(),
+            operations: vec!["created".to_string(), "updated".to_string()],
             affected_cache_types: vec!["test_cache".to_string()],
-            invalidation_strategy: "immediate".to_string(),
+            invalidation_strategy: InvalidationStrategy::InvalidateAll,
+            enabled: true,
+            created_at: Utc::now(),
             updated_at: Utc::now(),
         };
         middleware.add_rule(rule);
+
+        // Add rules for project and area entities to handle cascade events
+        // Note: cascade events use "l1" and "l2" as affected caches
+        let project_rule = InvalidationRule {
+            rule_id: Uuid::new_v4(),
+            name: "project_rule".to_string(),
+            description: "Rule for project invalidation".to_string(),
+            entity_type: "project".to_string(),
+            operations: vec!["cascade_invalidation".to_string()],
+            affected_cache_types: vec!["l1".to_string(), "l2".to_string()],
+            invalidation_strategy: InvalidationStrategy::InvalidateAll,
+            enabled: true,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        };
+        middleware.add_rule(project_rule);
+
+        let area_rule = InvalidationRule {
+            rule_id: Uuid::new_v4(),
+            name: "area_rule".to_string(),
+            description: "Rule for area invalidation".to_string(),
+            entity_type: "area".to_string(),
+            operations: vec!["cascade_invalidation".to_string()],
+            affected_cache_types: vec!["l1".to_string(), "l2".to_string()],
+            invalidation_strategy: InvalidationStrategy::InvalidateAll,
+            enabled: true,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        };
+        middleware.add_rule(area_rule);
 
         let event = InvalidationEvent {
             event_id: Uuid::new_v4(),
@@ -756,11 +802,11 @@ mod tests {
             metadata: HashMap::new(),
         };
 
-        middleware.process_event(event).await;
+        let _ = middleware.process_event(event).await;
 
         let stats = middleware.get_stats();
-        assert_eq!(stats.total_events, 1);
-        assert_eq!(stats.successful_invalidations, 1);
+        assert_eq!(stats.total_events, 3); // 1 original + 2 cascade events
+        assert_eq!(stats.successful_invalidations, 3);
     }
 
     #[tokio::test]
