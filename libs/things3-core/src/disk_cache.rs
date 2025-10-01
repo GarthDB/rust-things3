@@ -259,6 +259,14 @@ impl DiskCache {
     }
 
     /// Store data in the disk cache
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if:
+    /// - Serialization fails
+    /// - Compression fails (if enabled)
+    /// - Database operations fail
+    /// - File I/O operations fail
     pub fn store<T>(&self, key: &str, data: &T, cache_type: &str) -> Result<()>
     where
         T: Serialize,
@@ -315,6 +323,13 @@ impl DiskCache {
     }
 
     /// Retrieve data from the disk cache
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if:
+    /// - Database operations fail
+    /// - Deserialization fails
+    /// - Decompression fails (if data was compressed)
     pub async fn get<T>(&self, key: &str) -> Result<Option<T>>
     where
         T: for<'de> Deserialize<'de>,
@@ -374,6 +389,10 @@ impl DiskCache {
     }
 
     /// Remove an entry from the disk cache
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if database operations fail
     pub fn remove(&self, key: &str) -> Result<bool> {
         let conn = Connection::open(&self.config.db_path)?;
         let deleted = conn.execute("DELETE FROM cache_entries WHERE key = ?", params![key])?;
@@ -381,6 +400,10 @@ impl DiskCache {
     }
 
     /// Clear all entries from the disk cache
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if database operations fail
     pub fn clear(&self) -> Result<()> {
         let conn = Connection::open(&self.config.db_path)?;
         conn.execute("DELETE FROM cache_entries", [])?;
@@ -389,6 +412,10 @@ impl DiskCache {
     }
 
     /// Clear entries by cache type
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if database operations fail
     pub fn clear_by_type(&self, cache_type: &str) -> Result<()> {
         let conn = Connection::open(&self.config.db_path)?;
         let deleted = conn.execute(
@@ -436,6 +463,10 @@ impl DiskCache {
     }
 
     /// Get cache size in bytes
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if database operations fail
     pub fn get_size(&self) -> Result<u64> {
         let conn = Connection::open(&self.config.db_path)?;
         let now = Utc::now().timestamp();
@@ -450,12 +481,20 @@ impl DiskCache {
     }
 
     /// Check if cache is full
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if database operations fail
     pub fn is_full(&self) -> Result<bool> {
         let current_size = self.get_size()?;
         Ok(current_size >= self.config.max_size)
     }
 
     /// Get cache utilization percentage
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if database operations fail
     pub fn get_utilization(&self) -> Result<f64> {
         let current_size = self.get_size()?;
         Ok((current_size as f64 / self.config.max_size as f64) * 100.0)

@@ -133,6 +133,13 @@ where
     }
 
     /// Execute a tool with caching
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if:
+    /// - Tool execution fails
+    /// - Cache operations fail
+    /// - Serialization/deserialization fails
     pub async fn execute_tool<F, Fut>(
         &self,
         tool_name: &str,

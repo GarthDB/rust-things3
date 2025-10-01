@@ -158,6 +158,13 @@ impl QueryCache {
     }
 
     /// Cache a tasks query result
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if:
+    /// - The fetcher function fails
+    /// - Cache operations fail
+    /// - Serialization/deserialization fails
     pub async fn cache_tasks_query<F, Fut>(
         &self,
         query_key: &str,
@@ -223,6 +230,13 @@ impl QueryCache {
     }
 
     /// Cache a projects query result
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if:
+    /// - The fetcher function fails
+    /// - Cache operations fail
+    /// - Serialization/deserialization fails
     pub async fn cache_projects_query<F, Fut>(
         &self,
         query_key: &str,
@@ -288,6 +302,13 @@ impl QueryCache {
     }
 
     /// Cache an areas query result
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if:
+    /// - The fetcher function fails
+    /// - Cache operations fail
+    /// - Serialization/deserialization fails
     pub async fn cache_areas_query<F, Fut>(
         &self,
         query_key: &str,
@@ -353,6 +374,13 @@ impl QueryCache {
     }
 
     /// Cache a search query result
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if:
+    /// - The fetcher function fails
+    /// - Cache operations fail
+    /// - Serialization/deserialization fails
     pub async fn cache_search_query<F, Fut>(
         &self,
         query_key: &str,
@@ -667,7 +695,7 @@ mod tests {
             .await
             .unwrap();
 
-        assert_eq!(result.len(), 5);
+        assert_eq!(result.len(), tasks.len());
 
         // Test cache hit
         let cached_result = cache
@@ -677,7 +705,7 @@ mod tests {
             .await
             .unwrap();
 
-        assert_eq!(cached_result.len(), 5);
+        assert_eq!(cached_result.len(), tasks.len());
 
         // Test cache miss with different params
         let different_params = "different_params_hash";

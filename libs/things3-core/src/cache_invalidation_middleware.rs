@@ -227,6 +227,10 @@ impl CacheInvalidationMiddleware {
 
         // Update statistics
         let processing_time = start_time.elapsed().as_millis().min(u128::from(u64::MAX)) as f64;
+        {
+            let mut stats = self.stats.write();
+            stats.total_events += 1;
+        }
         self.update_processing_time(processing_time);
 
         debug!(
@@ -488,7 +492,6 @@ impl CacheInvalidationMiddleware {
     /// Update average processing time
     fn update_processing_time(&self, processing_time: f64) {
         let mut stats = self.stats.write();
-        stats.total_events += 1;
 
         // Update running average
         let total_events = stats.total_events as f64;
@@ -568,8 +571,8 @@ mod tests {
         middleware.register_handler(Box::new(MockCacheHandler::new("l1")));
         middleware.register_handler(Box::new(MockCacheHandler::new("l2")));
 
-        // Add a rule
-        let rule = InvalidationRule {
+        // Add rules for task, project, and area entities
+        let task_rule = InvalidationRule {
             rule_id: Uuid::new_v4(),
             name: "task_rule".to_string(),
             description: "Rule for task invalidation".to_string(),
@@ -581,7 +584,35 @@ mod tests {
             created_at: Utc::now(),
             updated_at: Utc::now(),
         };
-        middleware.add_rule(rule);
+        middleware.add_rule(task_rule);
+
+        let project_rule = InvalidationRule {
+            rule_id: Uuid::new_v4(),
+            name: "project_rule".to_string(),
+            description: "Rule for project invalidation".to_string(),
+            entity_type: "project".to_string(),
+            operations: vec!["cascade_invalidation".to_string()],
+            affected_cache_types: vec!["l1".to_string(), "l2".to_string()],
+            invalidation_strategy: InvalidationStrategy::InvalidateAll,
+            enabled: true,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        };
+        middleware.add_rule(project_rule);
+
+        let area_rule = InvalidationRule {
+            rule_id: Uuid::new_v4(),
+            name: "area_rule".to_string(),
+            description: "Rule for area invalidation".to_string(),
+            entity_type: "area".to_string(),
+            operations: vec!["cascade_invalidation".to_string()],
+            affected_cache_types: vec!["l1".to_string(), "l2".to_string()],
+            invalidation_strategy: InvalidationStrategy::InvalidateAll,
+            enabled: true,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        };
+        middleware.add_rule(area_rule);
 
         // Create an invalidation event
         let event = InvalidationEvent {
@@ -600,8 +631,8 @@ mod tests {
 
         // Check statistics
         let stats = middleware.get_stats();
-        assert_eq!(stats.total_events, 1);
-        assert_eq!(stats.successful_invalidations, 1);
+        assert_eq!(stats.total_events, 3); // 1 original + 2 cascade events
+        assert_eq!(stats.successful_invalidations, 3);
     }
 
     #[tokio::test]
