@@ -7,11 +7,14 @@ pub mod backup;
 pub mod cache;
 pub mod cache_invalidation_middleware;
 pub mod config;
+pub mod config_hot_reload;
+pub mod config_loader;
 pub mod database;
 pub mod disk_cache;
 pub mod error;
 pub mod export;
 pub mod mcp_cache_middleware;
+pub mod mcp_config;
 pub mod models;
 pub mod observability;
 pub mod performance;
@@ -29,6 +32,11 @@ pub use cache_invalidation_middleware::{
     InvalidationEventType, InvalidationRule, InvalidationStats, InvalidationStrategy,
 };
 pub use config::ThingsConfig;
+pub use config_hot_reload::{
+    ConfigChangeHandler, ConfigHotReloader, ConfigHotReloaderWithHandler,
+    DefaultConfigChangeHandler,
+};
+pub use config_loader::{load_config, load_config_from_env, load_config_with_paths, ConfigLoader};
 pub use database::{
     ComprehensiveHealthStatus, DatabasePoolConfig, DatabaseStats, PoolHealthStatus, PoolMetrics,
     SqliteOptimizations, ThingsDatabase,
@@ -37,6 +45,7 @@ pub use disk_cache::{DiskCache, DiskCacheConfig, DiskCacheStats};
 pub use error::{Result, ThingsError};
 pub use export::{DataExporter, ExportConfig, ExportData, ExportFormat};
 pub use mcp_cache_middleware::{MCPCacheConfig, MCPCacheEntry, MCPCacheMiddleware, MCPCacheStats};
+pub use mcp_config::McpServerConfig;
 pub use models::*;
 pub use observability::{
     CheckResult, HealthStatus, ObservabilityConfig, ObservabilityError, ObservabilityManager,

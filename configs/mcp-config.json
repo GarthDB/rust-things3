@@ -1,0 +1,110 @@
+{
+  "server": {
+    "name": "things3-mcp-server",
+    "version": "1.0.0",
+    "description": "Things 3 MCP Server - Production Configuration",
+    "max_connections": 200,
+    "connection_timeout": 30,
+    "request_timeout": 60,
+    "graceful_shutdown": true,
+    "shutdown_timeout": 30
+  },
+  "database": {
+    "path": "/Users/garthdb/Library/Group Containers/JLMPQHK86H.com.culturedcode.ThingsMac/ThingsData-0Z0Z2/Things Database.thingsdatabase/main.sqlite",
+    "fallback_to_default": true,
+    "pool_size": 20,
+    "connection_timeout": 30,
+    "query_timeout": 60,
+    "enable_query_logging": false,
+    "enable_query_metrics": true
+  },
+  "logging": {
+    "level": "info",
+    "json_logs": true,
+    "log_file": "/var/log/things3-mcp/server.log",
+    "console_logs": true,
+    "structured_logs": true,
+    "rotation": {
+      "enabled": true,
+      "max_file_size_mb": 100,
+      "max_files": 10,
+      "compress": true
+    }
+  },
+  "performance": {
+    "enabled": true,
+    "slow_request_threshold_ms": 500,
+    "enable_profiling": false,
+    "memory_monitoring": {
+      "enabled": true,
+      "threshold_percentage": 85.0,
+      "check_interval": 30
+    },
+    "cpu_monitoring": {
+      "enabled": true,
+      "threshold_percentage": 80.0,
+      "check_interval": 30
+    }
+  },
+  "security": {
+    "authentication": {
+      "enabled": true,
+      "require_auth": false,
+      "jwt_secret": "your-production-secret-key-change-this",
+      "jwt_expiration": 3600,
+      "api_keys": [],
+      "oauth": null
+    },
+    "rate_limiting": {
+      "enabled": true,
+      "requests_per_minute": 120,
+      "burst_limit": 20,
+      "custom_limits": {
+        "admin": 300,
+        "api": 100,
+        "web": 60
+      }
+    },
+    "cors": {
+      "enabled": true,
+      "allowed_origins": ["https://app.things3.com", "https://localhost:3000"],
+      "allowed_methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+      "allowed_headers": ["Content-Type", "Authorization", "X-Requested-With"],
+      "exposed_headers": [],
+      "allow_credentials": true,
+      "max_age": 86400
+    },
+    "validation": {
+      "enabled": true,
+      "strict_mode": true,
+      "max_request_size": 2097152,
+      "max_field_length": 2000
+    }
+  },
+  "cache": {
+    "enabled": true,
+    "cache_type": "hybrid",
+    "max_size_mb": 500,
+    "ttl_seconds": 7200,
+    "compression": true,
+    "eviction_policy": "lru"
+  },
+  "monitoring": {
+    "enabled": true,
+    "metrics_port": 9090,
+    "health_port": 8080,
+    "health_checks": true,
+    "metrics_collection": true,
+    "metrics_path": "/metrics",
+    "health_path": "/health"
+  },
+  "features": {
+    "real_time_updates": true,
+    "websocket_server": true,
+    "dashboard": true,
+    "bulk_operations": true,
+    "data_export": true,
+    "backup": true,
+    "hot_reloading": false
+  }
+}
