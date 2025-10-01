@@ -53,6 +53,12 @@ impl ConfigLoader {
         self
     }
 
+    /// Disable loading from environment variables
+    pub fn without_env_loading(mut self) -> Self {
+        self.load_from_env = false;
+        self
+    }
+
     /// Enable or disable loading from environment variables
     pub fn with_env_loading(mut self, enabled: bool) -> Self {
         self.load_from_env = enabled;
@@ -274,7 +280,9 @@ mod tests {
         let mut base_config = McpServerConfig::default();
         base_config.server.name = "test-server".to_string();
 
-        let loader = ConfigLoader::new().with_base_config(base_config.clone());
+        let loader = ConfigLoader::new()
+            .with_base_config(base_config.clone())
+            .without_env_loading();
         let loaded_config = loader.load().unwrap();
         assert_eq!(loaded_config.server.name, "test-server");
     }

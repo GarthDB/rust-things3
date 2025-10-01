@@ -617,42 +617,32 @@ impl McpServerConfig {
         }
 
         // Merge performance config
-        if other.performance.enabled {
-            self.performance.enabled = other.performance.enabled;
-        }
+        self.performance.enabled = other.performance.enabled;
         if other.performance.slow_request_threshold_ms > 0 {
             self.performance.slow_request_threshold_ms =
                 other.performance.slow_request_threshold_ms;
         }
 
         // Merge security config
-        if other.security.authentication.enabled {
-            self.security.authentication.enabled = other.security.authentication.enabled;
-        }
+        self.security.authentication.enabled = other.security.authentication.enabled;
         if !other.security.authentication.jwt_secret.is_empty() {
             self.security.authentication.jwt_secret =
                 other.security.authentication.jwt_secret.clone();
         }
-        if other.security.rate_limiting.enabled {
-            self.security.rate_limiting.enabled = other.security.rate_limiting.enabled;
-        }
+        self.security.rate_limiting.enabled = other.security.rate_limiting.enabled;
         if other.security.rate_limiting.requests_per_minute > 0 {
             self.security.rate_limiting.requests_per_minute =
                 other.security.rate_limiting.requests_per_minute;
         }
 
         // Merge cache config
-        if other.cache.enabled {
-            self.cache.enabled = other.cache.enabled;
-        }
+        self.cache.enabled = other.cache.enabled;
         if other.cache.max_size_mb > 0 {
             self.cache.max_size_mb = other.cache.max_size_mb;
         }
 
         // Merge monitoring config
-        if other.monitoring.enabled {
-            self.monitoring.enabled = other.monitoring.enabled;
-        }
+        self.monitoring.enabled = other.monitoring.enabled;
         if other.monitoring.metrics_port > 0 {
             self.monitoring.metrics_port = other.monitoring.metrics_port;
         }
@@ -661,27 +651,13 @@ impl McpServerConfig {
         }
 
         // Merge feature flags
-        if other.features.real_time_updates {
-            self.features.real_time_updates = other.features.real_time_updates;
-        }
-        if other.features.websocket_server {
-            self.features.websocket_server = other.features.websocket_server;
-        }
-        if other.features.dashboard {
-            self.features.dashboard = other.features.dashboard;
-        }
-        if other.features.bulk_operations {
-            self.features.bulk_operations = other.features.bulk_operations;
-        }
-        if other.features.data_export {
-            self.features.data_export = other.features.data_export;
-        }
-        if other.features.backup {
-            self.features.backup = other.features.backup;
-        }
-        if other.features.hot_reloading {
-            self.features.hot_reloading = other.features.hot_reloading;
-        }
+        self.features.real_time_updates = other.features.real_time_updates;
+        self.features.websocket_server = other.features.websocket_server;
+        self.features.dashboard = other.features.dashboard;
+        self.features.bulk_operations = other.features.bulk_operations;
+        self.features.data_export = other.features.data_export;
+        self.features.backup = other.features.backup;
+        self.features.hot_reloading = other.features.hot_reloading;
     }
 
     /// Get the effective database path, falling back to default if needed
