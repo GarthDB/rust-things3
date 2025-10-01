@@ -613,4 +613,329 @@ mod tests {
         assert!(stats.misses >= 1);
         assert!(stats.hit_rate > 0.0);
     }
+
+    #[tokio::test]
+    async fn test_disk_cache_clear() {
+        let temp_dir = tempdir().unwrap();
+        let db_path = temp_dir.path().join("test_cache_clear.db");
+
+        let config = DiskCacheConfig {
+            db_path: db_path.to_string_lossy().to_string(),
+            max_size: 1024 * 1024,
+            ttl: Duration::from_secs(60),
+            compression: false,
+            cleanup_interval: Duration::from_secs(10),
+            max_entries: 100,
+        };
+
+        let cache = DiskCache::new(config).await.unwrap();
+
+        // Store some data
+        cache.store("key1", &vec!["data1"], "test").unwrap();
+        cache.store("key2", &vec!["data2"], "test").unwrap();
+
+        // Verify data exists
+        let stats_before = cache.get_stats().await;
+        assert_eq!(stats_before.total_entries, 2);
+
+        // Clear all data
+        cache.clear().unwrap();
+
+        // Verify data is gone
+        let stats_after = cache.get_stats().await;
+        assert_eq!(stats_after.total_entries, 0);
+
+        // Verify individual keys are gone
+        let missing: Option<Vec<String>> = cache.get("key1").await.unwrap();
+        assert_eq!(missing, None);
+    }
+
+    #[tokio::test]
+    async fn test_disk_cache_clear_by_type() {
+        let temp_dir = tempdir().unwrap();
+        let db_path = temp_dir.path().join("test_cache_clear_by_type.db");
+
+        let config = DiskCacheConfig {
+            db_path: db_path.to_string_lossy().to_string(),
+            max_size: 1024 * 1024,
+            ttl: Duration::from_secs(60),
+            compression: false,
+            cleanup_interval: Duration::from_secs(10),
+            max_entries: 100,
+        };
+
+        let cache = DiskCache::new(config).await.unwrap();
+
+        // Store data with different cache types
+        cache.store("key1", &vec!["data1"], "type1").unwrap();
+        cache.store("key2", &vec!["data2"], "type1").unwrap();
+        cache.store("key3", &vec!["data3"], "type2").unwrap();
+
+        // Clear only type1
+        cache.clear_by_type("type1").unwrap();
+
+        // Verify type1 keys are gone
+        let missing1: Option<Vec<String>> = cache.get("key1").await.unwrap();
+        let missing2: Option<Vec<String>> = cache.get("key2").await.unwrap();
+        assert_eq!(missing1, None);
+        assert_eq!(missing2, None);
+
+        // Verify type2 key still exists
+        let existing: Option<Vec<String>> = cache.get("key3").await.unwrap();
+        assert_eq!(existing, Some(vec!["data3".to_string()]));
+    }
+
+    #[tokio::test]
+    async fn test_disk_cache_get_size() {
+        let temp_dir = tempdir().unwrap();
+        let db_path = temp_dir.path().join("test_cache_size.db");
+
+        let config = DiskCacheConfig {
+            db_path: db_path.to_string_lossy().to_string(),
+            max_size: 1024 * 1024,
+            ttl: Duration::from_secs(60),
+            compression: false,
+            cleanup_interval: Duration::from_secs(10),
+            max_entries: 100,
+        };
+
+        let cache = DiskCache::new(config).await.unwrap();
+
+        // Initially empty
+        let initial_size = cache.get_size().unwrap();
+        assert_eq!(initial_size, 0);
+
+        // Store some data
+        cache.store("key1", &vec!["data1"], "test").unwrap();
+        cache.store("key2", &vec!["data2"], "test").unwrap();
+
+        // Size should be greater than 0
+        let size_after_store = cache.get_size().unwrap();
+        assert!(size_after_store > 0);
+    }
+
+    #[tokio::test]
+    async fn test_disk_cache_is_full() {
+        let temp_dir = tempdir().unwrap();
+        let db_path = temp_dir.path().join("test_cache_full.db");
+
+        let config = DiskCacheConfig {
+            db_path: db_path.to_string_lossy().to_string(),
+            max_size: 100, // Very small size
+            ttl: Duration::from_secs(60),
+            compression: false,
+            cleanup_interval: Duration::from_secs(10),
+            max_entries: 100,
+        };
+
+        let cache = DiskCache::new(config).await.unwrap();
+
+        // Initially not full
+        let initially_full = cache.is_full().unwrap();
+        assert!(!initially_full);
+
+        // Store data until full
+        for i in 0..10 {
+            let data = vec![format!("data_{}", i); 100]; // Large data
+            cache.store(&format!("key{}", i), &data, "test").unwrap();
+        }
+
+        // Should be full now
+        let is_full = cache.is_full().unwrap();
+        assert!(is_full);
+    }
+
+    #[tokio::test]
+    async fn test_disk_cache_get_utilization() {
+        let temp_dir = tempdir().unwrap();
+        let db_path = temp_dir.path().join("test_cache_utilization.db");
+
+        let config = DiskCacheConfig {
+            db_path: db_path.to_string_lossy().to_string(),
+            max_size: 1000, // 1KB
+            ttl: Duration::from_secs(60),
+            compression: false,
+            cleanup_interval: Duration::from_secs(10),
+            max_entries: 100,
+        };
+
+        let cache = DiskCache::new(config).await.unwrap();
+
+        // Initially 0% utilization
+        let initial_utilization = cache.get_utilization().unwrap();
+        assert_eq!(initial_utilization, 0.0);
+
+        // Store some data
+        cache.store("key1", &vec!["data1"], "test").unwrap();
+
+        // Utilization should be > 0%
+        let utilization = cache.get_utilization().unwrap();
+        assert!(utilization > 0.0);
+        assert!(utilization <= 100.0);
+    }
+
+    #[tokio::test]
+    async fn test_disk_cache_ttl_expiration() {
+        let temp_dir = tempdir().unwrap();
+        let db_path = temp_dir.path().join("test_cache_ttl.db");
+
+        let config = DiskCacheConfig {
+            db_path: db_path.to_string_lossy().to_string(),
+            max_size: 1024 * 1024,
+            ttl: Duration::from_millis(100), // Very short TTL
+            compression: false,
+            cleanup_interval: Duration::from_millis(50),
+            max_entries: 100,
+        };
+
+        let cache = DiskCache::new(config).await.unwrap();
+
+        // Store data
+        cache.store("key1", &vec!["data1"], "test").unwrap();
+
+        // Data should exist initially
+        let initial: Option<Vec<String>> = cache.get("key1").await.unwrap();
+        assert_eq!(initial, Some(vec!["data1".to_string()]));
+
+        // Wait for TTL to expire
+        tokio::time::sleep(Duration::from_millis(200)).await;
+
+        // Data should be expired
+        let expired: Option<Vec<String>> = cache.get("key1").await.unwrap();
+        assert_eq!(expired, None);
+    }
+
+    #[tokio::test]
+    async fn test_disk_cache_cleanup_expired_entries() {
+        let temp_dir = tempdir().unwrap();
+        let db_path = temp_dir.path().join("test_cache_cleanup.db");
+
+        let config = DiskCacheConfig {
+            db_path: db_path.to_string_lossy().to_string(),
+            max_size: 1024 * 1024,
+            ttl: Duration::from_millis(100),
+            compression: false,
+            cleanup_interval: Duration::from_millis(50),
+            max_entries: 100,
+        };
+
+        let cache = DiskCache::new(config).await.unwrap();
+
+        // Store data
+        cache.store("key1", &vec!["data1"], "test").unwrap();
+        cache.store("key2", &vec!["data2"], "test").unwrap();
+
+        // Wait for TTL to expire
+        tokio::time::sleep(Duration::from_millis(200)).await;
+
+        // Manually trigger cleanup
+        cache.cleanup_expired_entries().unwrap();
+
+        // Data should be cleaned up
+        let stats = cache.get_stats().await;
+        assert_eq!(stats.total_entries, 0);
+    }
+
+    #[tokio::test]
+    async fn test_disk_cache_cleanup_oversized_entries() {
+        let temp_dir = tempdir().unwrap();
+        let db_path = temp_dir.path().join("test_cache_oversized.db");
+
+        let config = DiskCacheConfig {
+            db_path: db_path.to_string_lossy().to_string(),
+            max_size: 100, // Very small size
+            ttl: Duration::from_secs(60),
+            compression: false,
+            cleanup_interval: Duration::from_secs(10),
+            max_entries: 100,
+        };
+
+        let cache = DiskCache::new(config).await.unwrap();
+
+        // Store oversized data
+        let large_data = vec!["data"; 1000]; // Very large data
+        cache.store("key1", &large_data, "test").unwrap();
+
+        // Manually trigger cleanup
+        cache.cleanup_oversized_entries().unwrap();
+
+        // Data should be cleaned up
+        let stats = cache.get_stats().await;
+        assert_eq!(stats.total_entries, 0);
+    }
+
+    #[tokio::test]
+    async fn test_disk_cache_error_handling() {
+        let temp_dir = tempdir().unwrap();
+        let db_path = temp_dir.path().join("test_cache_errors.db");
+
+        let config = DiskCacheConfig {
+            db_path: db_path.to_string_lossy().to_string(),
+            max_size: 1024 * 1024,
+            ttl: Duration::from_secs(60),
+            compression: false,
+            cleanup_interval: Duration::from_secs(10),
+            max_entries: 100,
+        };
+
+        let cache = DiskCache::new(config).await.unwrap();
+
+        // Test storing with invalid data (this should work fine)
+        let valid_data = vec!["valid".to_string()];
+        let result = cache.store("valid_key", &valid_data, "test");
+        assert!(result.is_ok());
+
+        // Test getting non-existent key (should return None, not error)
+        let missing: Option<Vec<String>> = cache.get("missing_key").await.unwrap();
+        assert_eq!(missing, None);
+
+        // Test removing non-existent key (should return false, not error)
+        let removed = cache.remove("missing_key").unwrap();
+        assert!(!removed);
+    }
+
+    #[tokio::test]
+    async fn test_disk_cache_concurrent_access() {
+        let temp_dir = tempdir().unwrap();
+        let db_path = temp_dir.path().join("test_cache_concurrent.db");
+
+        let config = DiskCacheConfig {
+            db_path: db_path.to_string_lossy().to_string(),
+            max_size: 1024 * 1024,
+            ttl: Duration::from_secs(60),
+            compression: false,
+            cleanup_interval: Duration::from_secs(10),
+            max_entries: 100,
+        };
+
+        let cache = Arc::new(DiskCache::new(config).await.unwrap());
+
+        // Spawn multiple tasks to test concurrent access
+        let mut handles = vec![];
+
+        for i in 0..10 {
+            let cache_clone = Arc::clone(&cache);
+            let handle = tokio::spawn(async move {
+                let key = format!("key_{}", i);
+                let data = vec![format!("data_{}", i)];
+
+                // Store data
+                cache_clone.store(&key, &data, "test").unwrap();
+
+                // Retrieve data
+                let retrieved: Option<Vec<String>> = cache_clone.get(&key).await.unwrap();
+                assert_eq!(retrieved, Some(data));
+            });
+            handles.push(handle);
+        }
+
+        // Wait for all tasks to complete
+        for handle in handles {
+            handle.await.unwrap();
+        }
+
+        // Verify all data is still there
+        let stats = cache.get_stats().await;
+        assert_eq!(stats.total_entries, 10);
+    }
 }

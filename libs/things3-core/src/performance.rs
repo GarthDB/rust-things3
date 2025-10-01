@@ -740,4 +740,415 @@ mod tests {
         assert!(stats2.is_some());
         assert_eq!(stats1.unwrap().total_calls, stats2.unwrap().total_calls);
     }
+
+    #[test]
+    fn test_performance_monitor_multiple_operations() {
+        let monitor = PerformanceMonitor::new_default();
+
+        // Record multiple operations
+        let operations = vec![
+            ("op1", Duration::from_millis(100), true),
+            ("op1", Duration::from_millis(150), true),
+            ("op1", Duration::from_millis(200), false),
+            ("op2", Duration::from_millis(50), true),
+            ("op2", Duration::from_millis(75), true),
+        ];
+
+        for (op_name, duration, success) in operations {
+            let metric = OperationMetrics {
+                operation_name: op_name.to_string(),
+                duration,
+                timestamp: Utc::now(),
+                success,
+                error_message: if success {
+                    None
+                } else {
+                    Some("Test error".to_string())
+                },
+            };
+            monitor.record_operation(&metric);
+        }
+
+        // Check op1 stats
+        let op1_stats = monitor.get_operation_stats("op1").unwrap();
+        assert_eq!(op1_stats.total_calls, 3);
+        assert_eq!(op1_stats.successful_calls, 2);
+        assert_eq!(op1_stats.failed_calls, 1);
+        assert_eq!(op1_stats.average_execution_time_ms, 150.0);
+
+        // Check op2 stats
+        let op2_stats = monitor.get_operation_stats("op2").unwrap();
+        assert_eq!(op2_stats.total_calls, 2);
+        assert_eq!(op2_stats.successful_calls, 2);
+        assert_eq!(op2_stats.failed_calls, 0);
+        assert_eq!(op2_stats.average_execution_time_ms, 62.5);
+    }
+
+    #[test]
+    fn test_performance_monitor_get_summary() {
+        let monitor = PerformanceMonitor::new_default();
+
+        // Record some operations
+        let metric1 = OperationMetrics {
+            operation_name: "test_op".to_string(),
+            duration: Duration::from_millis(100),
+            timestamp: Utc::now(),
+            success: true,
+            error_message: None,
+        };
+        monitor.record_operation(&metric1);
+
+        let metric2 = OperationMetrics {
+            operation_name: "test_op".to_string(),
+            duration: Duration::from_millis(200),
+            timestamp: Utc::now(),
+            success: false,
+            error_message: Some("Test error".to_string()),
+        };
+        monitor.record_operation(&metric2);
+
+        let summary = monitor.get_summary();
+        assert_eq!(summary.total_operations, 2);
+        assert_eq!(summary.successful_operations, 1);
+        assert_eq!(summary.failed_operations, 1);
+        assert_eq!(summary.average_execution_time_ms, 150.0);
+        assert_eq!(summary.success_rate, 0.5);
+    }
+
+    #[test]
+    fn test_performance_monitor_get_summary_empty() {
+        let monitor = PerformanceMonitor::new_default();
+        let summary = monitor.get_summary();
+
+        assert_eq!(summary.total_operations, 0);
+        assert_eq!(summary.successful_operations, 0);
+        assert_eq!(summary.failed_operations, 0);
+        assert_eq!(summary.average_execution_time_ms, 0.0);
+        assert_eq!(summary.success_rate, 0.0);
+    }
+
+    #[test]
+    fn test_performance_monitor_get_all_stats() {
+        let monitor = PerformanceMonitor::new_default();
+
+        // Record operations for different operation types
+        let operations = vec![
+            ("operation_a", Duration::from_millis(100), true),
+            ("operation_a", Duration::from_millis(150), true),
+            ("operation_b", Duration::from_millis(200), false),
+        ];
+
+        for (op_name, duration, success) in operations {
+            let metric = OperationMetrics {
+                operation_name: op_name.to_string(),
+                duration,
+                timestamp: Utc::now(),
+                success,
+                error_message: if success {
+                    None
+                } else {
+                    Some("Test error".to_string())
+                },
+            };
+            monitor.record_operation(&metric);
+        }
+
+        let all_stats = monitor.get_all_stats();
+        assert_eq!(all_stats.len(), 2);
+        assert!(all_stats.contains_key("operation_a"));
+        assert!(all_stats.contains_key("operation_b"));
+
+        let op_a_stats = &all_stats["operation_a"];
+        assert_eq!(op_a_stats.total_calls, 2);
+        assert_eq!(op_a_stats.successful_calls, 2);
+
+        let op_b_stats = &all_stats["operation_b"];
+        assert_eq!(op_b_stats.total_calls, 1);
+        assert_eq!(op_b_stats.failed_calls, 1);
+    }
+
+    #[test]
+    fn test_performance_monitor_get_metrics() {
+        let monitor = PerformanceMonitor::new_default();
+
+        // Record some operations
+        let metric1 = OperationMetrics {
+            operation_name: "test_op".to_string(),
+            duration: Duration::from_millis(100),
+            timestamp: Utc::now(),
+            success: true,
+            error_message: None,
+        };
+        monitor.record_operation(&metric1);
+
+        let metric2 = OperationMetrics {
+            operation_name: "test_op2".to_string(),
+            duration: Duration::from_millis(200),
+            timestamp: Utc::now(),
+            success: false,
+            error_message: Some("Test error".to_string()),
+        };
+        monitor.record_operation(&metric2);
+
+        let metrics = monitor.get_metrics();
+        assert_eq!(metrics.len(), 2);
+        assert!(metrics.iter().any(|m| m.operation_name == "test_op"));
+        assert!(metrics.iter().any(|m| m.operation_name == "test_op2"));
+    }
+
+    #[test]
+    fn test_performance_monitor_failed_operation() {
+        let monitor = PerformanceMonitor::new_default();
+
+        // Test failed operation
+        {
+            let timer = monitor.start_operation("test_failure");
+            thread::sleep(Duration::from_millis(5));
+            timer.failure("Test failure message".to_string());
+        }
+
+        let stats = monitor.get_operation_stats("test_failure");
+        assert!(stats.is_some());
+        let stats = stats.unwrap();
+        assert_eq!(stats.total_calls, 1);
+        assert_eq!(stats.successful_calls, 0);
+        assert_eq!(stats.failed_calls, 1);
+    }
+
+    #[test]
+    fn test_performance_monitor_with_custom_observability() {
+        let config = ObservabilityConfig {
+            enable_metrics: true,
+            enable_tracing: true,
+            log_level: "debug".to_string(),
+        };
+        let monitor = PerformanceMonitor::new(config);
+
+        // Record an operation
+        let metric = OperationMetrics {
+            operation_name: "custom_test".to_string(),
+            duration: Duration::from_millis(100),
+            timestamp: Utc::now(),
+            success: true,
+            error_message: None,
+        };
+        monitor.record_operation(&metric);
+
+        let stats = monitor.get_operation_stats("custom_test");
+        assert!(stats.is_some());
+        let stats = stats.unwrap();
+        assert_eq!(stats.total_calls, 1);
+    }
+
+    #[test]
+    fn test_performance_monitor_error_tracking() {
+        let monitor = PerformanceMonitor::new_default();
+
+        // Record operations with different error types
+        let operations = vec![
+            ("op1", "Error 1".to_string()),
+            ("op1", "Error 2".to_string()),
+            ("op2", "Error 3".to_string()),
+        ];
+
+        for (op_name, error_msg) in operations {
+            let metric = OperationMetrics {
+                operation_name: op_name.to_string(),
+                duration: Duration::from_millis(100),
+                timestamp: Utc::now(),
+                success: false,
+                error_message: Some(error_msg),
+            };
+            monitor.record_operation(&metric);
+        }
+
+        let op1_stats = monitor.get_operation_stats("op1").unwrap();
+        assert_eq!(op1_stats.failed_calls, 2);
+
+        let op2_stats = monitor.get_operation_stats("op2").unwrap();
+        assert_eq!(op2_stats.failed_calls, 1);
+    }
+
+    #[test]
+    fn test_performance_monitor_timing() {
+        let monitor = PerformanceMonitor::new_default();
+
+        // Test precise timing
+        let start = std::time::Instant::now();
+        {
+            let timer = monitor.start_operation("timing_test");
+            thread::sleep(Duration::from_millis(10));
+            timer.success();
+        }
+        let elapsed = start.elapsed();
+
+        let stats = monitor.get_operation_stats("timing_test").unwrap();
+        assert_eq!(stats.total_calls, 1);
+        assert!(stats.average_execution_time_ms >= 10.0);
+        assert!(stats.average_execution_time_ms <= elapsed.as_millis() as f64 + 1.0);
+    }
+
+    #[test]
+    fn test_performance_monitor_concurrent_operations() {
+        let monitor = Arc::new(PerformanceMonitor::new_default());
+        let mut handles = vec![];
+
+        // Spawn multiple threads to test concurrent operations
+        for i in 0..10 {
+            let monitor_clone = Arc::clone(&monitor);
+            let handle = thread::spawn(move || {
+                let metric = OperationMetrics {
+                    operation_name: format!("concurrent_op_{}", i),
+                    duration: Duration::from_millis(50),
+                    timestamp: Utc::now(),
+                    success: true,
+                    error_message: None,
+                };
+                monitor_clone.record_operation(&metric);
+            });
+            handles.push(handle);
+        }
+
+        // Wait for all threads to complete
+        for handle in handles {
+            handle.join().unwrap();
+        }
+
+        // Verify all operations were recorded
+        let all_stats = monitor.get_all_stats();
+        assert_eq!(all_stats.len(), 10);
+    }
+
+    #[test]
+    fn test_performance_stats_new() {
+        let stats = PerformanceStats::new("test_operation".to_string());
+        assert_eq!(stats.operation_name, "test_operation");
+        assert_eq!(stats.total_calls, 0);
+        assert_eq!(stats.successful_calls, 0);
+        assert_eq!(stats.failed_calls, 0);
+        assert_eq!(stats.average_execution_time_ms, 0.0);
+        assert_eq!(stats.min_execution_time_ms, f64::INFINITY);
+        assert_eq!(stats.max_execution_time_ms, 0.0);
+    }
+
+    #[test]
+    fn test_performance_stats_add_metric() {
+        let mut stats = PerformanceStats::new("test_operation".to_string());
+
+        let metric = OperationMetrics {
+            operation_name: "test_operation".to_string(),
+            duration: Duration::from_millis(100),
+            timestamp: Utc::now(),
+            success: true,
+            error_message: None,
+        };
+
+        stats.add_metric(metric);
+
+        assert_eq!(stats.total_calls, 1);
+        assert_eq!(stats.successful_calls, 1);
+        assert_eq!(stats.failed_calls, 0);
+        assert_eq!(stats.average_execution_time_ms, 100.0);
+        assert_eq!(stats.min_execution_time_ms, 100.0);
+        assert_eq!(stats.max_execution_time_ms, 100.0);
+    }
+
+    #[test]
+    fn test_performance_stats_multiple_metrics() {
+        let mut stats = PerformanceStats::new("test_operation".to_string());
+
+        let metrics = vec![
+            (Duration::from_millis(100), true),
+            (Duration::from_millis(200), true),
+            (Duration::from_millis(150), false),
+        ];
+
+        for (duration, success) in metrics {
+            let metric = OperationMetrics {
+                operation_name: "test_operation".to_string(),
+                duration,
+                timestamp: Utc::now(),
+                success,
+                error_message: if success {
+                    None
+                } else {
+                    Some("Test error".to_string())
+                },
+            };
+            stats.add_metric(metric);
+        }
+
+        assert_eq!(stats.total_calls, 3);
+        assert_eq!(stats.successful_calls, 2);
+        assert_eq!(stats.failed_calls, 1);
+        assert_eq!(stats.average_execution_time_ms, 150.0);
+        assert_eq!(stats.min_execution_time_ms, 100.0);
+        assert_eq!(stats.max_execution_time_ms, 200.0);
+    }
+
+    #[test]
+    fn test_operation_metrics_creation() {
+        let metric = OperationMetrics {
+            operation_name: "test_op".to_string(),
+            duration: Duration::from_millis(100),
+            timestamp: Utc::now(),
+            success: true,
+            error_message: None,
+        };
+
+        assert_eq!(metric.operation_name, "test_op");
+        assert_eq!(metric.duration, Duration::from_millis(100));
+        assert!(metric.success);
+        assert!(metric.error_message.is_none());
+    }
+
+    #[test]
+    fn test_operation_metrics_with_error() {
+        let metric = OperationMetrics {
+            operation_name: "test_op".to_string(),
+            duration: Duration::from_millis(100),
+            timestamp: Utc::now(),
+            success: false,
+            error_message: Some("Test error".to_string()),
+        };
+
+        assert_eq!(metric.operation_name, "test_op");
+        assert_eq!(metric.duration, Duration::from_millis(100));
+        assert!(!metric.success);
+        assert_eq!(metric.error_message, Some("Test error".to_string()));
+    }
+
+    #[test]
+    fn test_performance_summary_creation() {
+        let summary = PerformanceSummary {
+            total_operations: 10,
+            successful_operations: 8,
+            failed_operations: 2,
+            average_execution_time_ms: 150.0,
+            success_rate: 0.8,
+        };
+
+        assert_eq!(summary.total_operations, 10);
+        assert_eq!(summary.successful_operations, 8);
+        assert_eq!(summary.failed_operations, 2);
+        assert_eq!(summary.average_execution_time_ms, 150.0);
+        assert_eq!(summary.success_rate, 0.8);
+    }
+
+    #[test]
+    fn test_performance_summary_zero_operations() {
+        let summary = PerformanceSummary {
+            total_operations: 0,
+            successful_operations: 0,
+            failed_operations: 0,
+            average_execution_time_ms: 0.0,
+            success_rate: 0.0,
+        };
+
+        assert_eq!(summary.total_operations, 0);
+        assert_eq!(summary.successful_operations, 0);
+        assert_eq!(summary.failed_operations, 0);
+        assert_eq!(summary.average_execution_time_ms, 0.0);
+        assert_eq!(summary.success_rate, 0.0);
+    }
 }

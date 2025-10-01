@@ -672,4 +672,425 @@ mod tests {
         assert_eq!(recent_events.len(), 1);
         assert_eq!(recent_events[0].entity_type, "task");
     }
+
+    #[tokio::test]
+    async fn test_invalidation_middleware_creation() {
+        let middleware = CacheInvalidationMiddleware::new_default();
+        let stats = middleware.get_stats();
+
+        assert_eq!(stats.total_events, 0);
+        assert_eq!(stats.successful_invalidations, 0);
+        assert_eq!(stats.failed_invalidations, 0);
+        assert_eq!(stats.manual_invalidations, 0);
+    }
+
+    #[tokio::test]
+    async fn test_invalidation_middleware_with_config() {
+        let config = CacheInvalidationConfig {
+            enable_cascade_invalidation: true,
+            max_events_stored: 1000,
+            event_retention_duration: Duration::from_secs(3600),
+            batch_processing_size: 10,
+            processing_timeout: Duration::from_secs(30),
+        };
+
+        let middleware = CacheInvalidationMiddleware::new(config);
+        let stats = middleware.get_stats();
+
+        assert_eq!(stats.total_events, 0);
+    }
+
+    #[tokio::test]
+    async fn test_add_rule() {
+        let middleware = CacheInvalidationMiddleware::new_default();
+
+        let rule = InvalidationRule {
+            rule_id: Uuid::new_v4(),
+            entity_type: "task".to_string(),
+            operations: vec!["created".to_string(), "updated".to_string()],
+            affected_caches: vec!["task_cache".to_string()],
+            cascade_invalidation: true,
+            priority: 1,
+            enabled: true,
+            created_at: Utc::now(),
+        };
+
+        middleware.add_rule(rule);
+
+        // Rules are stored internally, we can't directly test them
+        // but we can test that the method doesn't panic
+    }
+
+    #[tokio::test]
+    async fn test_remove_rule() {
+        let middleware = CacheInvalidationMiddleware::new_default();
+        let rule_id = Uuid::new_v4();
+
+        // Remove non-existent rule should not panic
+        middleware.remove_rule(&rule_id);
+    }
+
+    #[tokio::test]
+    async fn test_register_handler() {
+        let middleware = CacheInvalidationMiddleware::new_default();
+        let handler = Arc::new(MockCacheHandler::new("test_cache"));
+
+        middleware.register_handler("test_cache", handler);
+
+        // Handler is stored internally, we can't directly test it
+        // but we can test that the method doesn't panic
+    }
+
+    #[tokio::test]
+    async fn test_unregister_handler() {
+        let middleware = CacheInvalidationMiddleware::new_default();
+
+        // Unregister non-existent handler should not panic
+        middleware.unregister_handler("non_existent_cache");
+    }
+
+    #[tokio::test]
+    async fn test_process_event_with_handler() {
+        let middleware = CacheInvalidationMiddleware::new_default();
+        let handler = Arc::new(MockCacheHandler::new("test_cache"));
+
+        middleware.register_handler("test_cache", handler);
+
+        let rule = InvalidationRule {
+            rule_id: Uuid::new_v4(),
+            entity_type: "task".to_string(),
+            operations: vec!["created".to_string()],
+            affected_caches: vec!["test_cache".to_string()],
+            cascade_invalidation: false,
+            priority: 1,
+            enabled: true,
+            created_at: Utc::now(),
+        };
+        middleware.add_rule(rule);
+
+        let event = InvalidationEvent {
+            event_id: Uuid::new_v4(),
+            event_type: InvalidationEventType::Created,
+            entity_type: "task".to_string(),
+            entity_id: Some(Uuid::new_v4()),
+            operation: "created".to_string(),
+            timestamp: Utc::now(),
+            affected_caches: vec!["test_cache".to_string()],
+            metadata: HashMap::new(),
+        };
+
+        middleware.process_event(&event).await;
+
+        let stats = middleware.get_stats();
+        assert_eq!(stats.total_events, 1);
+        assert_eq!(stats.successful_invalidations, 1);
+    }
+
+    #[tokio::test]
+    async fn test_process_event_without_handler() {
+        let middleware = CacheInvalidationMiddleware::new_default();
+
+        let event = InvalidationEvent {
+            event_id: Uuid::new_v4(),
+            event_type: InvalidationEventType::Created,
+            entity_type: "task".to_string(),
+            entity_id: Some(Uuid::new_v4()),
+            operation: "created".to_string(),
+            timestamp: Utc::now(),
+            affected_caches: vec!["non_existent_cache".to_string()],
+            metadata: HashMap::new(),
+        };
+
+        middleware.process_event(&event).await;
+
+        let stats = middleware.get_stats();
+        assert_eq!(stats.total_events, 1);
+        assert_eq!(stats.failed_invalidations, 1);
+    }
+
+    #[tokio::test]
+    async fn test_cascade_invalidation() {
+        let middleware = CacheInvalidationMiddleware::new_default();
+
+        // Add rules for cascade invalidation
+        let task_rule = InvalidationRule {
+            rule_id: Uuid::new_v4(),
+            entity_type: "task".to_string(),
+            operations: vec!["updated".to_string()],
+            affected_caches: vec!["task_cache".to_string()],
+            cascade_invalidation: true,
+            priority: 1,
+            enabled: true,
+            created_at: Utc::now(),
+        };
+        middleware.add_rule(task_rule);
+
+        let project_rule = InvalidationRule {
+            rule_id: Uuid::new_v4(),
+            entity_type: "project".to_string(),
+            operations: vec!["cascade_invalidation".to_string()],
+            affected_caches: vec!["project_cache".to_string()],
+            cascade_invalidation: false,
+            priority: 2,
+            enabled: true,
+            created_at: Utc::now(),
+        };
+        middleware.add_rule(project_rule);
+
+        let area_rule = InvalidationRule {
+            rule_id: Uuid::new_v4(),
+            entity_type: "area".to_string(),
+            operations: vec!["cascade_invalidation".to_string()],
+            affected_caches: vec!["area_cache".to_string()],
+            cascade_invalidation: false,
+            priority: 3,
+            enabled: true,
+            created_at: Utc::now(),
+        };
+        middleware.add_rule(area_rule);
+
+        let event = InvalidationEvent {
+            event_id: Uuid::new_v4(),
+            event_type: InvalidationEventType::Updated,
+            entity_type: "task".to_string(),
+            entity_id: Some(Uuid::new_v4()),
+            operation: "updated".to_string(),
+            timestamp: Utc::now(),
+            affected_caches: vec!["task_cache".to_string()],
+            metadata: HashMap::new(),
+        };
+
+        middleware.process_event(&event).await;
+
+        let stats = middleware.get_stats();
+        assert_eq!(stats.total_events, 3); // Original + 2 cascade events
+        assert_eq!(stats.successful_invalidations, 3);
+    }
+
+    #[tokio::test]
+    async fn test_get_recent_events() {
+        let middleware = CacheInvalidationMiddleware::new_default();
+
+        // Add multiple events
+        for i in 0..5 {
+            let event = InvalidationEvent {
+                event_id: Uuid::new_v4(),
+                event_type: InvalidationEventType::Created,
+                entity_type: format!("task_{}", i),
+                entity_id: Some(Uuid::new_v4()),
+                operation: "created".to_string(),
+                timestamp: Utc::now(),
+                affected_caches: vec![],
+                metadata: HashMap::new(),
+            };
+            middleware.store_event(&event);
+        }
+
+        // Get recent events
+        let recent_events = middleware.get_recent_events(3);
+        assert_eq!(recent_events.len(), 3);
+
+        // Get all events
+        let all_events = middleware.get_recent_events(10);
+        assert_eq!(all_events.len(), 5);
+    }
+
+    #[tokio::test]
+    async fn test_get_stats() {
+        let middleware = CacheInvalidationMiddleware::new_default();
+
+        let initial_stats = middleware.get_stats();
+        assert_eq!(initial_stats.total_events, 0);
+        assert_eq!(initial_stats.successful_invalidations, 0);
+        assert_eq!(initial_stats.failed_invalidations, 0);
+        assert_eq!(initial_stats.manual_invalidations, 0);
+        assert_eq!(initial_stats.average_processing_time_ms, 0.0);
+        assert_eq!(initial_stats.success_rate, 0.0);
+    }
+
+    #[tokio::test]
+    async fn test_invalidate_all() {
+        let middleware = CacheInvalidationMiddleware::new_default();
+        let handler = Arc::new(MockCacheHandler::new("test_cache"));
+
+        middleware.register_handler("test_cache", handler);
+
+        middleware.invalidate_all().await;
+
+        let stats = middleware.get_stats();
+        assert_eq!(stats.manual_invalidations, 1);
+    }
+
+    #[tokio::test]
+    async fn test_invalidate_by_entity_type() {
+        let middleware = CacheInvalidationMiddleware::new_default();
+        let handler = Arc::new(MockCacheHandler::new("test_cache"));
+
+        middleware.register_handler("test_cache", handler);
+
+        middleware.invalidate_by_entity_type("task").await;
+
+        let stats = middleware.get_stats();
+        assert_eq!(stats.manual_invalidations, 1);
+    }
+
+    #[tokio::test]
+    async fn test_invalidate_by_entity_id() {
+        let middleware = CacheInvalidationMiddleware::new_default();
+        let handler = Arc::new(MockCacheHandler::new("test_cache"));
+
+        middleware.register_handler("test_cache", handler);
+
+        let entity_id = Uuid::new_v4();
+        middleware.invalidate_by_entity_id("task", &entity_id).await;
+
+        let stats = middleware.get_stats();
+        assert_eq!(stats.manual_invalidations, 1);
+    }
+
+    #[tokio::test]
+    async fn test_find_dependent_entities() {
+        let event = InvalidationEvent {
+            event_id: Uuid::new_v4(),
+            event_type: InvalidationEventType::Updated,
+            entity_type: "task".to_string(),
+            entity_id: Some(Uuid::new_v4()),
+            operation: "updated".to_string(),
+            timestamp: Utc::now(),
+            affected_caches: vec![],
+            metadata: HashMap::new(),
+        };
+
+        let dependent_entities = CacheInvalidationMiddleware::find_dependent_entities(&event);
+
+        assert_eq!(dependent_entities.len(), 2); // project and area
+        assert!(dependent_entities
+            .iter()
+            .any(|dep| dep.entity_type == "project"));
+        assert!(dependent_entities
+            .iter()
+            .any(|dep| dep.entity_type == "area"));
+    }
+
+    #[tokio::test]
+    async fn test_find_dependent_entities_project() {
+        let event = InvalidationEvent {
+            event_id: Uuid::new_v4(),
+            event_type: InvalidationEventType::Updated,
+            entity_type: "project".to_string(),
+            entity_id: Some(Uuid::new_v4()),
+            operation: "updated".to_string(),
+            timestamp: Utc::now(),
+            affected_caches: vec![],
+            metadata: HashMap::new(),
+        };
+
+        let dependent_entities = CacheInvalidationMiddleware::find_dependent_entities(&event);
+
+        assert_eq!(dependent_entities.len(), 1); // area only
+        assert!(dependent_entities
+            .iter()
+            .any(|dep| dep.entity_type == "area"));
+    }
+
+    #[tokio::test]
+    async fn test_find_dependent_entities_area() {
+        let event = InvalidationEvent {
+            event_id: Uuid::new_v4(),
+            event_type: InvalidationEventType::Updated,
+            entity_type: "area".to_string(),
+            entity_id: Some(Uuid::new_v4()),
+            operation: "updated".to_string(),
+            timestamp: Utc::now(),
+            affected_caches: vec![],
+            metadata: HashMap::new(),
+        };
+
+        let dependent_entities = CacheInvalidationMiddleware::find_dependent_entities(&event);
+
+        assert_eq!(dependent_entities.len(), 0); // no dependencies
+    }
+
+    #[tokio::test]
+    async fn test_find_dependent_entities_unknown() {
+        let event = InvalidationEvent {
+            event_id: Uuid::new_v4(),
+            event_type: InvalidationEventType::Updated,
+            entity_type: "unknown".to_string(),
+            entity_id: Some(Uuid::new_v4()),
+            operation: "updated".to_string(),
+            timestamp: Utc::now(),
+            affected_caches: vec![],
+            metadata: HashMap::new(),
+        };
+
+        let dependent_entities = CacheInvalidationMiddleware::find_dependent_entities(&event);
+
+        assert_eq!(dependent_entities.len(), 0); // no dependencies for unknown entity
+    }
+
+    #[tokio::test]
+    async fn test_concurrent_event_processing() {
+        let middleware = Arc::new(CacheInvalidationMiddleware::new_default());
+        let mut handles = vec![];
+
+        // Spawn multiple tasks to process events concurrently
+        for i in 0..10 {
+            let middleware_clone = Arc::clone(&middleware);
+            let handle = tokio::spawn(async move {
+                let event = InvalidationEvent {
+                    event_id: Uuid::new_v4(),
+                    event_type: InvalidationEventType::Created,
+                    entity_type: format!("task_{}", i),
+                    entity_id: Some(Uuid::new_v4()),
+                    operation: "created".to_string(),
+                    timestamp: Utc::now(),
+                    affected_caches: vec![],
+                    metadata: HashMap::new(),
+                };
+                middleware_clone.process_event(&event).await;
+            });
+            handles.push(handle);
+        }
+
+        // Wait for all tasks to complete
+        for handle in handles {
+            handle.await.unwrap();
+        }
+
+        let stats = middleware.get_stats();
+        assert_eq!(stats.total_events, 10);
+    }
+
+    #[tokio::test]
+    async fn test_event_retention() {
+        let config = CacheInvalidationConfig {
+            enable_cascade_invalidation: false,
+            max_events_stored: 3, // Very small limit
+            event_retention_duration: Duration::from_secs(1),
+            batch_processing_size: 10,
+            processing_timeout: Duration::from_secs(30),
+        };
+
+        let middleware = CacheInvalidationMiddleware::new(config);
+
+        // Add more events than the limit
+        for i in 0..5 {
+            let event = InvalidationEvent {
+                event_id: Uuid::new_v4(),
+                event_type: InvalidationEventType::Created,
+                entity_type: format!("task_{}", i),
+                entity_id: Some(Uuid::new_v4()),
+                operation: "created".to_string(),
+                timestamp: Utc::now(),
+                affected_caches: vec![],
+                metadata: HashMap::new(),
+            };
+            middleware.store_event(&event);
+        }
+
+        // Should only store the most recent events
+        let recent_events = middleware.get_recent_events(10);
+        assert!(recent_events.len() <= 3);
+    }
 }
