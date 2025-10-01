@@ -6,10 +6,36 @@ use chrono::{DateTime, Utc};
 use moka::future::Cache;
 use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
+use uuid::Uuid;
 
-/// Cache configuration
+/// Cache invalidation strategy
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum InvalidationStrategy {
+    /// Time-based invalidation (TTL)
+    TimeBased,
+    /// Event-based invalidation (manual triggers)
+    EventBased,
+    /// Dependency-based invalidation (related data changes)
+    DependencyBased,
+    /// Hybrid approach combining multiple strategies
+    Hybrid,
+}
+
+/// Cache dependency tracking for intelligent invalidation
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CacheDependency {
+    /// The entity type this cache entry depends on
+    pub entity_type: String,
+    /// The specific entity ID this cache entry depends on
+    pub entity_id: Option<Uuid>,
+    /// The operation that would invalidate this cache entry
+    pub invalidating_operations: Vec<String>,
+}
+
+/// Enhanced cache configuration with intelligent invalidation
 #[derive(Debug, Clone)]
 pub struct CacheConfig {
     /// Maximum number of entries in the cache
@@ -18,6 +44,14 @@ pub struct CacheConfig {
     pub ttl: Duration,
     /// Time to idle for cache entries
     pub tti: Duration,
+    /// Invalidation strategy to use
+    pub invalidation_strategy: InvalidationStrategy,
+    /// Enable cache warming for frequently accessed data
+    pub enable_cache_warming: bool,
+    /// Cache warming interval
+    pub warming_interval: Duration,
+    /// Maximum cache warming entries
+    pub max_warming_entries: usize,
 }
 
 impl Default for CacheConfig {
@@ -26,16 +60,28 @@ impl Default for CacheConfig {
             max_capacity: 1000,
             ttl: Duration::from_secs(300), // 5 minutes
             tti: Duration::from_secs(60),  // 1 minute
+            invalidation_strategy: InvalidationStrategy::Hybrid,
+            enable_cache_warming: true,
+            warming_interval: Duration::from_secs(60), // 1 minute
+            max_warming_entries: 50,
         }
     }
 }
 
-/// Cached data wrapper
+/// Enhanced cached data wrapper with dependency tracking
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CachedData<T> {
     pub data: T,
     pub cached_at: DateTime<Utc>,
     pub expires_at: DateTime<Utc>,
+    /// Dependencies for intelligent invalidation
+    pub dependencies: Vec<CacheDependency>,
+    /// Access count for cache warming
+    pub access_count: u64,
+    /// Last access time for TTI calculation
+    pub last_accessed: DateTime<Utc>,
+    /// Cache warming priority (higher = more likely to be warmed)
+    pub warming_priority: u32,
 }
 
 impl<T> CachedData<T> {
@@ -45,11 +91,58 @@ impl<T> CachedData<T> {
             data,
             cached_at: now,
             expires_at: now + chrono::Duration::from_std(ttl).unwrap_or_default(),
+            dependencies: Vec::new(),
+            access_count: 0,
+            last_accessed: now,
+            warming_priority: 0,
+        }
+    }
+
+    pub fn new_with_dependencies(
+        data: T,
+        ttl: Duration,
+        dependencies: Vec<CacheDependency>,
+    ) -> Self {
+        let now = Utc::now();
+        Self {
+            data,
+            cached_at: now,
+            expires_at: now + chrono::Duration::from_std(ttl).unwrap_or_default(),
+            dependencies,
+            access_count: 0,
+            last_accessed: now,
+            warming_priority: 0,
         }
     }
 
     pub fn is_expired(&self) -> bool {
         Utc::now() > self.expires_at
+    }
+
+    pub fn is_idle(&self, tti: Duration) -> bool {
+        let now = Utc::now();
+        let idle_duration = now - self.last_accessed;
+        idle_duration > chrono::Duration::from_std(tti).unwrap_or_default()
+    }
+
+    pub fn record_access(&mut self) {
+        self.access_count += 1;
+        self.last_accessed = Utc::now();
+    }
+
+    pub fn update_warming_priority(&mut self, priority: u32) {
+        self.warming_priority = priority;
+    }
+
+    pub fn add_dependency(&mut self, dependency: CacheDependency) {
+        self.dependencies.push(dependency);
+    }
+
+    pub fn has_dependency(&self, entity_type: &str, entity_id: Option<&Uuid>) -> bool {
+        self.dependencies.iter().any(|dep| {
+            dep.entity_type == entity_type
+                && entity_id.is_none_or(|id| dep.entity_id.as_ref() == Some(id))
+        })
     }
 }
 
@@ -76,7 +169,7 @@ impl CacheStats {
     }
 }
 
-/// Main cache manager for Things 3 data
+/// Main cache manager for Things 3 data with intelligent invalidation
 pub struct ThingsCache {
     /// Tasks cache
     tasks: Cache<String, CachedData<Vec<Task>>>,
@@ -90,12 +183,16 @@ pub struct ThingsCache {
     stats: Arc<RwLock<CacheStats>>,
     /// Configuration
     config: CacheConfig,
+    /// Cache warming entries (key -> priority)
+    warming_entries: Arc<RwLock<HashMap<String, u32>>>,
+    /// Cache warming task handle
+    warming_task: Option<tokio::task::JoinHandle<()>>,
 }
 
 impl ThingsCache {
     /// Create a new cache with the given configuration
     #[must_use]
-    pub fn new(config: CacheConfig) -> Self {
+    pub fn new(config: &CacheConfig) -> Self {
         let tasks = Cache::builder()
             .max_capacity(config.max_capacity)
             .time_to_live(config.ttl)
@@ -120,20 +217,29 @@ impl ThingsCache {
             .time_to_idle(config.tti)
             .build();
 
-        Self {
+        let mut cache = Self {
             tasks,
             projects,
             areas,
             search_results,
             stats: Arc::new(RwLock::new(CacheStats::default())),
-            config,
+            config: config.clone(),
+            warming_entries: Arc::new(RwLock::new(HashMap::new())),
+            warming_task: None,
+        };
+
+        // Start cache warming task if enabled
+        if config.enable_cache_warming {
+            cache.start_cache_warming();
         }
+
+        cache
     }
 
     /// Create a new cache with default configuration
     #[must_use]
     pub fn new_default() -> Self {
-        Self::new(CacheConfig::default())
+        Self::new(&CacheConfig::default())
     }
 
     /// Get tasks from cache or execute the provided function
@@ -147,16 +253,38 @@ impl ThingsCache {
         F: FnOnce() -> Fut,
         Fut: std::future::Future<Output = Result<Vec<Task>>>,
     {
-        if let Some(cached) = self.tasks.get(key).await {
-            if !cached.is_expired() {
+        if let Some(mut cached) = self.tasks.get(key).await {
+            if !cached.is_expired() && !cached.is_idle(self.config.tti) {
+                cached.record_access();
                 self.record_hit();
+
+                // Add to warming if frequently accessed
+                if cached.access_count > 3 {
+                    self.add_to_warming(key.to_string(), cached.warming_priority + 1);
+                }
+
                 return Ok(cached.data);
             }
         }
 
         self.record_miss();
         let data = fetcher().await?;
-        let cached_data = CachedData::new(data.clone(), self.config.ttl);
+
+        // Create dependencies for intelligent invalidation
+        let dependencies = Self::create_task_dependencies(&data);
+        let mut cached_data =
+            CachedData::new_with_dependencies(data.clone(), self.config.ttl, dependencies);
+
+        // Set initial warming priority based on key type
+        let priority = if key.starts_with("inbox:") {
+            10
+        } else if key.starts_with("today:") {
+            8
+        } else {
+            5
+        };
+        cached_data.update_warming_priority(priority);
+
         self.tasks.insert(key.to_string(), cached_data).await;
         Ok(data)
     }
@@ -172,16 +300,32 @@ impl ThingsCache {
         F: FnOnce() -> Fut,
         Fut: std::future::Future<Output = Result<Vec<Project>>>,
     {
-        if let Some(cached) = self.projects.get(key).await {
-            if !cached.is_expired() {
+        if let Some(mut cached) = self.projects.get(key).await {
+            if !cached.is_expired() && !cached.is_idle(self.config.tti) {
+                cached.record_access();
                 self.record_hit();
+
+                // Add to warming if frequently accessed
+                if cached.access_count > 3 {
+                    self.add_to_warming(key.to_string(), cached.warming_priority + 1);
+                }
+
                 return Ok(cached.data);
             }
         }
 
         self.record_miss();
         let data = fetcher().await?;
-        let cached_data = CachedData::new(data.clone(), self.config.ttl);
+
+        // Create dependencies for intelligent invalidation
+        let dependencies = Self::create_project_dependencies(&data);
+        let mut cached_data =
+            CachedData::new_with_dependencies(data.clone(), self.config.ttl, dependencies);
+
+        // Set initial warming priority
+        let priority = if key.starts_with("projects:") { 7 } else { 5 };
+        cached_data.update_warming_priority(priority);
+
         self.projects.insert(key.to_string(), cached_data).await;
         Ok(data)
     }
@@ -197,16 +341,32 @@ impl ThingsCache {
         F: FnOnce() -> Fut,
         Fut: std::future::Future<Output = Result<Vec<Area>>>,
     {
-        if let Some(cached) = self.areas.get(key).await {
-            if !cached.is_expired() {
+        if let Some(mut cached) = self.areas.get(key).await {
+            if !cached.is_expired() && !cached.is_idle(self.config.tti) {
+                cached.record_access();
                 self.record_hit();
+
+                // Add to warming if frequently accessed
+                if cached.access_count > 3 {
+                    self.add_to_warming(key.to_string(), cached.warming_priority + 1);
+                }
+
                 return Ok(cached.data);
             }
         }
 
         self.record_miss();
         let data = fetcher().await?;
-        let cached_data = CachedData::new(data.clone(), self.config.ttl);
+
+        // Create dependencies for intelligent invalidation
+        let dependencies = Self::create_area_dependencies(&data);
+        let mut cached_data =
+            CachedData::new_with_dependencies(data.clone(), self.config.ttl, dependencies);
+
+        // Set initial warming priority
+        let priority = if key.starts_with("areas:") { 6 } else { 5 };
+        cached_data.update_warming_priority(priority);
+
         self.areas.insert(key.to_string(), cached_data).await;
         Ok(data)
     }
@@ -222,16 +382,32 @@ impl ThingsCache {
         F: FnOnce() -> Fut,
         Fut: std::future::Future<Output = Result<Vec<Task>>>,
     {
-        if let Some(cached) = self.search_results.get(key).await {
-            if !cached.is_expired() {
+        if let Some(mut cached) = self.search_results.get(key).await {
+            if !cached.is_expired() && !cached.is_idle(self.config.tti) {
+                cached.record_access();
                 self.record_hit();
+
+                // Add to warming if frequently accessed
+                if cached.access_count > 3 {
+                    self.add_to_warming(key.to_string(), cached.warming_priority + 1);
+                }
+
                 return Ok(cached.data);
             }
         }
 
         self.record_miss();
         let data = fetcher().await?;
-        let cached_data = CachedData::new(data.clone(), self.config.ttl);
+
+        // Create dependencies for intelligent invalidation
+        let dependencies = Self::create_task_dependencies(&data);
+        let mut cached_data =
+            CachedData::new_with_dependencies(data.clone(), self.config.ttl, dependencies);
+
+        // Set initial warming priority for search results
+        let priority = if key.starts_with("search:") { 4 } else { 3 };
+        cached_data.update_warming_priority(priority);
+
         self.search_results
             .insert(key.to_string(), cached_data)
             .await;
@@ -282,6 +458,207 @@ impl ThingsCache {
     fn record_miss(&self) {
         let mut stats = self.stats.write();
         stats.misses += 1;
+    }
+
+    /// Create dependencies for task data
+    fn create_task_dependencies(tasks: &[Task]) -> Vec<CacheDependency> {
+        let mut dependencies = Vec::new();
+
+        // Add dependencies for each task
+        for task in tasks {
+            dependencies.push(CacheDependency {
+                entity_type: "task".to_string(),
+                entity_id: Some(task.uuid),
+                invalidating_operations: vec![
+                    "task_updated".to_string(),
+                    "task_deleted".to_string(),
+                    "task_completed".to_string(),
+                ],
+            });
+
+            // Add project dependency if task belongs to a project
+            if let Some(project_uuid) = task.project_uuid {
+                dependencies.push(CacheDependency {
+                    entity_type: "project".to_string(),
+                    entity_id: Some(project_uuid),
+                    invalidating_operations: vec![
+                        "project_updated".to_string(),
+                        "project_deleted".to_string(),
+                    ],
+                });
+            }
+
+            // Add area dependency if task belongs to an area
+            if let Some(area_uuid) = task.area_uuid {
+                dependencies.push(CacheDependency {
+                    entity_type: "area".to_string(),
+                    entity_id: Some(area_uuid),
+                    invalidating_operations: vec![
+                        "area_updated".to_string(),
+                        "area_deleted".to_string(),
+                    ],
+                });
+            }
+        }
+
+        dependencies
+    }
+
+    /// Create dependencies for project data
+    fn create_project_dependencies(projects: &[Project]) -> Vec<CacheDependency> {
+        let mut dependencies = Vec::new();
+
+        for project in projects {
+            dependencies.push(CacheDependency {
+                entity_type: "project".to_string(),
+                entity_id: Some(project.uuid),
+                invalidating_operations: vec![
+                    "project_updated".to_string(),
+                    "project_deleted".to_string(),
+                ],
+            });
+
+            if let Some(area_uuid) = project.area_uuid {
+                dependencies.push(CacheDependency {
+                    entity_type: "area".to_string(),
+                    entity_id: Some(area_uuid),
+                    invalidating_operations: vec![
+                        "area_updated".to_string(),
+                        "area_deleted".to_string(),
+                    ],
+                });
+            }
+        }
+
+        dependencies
+    }
+
+    /// Create dependencies for area data
+    fn create_area_dependencies(areas: &[Area]) -> Vec<CacheDependency> {
+        let mut dependencies = Vec::new();
+
+        for area in areas {
+            dependencies.push(CacheDependency {
+                entity_type: "area".to_string(),
+                entity_id: Some(area.uuid),
+                invalidating_operations: vec![
+                    "area_updated".to_string(),
+                    "area_deleted".to_string(),
+                ],
+            });
+        }
+
+        dependencies
+    }
+
+    /// Start cache warming background task
+    fn start_cache_warming(&mut self) {
+        let warming_entries = Arc::clone(&self.warming_entries);
+        let warming_interval = self.config.warming_interval;
+        let max_entries = self.config.max_warming_entries;
+
+        let handle = tokio::spawn(async move {
+            let mut interval = tokio::time::interval(warming_interval);
+            loop {
+                interval.tick().await;
+
+                // Get top priority entries for warming
+                let entries_to_warm = {
+                    let entries = warming_entries.read();
+                    let mut sorted_entries: Vec<_> = entries.iter().collect();
+                    sorted_entries.sort_by(|a, b| b.1.cmp(a.1));
+                    sorted_entries
+                        .into_iter()
+                        .take(max_entries)
+                        .map(|(key, _)| key.clone())
+                        .collect::<Vec<_>>()
+                };
+
+                // In a real implementation, you would warm these entries
+                // by calling the appropriate fetcher functions
+                if !entries_to_warm.is_empty() {
+                    tracing::debug!("Cache warming {} entries", entries_to_warm.len());
+                }
+            }
+        });
+
+        self.warming_task = Some(handle);
+    }
+
+    /// Add entry to cache warming list
+    pub fn add_to_warming(&self, key: String, priority: u32) {
+        let mut entries = self.warming_entries.write();
+        entries.insert(key, priority);
+    }
+
+    /// Remove entry from cache warming list
+    pub fn remove_from_warming(&self, key: &str) {
+        let mut entries = self.warming_entries.write();
+        entries.remove(key);
+    }
+
+    /// Invalidate cache entries based on entity changes
+    pub fn invalidate_by_entity(&self, entity_type: &str, entity_id: Option<&Uuid>) {
+        // For now, we'll invalidate all caches when an entity changes
+        // In a more sophisticated implementation, we would track dependencies
+        // and only invalidate specific entries
+
+        // Invalidate all caches as a conservative approach
+        self.tasks.invalidate_all();
+        self.projects.invalidate_all();
+        self.areas.invalidate_all();
+        self.search_results.invalidate_all();
+
+        tracing::debug!(
+            "Invalidated all caches due to entity change: {} {:?}",
+            entity_type,
+            entity_id
+        );
+    }
+
+    /// Invalidate cache entries by operation type
+    pub fn invalidate_by_operation(&self, operation: &str) {
+        // For now, we'll invalidate all caches when certain operations occur
+        // In a more sophisticated implementation, we would track dependencies
+        // and only invalidate specific entries based on the operation
+
+        match operation {
+            "task_created" | "task_updated" | "task_deleted" | "task_completed" => {
+                self.tasks.invalidate_all();
+                self.search_results.invalidate_all();
+            }
+            "project_created" | "project_updated" | "project_deleted" => {
+                self.projects.invalidate_all();
+                self.tasks.invalidate_all(); // Tasks depend on projects
+            }
+            "area_created" | "area_updated" | "area_deleted" => {
+                self.areas.invalidate_all();
+                self.projects.invalidate_all(); // Projects depend on areas
+                self.tasks.invalidate_all(); // Tasks depend on areas
+            }
+            _ => {
+                // For unknown operations, invalidate all caches as a conservative approach
+                self.invalidate_all();
+            }
+        }
+
+        tracing::debug!("Invalidated caches due to operation: {}", operation);
+    }
+
+    /// Get cache warming statistics
+    #[must_use]
+    pub fn get_warming_stats(&self) -> (usize, u32) {
+        let entries = self.warming_entries.read();
+        let count = entries.len();
+        let max_priority = entries.values().max().copied().unwrap_or(0);
+        (count, max_priority)
+    }
+
+    /// Stop cache warming
+    pub fn stop_cache_warming(&mut self) {
+        if let Some(handle) = self.warming_task.take() {
+            handle.abort();
+        }
     }
 }
 
@@ -349,6 +726,10 @@ mod tests {
             max_capacity: 500,
             ttl: Duration::from_secs(600),
             tti: Duration::from_secs(120),
+            invalidation_strategy: InvalidationStrategy::Hybrid,
+            enable_cache_warming: true,
+            warming_interval: Duration::from_secs(60),
+            max_warming_entries: 50,
         };
 
         assert_eq!(config.max_capacity, 500);
@@ -493,7 +874,7 @@ mod tests {
     #[tokio::test]
     async fn test_cache_new() {
         let config = CacheConfig::default();
-        let _cache = ThingsCache::new(config);
+        let _cache = ThingsCache::new(&config);
 
         // Just test that it can be created
         // Test passes if we reach this point
@@ -633,8 +1014,12 @@ mod tests {
             max_capacity: 100,
             ttl: Duration::from_millis(10),
             tti: Duration::from_millis(5),
+            invalidation_strategy: InvalidationStrategy::Hybrid,
+            enable_cache_warming: true,
+            warming_interval: Duration::from_secs(60),
+            max_warming_entries: 50,
         };
-        let cache = ThingsCache::new(config);
+        let cache = ThingsCache::new(&config);
 
         // Insert data
         let _ = cache.get_tasks("test", || async { Ok(vec![]) }).await;

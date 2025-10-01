@@ -21,6 +21,7 @@ anyhow.workspace = true
 
 # Database
 sqlx = { version = "0.8", features = ["runtime-tokio-rustls", "sqlite", "chrono", "uuid", "json"], default-features = false }
+rusqlite = { version = "0.31", features = ["bundled"] }
 
 # Async
 tokio.workspace = true
@@ -30,6 +31,7 @@ moka.workspace = true
 dashmap.workspace = true
 parking_lot.workspace = true
 once_cell.workspace = true
+zstd = "0.13"
 
 # Export formats
 csv.workspace = true

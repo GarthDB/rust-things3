@@ -94,12 +94,61 @@ pub struct SystemMetrics {
     pub total_memory_mb: f64,
 }
 
+/// Cache-specific performance metrics
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CacheMetrics {
+    pub cache_type: String, // "l1", "l2", "l3", "query"
+    pub hits: u64,
+    pub misses: u64,
+    pub hit_rate: f64,
+    pub total_entries: u64,
+    pub memory_usage_bytes: u64,
+    pub evictions: u64,
+    pub insertions: u64,
+    pub invalidations: u64,
+    pub warming_entries: u64,
+    pub average_access_time_ms: f64,
+    pub last_accessed: Option<DateTime<Utc>>,
+}
+
+/// Database query performance metrics
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct QueryMetrics {
+    pub query_type: String, // "tasks", "projects", "areas", "search"
+    pub total_queries: u64,
+    pub cached_queries: u64,
+    pub database_queries: u64,
+    pub cache_hit_rate: f64,
+    pub average_query_time_ms: f64,
+    pub average_cache_time_ms: f64,
+    pub average_database_time_ms: f64,
+    pub slowest_query_ms: u64,
+    pub fastest_query_ms: u64,
+    pub query_size_bytes: u64,
+    pub compression_ratio: f64,
+}
+
+/// Comprehensive performance summary including all metrics
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ComprehensivePerformanceSummary {
+    pub timestamp: DateTime<Utc>,
+    pub operation_stats: HashMap<String, PerformanceStats>,
+    pub system_metrics: SystemMetrics,
+    pub cache_metrics: HashMap<String, CacheMetrics>,
+    pub query_metrics: HashMap<String, QueryMetrics>,
+    pub overall_health_score: f64,
+}
+
 /// Performance monitor for tracking operations and system metrics
 pub struct PerformanceMonitor {
     /// Individual operation metrics
     metrics: Arc<RwLock<Vec<OperationMetrics>>>,
     /// Aggregated statistics by operation name
     stats: Arc<RwLock<HashMap<String, PerformanceStats>>>,
+    /// Cache-specific metrics by cache type
+    cache_metrics: Arc<RwLock<HashMap<String, CacheMetrics>>>,
+    /// Query performance metrics by query type
+    query_metrics: Arc<RwLock<HashMap<String, QueryMetrics>>>,
     /// System information
     system: Arc<RwLock<System>>,
     /// Maximum number of metrics to keep in memory
@@ -113,6 +162,8 @@ impl PerformanceMonitor {
         Self {
             metrics: Arc::new(RwLock::new(Vec::new())),
             stats: Arc::new(RwLock::new(HashMap::new())),
+            cache_metrics: Arc::new(RwLock::new(HashMap::new())),
+            query_metrics: Arc::new(RwLock::new(HashMap::new())),
             system: Arc::new(RwLock::new(System::new_all())),
             max_metrics,
         }
@@ -245,6 +296,146 @@ impl PerformanceMonitor {
             operation_count: stats.len(),
         }
     }
+
+    /// Record cache metrics
+    pub fn record_cache_metrics(&self, cache_type: &str, metrics: CacheMetrics) {
+        let mut cache_metrics = self.cache_metrics.write();
+        cache_metrics.insert(cache_type.to_string(), metrics);
+    }
+
+    /// Get cache metrics for a specific cache type
+    #[must_use]
+    pub fn get_cache_metrics(&self, cache_type: &str) -> Option<CacheMetrics> {
+        let cache_metrics = self.cache_metrics.read();
+        cache_metrics.get(cache_type).cloned()
+    }
+
+    /// Get all cache metrics
+    #[must_use]
+    pub fn get_all_cache_metrics(&self) -> HashMap<String, CacheMetrics> {
+        let cache_metrics = self.cache_metrics.read();
+        cache_metrics.clone()
+    }
+
+    /// Record query metrics
+    pub fn record_query_metrics(&self, query_type: &str, metrics: QueryMetrics) {
+        let mut query_metrics = self.query_metrics.write();
+        query_metrics.insert(query_type.to_string(), metrics);
+    }
+
+    /// Get query metrics for a specific query type
+    #[must_use]
+    pub fn get_query_metrics(&self, query_type: &str) -> Option<QueryMetrics> {
+        let query_metrics = self.query_metrics.read();
+        query_metrics.get(query_type).cloned()
+    }
+
+    /// Get all query metrics
+    #[must_use]
+    pub fn get_all_query_metrics(&self) -> HashMap<String, QueryMetrics> {
+        let query_metrics = self.query_metrics.read();
+        query_metrics.clone()
+    }
+
+    /// Get comprehensive performance summary including cache and query metrics
+    #[must_use]
+    pub fn get_comprehensive_summary(&self) -> ComprehensivePerformanceSummary {
+        let operation_stats = self.get_all_stats();
+        let system_metrics = self.get_system_metrics().unwrap_or_else(|_| SystemMetrics {
+            timestamp: Utc::now(),
+            memory_usage_mb: 0.0,
+            cpu_usage_percent: 0.0,
+            available_memory_mb: 0.0,
+            total_memory_mb: 0.0,
+        });
+        let cache_metrics = self.get_all_cache_metrics();
+        let query_metrics = self.get_all_query_metrics();
+
+        // Calculate overall health score including cache performance
+        let health_score = Self::calculate_comprehensive_health_score(
+            &operation_stats,
+            &cache_metrics,
+            &query_metrics,
+        );
+
+        ComprehensivePerformanceSummary {
+            timestamp: Utc::now(),
+            operation_stats,
+            system_metrics,
+            cache_metrics,
+            query_metrics,
+            overall_health_score: health_score,
+        }
+    }
+
+    /// Calculate comprehensive health score including cache and query performance
+    fn calculate_comprehensive_health_score(
+        operation_stats: &HashMap<String, PerformanceStats>,
+        cache_metrics: &HashMap<String, CacheMetrics>,
+        query_metrics: &HashMap<String, QueryMetrics>,
+    ) -> f64 {
+        let mut total_score = 0.0;
+        let mut weight_sum = 0.0;
+
+        // Operation performance (40% weight)
+        if !operation_stats.is_empty() {
+            let avg_success_rate = operation_stats
+                .values()
+                .map(|s| s.success_rate)
+                .sum::<f64>()
+                / operation_stats.len() as f64;
+            let avg_response_time = operation_stats
+                .values()
+                .map(|s| s.average_duration.as_millis() as f64)
+                .sum::<f64>()
+                / operation_stats.len() as f64;
+
+            let operation_score =
+                (avg_success_rate * 70.0) + ((1000.0 - avg_response_time.min(1000.0)) * 0.3);
+            total_score += operation_score * 0.4;
+            weight_sum += 0.4;
+        }
+
+        // Cache performance (35% weight)
+        if !cache_metrics.is_empty() {
+            let avg_hit_rate = cache_metrics.values().map(|c| c.hit_rate).sum::<f64>()
+                / cache_metrics.len() as f64;
+            let avg_access_time = cache_metrics
+                .values()
+                .map(|c| c.average_access_time_ms)
+                .sum::<f64>()
+                / cache_metrics.len() as f64;
+
+            let cache_score = (avg_hit_rate * 60.0) + ((100.0 - avg_access_time.min(100.0)) * 0.4);
+            total_score += cache_score * 0.35;
+            weight_sum += 0.35;
+        }
+
+        // Query performance (25% weight)
+        if !query_metrics.is_empty() {
+            let avg_query_hit_rate = query_metrics
+                .values()
+                .map(|q| q.cache_hit_rate)
+                .sum::<f64>()
+                / query_metrics.len() as f64;
+            let avg_query_time = query_metrics
+                .values()
+                .map(|q| q.average_query_time_ms)
+                .sum::<f64>()
+                / query_metrics.len() as f64;
+
+            let query_score =
+                (avg_query_hit_rate * 50.0) + ((1000.0 - avg_query_time.min(1000.0)) * 0.5);
+            total_score += query_score * 0.25;
+            weight_sum += 0.25;
+        }
+
+        if weight_sum > 0.0 {
+            (total_score / weight_sum).clamp(0.0, 100.0)
+        } else {
+            100.0
+        }
+    }
 }
 
 impl Clone for PerformanceMonitor {
@@ -252,6 +443,8 @@ impl Clone for PerformanceMonitor {
         Self {
             metrics: Arc::clone(&self.metrics),
             stats: Arc::clone(&self.stats),
+            cache_metrics: Arc::clone(&self.cache_metrics),
+            query_metrics: Arc::clone(&self.query_metrics),
             system: Arc::clone(&self.system),
             max_metrics: self.max_metrics,
         }
@@ -546,5 +739,75 @@ mod tests {
         assert!(stats1.is_some());
         assert!(stats2.is_some());
         assert_eq!(stats1.unwrap().total_calls, stats2.unwrap().total_calls);
+    }
+
+    #[test]
+    fn test_performance_monitor_additional_operations() {
+        let monitor = PerformanceMonitor::new_default();
+
+        // Record multiple operations
+        let operations = vec![
+            ("op1", Duration::from_millis(100), true),
+            ("op1", Duration::from_millis(150), true),
+            ("op1", Duration::from_millis(200), false),
+            ("op2", Duration::from_millis(50), true),
+            ("op2", Duration::from_millis(75), true),
+        ];
+
+        for (op_name, duration, success) in operations {
+            let metric = OperationMetrics {
+                operation_name: op_name.to_string(),
+                duration,
+                timestamp: Utc::now(),
+                success,
+                error_message: if success {
+                    None
+                } else {
+                    Some("Test error".to_string())
+                },
+            };
+            monitor.record_operation(&metric);
+        }
+
+        // Check op1 stats
+        let op1_stats = monitor.get_operation_stats("op1").unwrap();
+        assert_eq!(op1_stats.total_calls, 3);
+        assert_eq!(op1_stats.successful_calls, 2);
+        assert_eq!(op1_stats.failed_calls, 1);
+
+        // Check op2 stats
+        let op2_stats = monitor.get_operation_stats("op2").unwrap();
+        assert_eq!(op2_stats.total_calls, 2);
+        assert_eq!(op2_stats.successful_calls, 2);
+        assert_eq!(op2_stats.failed_calls, 0);
+    }
+
+    #[test]
+    fn test_performance_monitor_get_metrics() {
+        let monitor = PerformanceMonitor::new_default();
+
+        // Record some operations
+        let metric1 = OperationMetrics {
+            operation_name: "test_op".to_string(),
+            duration: Duration::from_millis(100),
+            timestamp: Utc::now(),
+            success: true,
+            error_message: None,
+        };
+        monitor.record_operation(&metric1);
+
+        let metric2 = OperationMetrics {
+            operation_name: "test_op2".to_string(),
+            duration: Duration::from_millis(200),
+            timestamp: Utc::now(),
+            success: false,
+            error_message: Some("Test error".to_string()),
+        };
+        monitor.record_operation(&metric2);
+
+        let metrics = monitor.get_metrics();
+        assert_eq!(metrics.len(), 2);
+        assert!(metrics.iter().any(|m| m.operation_name == "test_op"));
+        assert!(metrics.iter().any(|m| m.operation_name == "test_op2"));
     }
 }

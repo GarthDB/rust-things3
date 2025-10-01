@@ -1,0 +1,9 @@
+# Moon toolchain configuration
+# https://moonrepo.dev/docs/config/toolchain
+
+rust:
+  version: "stable"
+  components: ["rustfmt", "clippy"]
+  targets: []
+  bins: []
+  syncToolchainConfig: true
