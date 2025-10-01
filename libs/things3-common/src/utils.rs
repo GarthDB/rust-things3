@@ -71,7 +71,7 @@ mod tests {
 
         // Should start with some home-like directory (environment-agnostic)
         let path_str = path.to_string_lossy();
-        assert!(path_str.starts_with("/") || path_str.starts_with("~"));
+        assert!(path_str.starts_with('/') || path_str.starts_with('~'));
     }
 
     #[test]
@@ -367,10 +367,10 @@ mod tests {
         let path_str = path.to_string_lossy();
 
         // This should test the || branch in the assertion
-        assert!(path_str.starts_with("/") || path_str.starts_with("~"));
+        assert!(path_str.starts_with('/') || path_str.starts_with('~'));
 
         // Specifically test that it starts with ~
-        assert!(path_str.starts_with("~"));
+        assert!(path_str.starts_with('~'));
 
         // Restore original HOME if it existed
         if let Ok(home) = original_home {
@@ -386,13 +386,13 @@ mod tests {
         // Test the "/" branch (when HOME is set)
         let path_with_home = get_default_database_path();
         let path_str_with_home = path_with_home.to_string_lossy();
-        assert!(path_str_with_home.starts_with("/") || path_str_with_home.starts_with("~"));
+        assert!(path_str_with_home.starts_with('/') || path_str_with_home.starts_with('~'));
 
         // Test the "~" branch (when HOME is not set)
         std::env::remove_var("HOME");
         let path_without_home = get_default_database_path();
         let path_str_without_home = path_without_home.to_string_lossy();
-        assert!(path_str_without_home.starts_with("/") || path_str_without_home.starts_with("~"));
+        assert!(path_str_without_home.starts_with('/') || path_str_without_home.starts_with('~'));
 
         // Restore original HOME if it existed
         if let Ok(home) = original_home {

@@ -1,7 +1,7 @@
 $schema: ../.moon/cache/schemas/project.json
 type: library
 language: rust
-platform: system
+platform: rust
 project:
   name: Things3 Core
   description: Core library providing Things 3 database access and data models
