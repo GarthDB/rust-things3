@@ -523,7 +523,6 @@ pub struct ThingsMcpServer {
 ///
 /// # Errors
 /// Returns an error if the server fails to start
-#[must_use]
 pub fn start_mcp_server(db: Arc<ThingsDatabase>, config: ThingsConfig) -> things3_core::Result<()> {
     let _server = ThingsMcpServer::new(db, config);
     info!("MCP server started successfully");
@@ -539,7 +538,6 @@ pub fn start_mcp_server(db: Arc<ThingsDatabase>, config: ThingsConfig) -> things
 ///
 /// # Errors
 /// Returns an error if the server fails to start
-#[must_use]
 pub fn start_mcp_server_with_config(
     db: Arc<ThingsDatabase>,
     mcp_config: McpServerConfig,
@@ -629,8 +627,29 @@ impl ThingsMcpServer {
                     enabled: mcp_config.security.authentication.enabled,
                     require_auth: mcp_config.security.authentication.require_auth,
                     jwt_secret: mcp_config.security.authentication.jwt_secret,
-                    api_keys: mcp_config.security.authentication.api_keys.clone(),
-                    oauth: mcp_config.security.authentication.oauth.clone(),
+                    api_keys: mcp_config
+                        .security
+                        .authentication
+                        .api_keys
+                        .iter()
+                        .map(|key| middleware::ApiKeyConfig {
+                            key: key.key.clone(),
+                            key_id: key.key_id.clone(),
+                            permissions: key.permissions.clone(),
+                            expires_at: key.expires_at.clone(),
+                        })
+                        .collect(),
+                    oauth: mcp_config
+                        .security
+                        .authentication
+                        .oauth
+                        .as_ref()
+                        .map(|oauth| middleware::OAuth2Config {
+                            client_id: oauth.client_id.clone(),
+                            client_secret: oauth.client_secret.clone(),
+                            token_endpoint: oauth.token_endpoint.clone(),
+                            scopes: oauth.scopes.clone(),
+                        }),
                 },
                 rate_limiting: middleware::RateLimitingConfig {
                     enabled: mcp_config.security.rate_limiting.enabled,
@@ -663,7 +682,6 @@ impl ThingsMcpServer {
     ///
     /// # Errors
     /// Returns an error if tool generation fails
-    #[must_use]
     pub fn list_tools(&self) -> McpResult<ListToolsResult> {
         Ok(ListToolsResult {
             tools: Self::get_available_tools(),
@@ -698,7 +716,6 @@ impl ThingsMcpServer {
     ///
     /// # Errors
     /// Returns an error if resource generation fails
-    #[must_use]
     pub fn list_resources(&self) -> McpResult<ListResourcesResult> {
         Ok(ListResourcesResult {
             resources: Self::get_available_resources(),
@@ -734,7 +751,6 @@ impl ThingsMcpServer {
     ///
     /// # Errors
     /// Returns an error if prompt generation fails
-    #[must_use]
     pub fn list_prompts(&self) -> McpResult<ListPromptsResult> {
         Ok(ListPromptsResult {
             prompts: Self::get_available_prompts(),

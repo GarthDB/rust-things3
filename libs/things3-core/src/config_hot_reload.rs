@@ -10,7 +10,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::{broadcast, RwLock};
 use tokio::time::interval;
-use tracing::{debug, error, info, warn};
+use tracing::{debug, error, info};
 
 /// Configuration hot reloader
 pub struct ConfigHotReloader {
@@ -60,7 +60,7 @@ impl ConfigHotReloader {
             reload_interval,
             enabled: true,
             change_tx,
-            last_modified,
+            last_modified: Some(last_modified),
         })
     }
 
@@ -71,7 +71,6 @@ impl ConfigHotReloader {
     ///
     /// # Errors
     /// Returns an error if the configuration file cannot be accessed
-    #[must_use]
     pub fn with_default_settings(config_path: PathBuf) -> Result<Self> {
         let config = McpServerConfig::default();
         Self::new(config, config_path, Duration::from_secs(5))
@@ -232,19 +231,19 @@ impl ConfigHotReloader {
     /// Get the last modification time of a file
     fn get_file_modified_time(path: &PathBuf) -> Result<std::time::SystemTime> {
         let metadata = std::fs::metadata(path).map_err(|e| {
-            ThingsError::io(format!(
+            ThingsError::Io(std::io::Error::other(format!(
                 "Failed to get file metadata for {}: {}",
                 path.display(),
                 e
-            ))
+            )))
         })?;
 
         metadata.modified().map_err(|e| {
-            ThingsError::io(format!(
+            ThingsError::Io(std::io::Error::other(format!(
                 "Failed to get modification time for {}: {}",
                 path.display(),
                 e
-            ))
+            )))
         })
     }
 
@@ -252,7 +251,6 @@ impl ConfigHotReloader {
     ///
     /// # Errors
     /// Returns an error if the configuration cannot be reloaded
-    #[must_use]
     pub async fn reload_now(&self) -> Result<bool> {
         let mut last_modified = self.last_modified;
         Self::check_and_reload_config(

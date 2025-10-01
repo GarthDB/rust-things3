@@ -6,8 +6,7 @@ use std::sync::Arc;
 use things3_cli::mcp::{start_mcp_server, start_mcp_server_with_config};
 use things3_cli::{health_check, start_websocket_server, watch_updates, Cli, Commands};
 use things3_core::{
-    load_config, McpServerConfig, ObservabilityConfig, ObservabilityManager, Result, ThingsConfig,
-    ThingsDatabase,
+    load_config, ObservabilityConfig, ObservabilityManager, Result, ThingsConfig, ThingsDatabase,
 };
 use tracing::{error, info};
 

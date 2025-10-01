@@ -69,7 +69,6 @@ impl ConfigLoader {
     ///
     /// # Errors
     /// Returns an error if configuration cannot be loaded or is invalid
-    #[must_use]
     pub fn load(&self) -> Result<McpServerConfig> {
         let mut config = self.base_config.clone();
         info!("Starting configuration loading process");
@@ -183,7 +182,6 @@ impl ConfigLoader {
     ///
     /// # Errors
     /// Returns an error if the file cannot be created
-    #[must_use]
     pub fn create_sample_config<P: AsRef<Path>>(path: P, format: &str) -> Result<()> {
         let config = McpServerConfig::default();
         config.to_file(path, format)?;
@@ -194,14 +192,16 @@ impl ConfigLoader {
     ///
     /// # Errors
     /// Returns an error if any file cannot be created
-    #[must_use]
     pub fn create_all_sample_configs() -> Result<()> {
         let config = McpServerConfig::default();
 
         // Create user config directory
         let user_config_dir = Self::get_user_config_dir();
         std::fs::create_dir_all(&user_config_dir).map_err(|e| {
-            ThingsError::io(format!("Failed to create user config directory: {}", e))
+            ThingsError::Io(std::io::Error::other(format!(
+                "Failed to create user config directory: {}",
+                e
+            )))
         })?;
 
         // Create sample files
@@ -231,7 +231,6 @@ impl Default for ConfigLoader {
 ///
 /// # Errors
 /// Returns an error if configuration cannot be loaded
-#[must_use]
 pub fn load_config() -> Result<McpServerConfig> {
     ConfigLoader::new().load()
 }
@@ -243,7 +242,6 @@ pub fn load_config() -> Result<McpServerConfig> {
 ///
 /// # Errors
 /// Returns an error if configuration cannot be loaded
-#[must_use]
 pub fn load_config_with_paths<P: AsRef<Path>>(config_paths: Vec<P>) -> Result<McpServerConfig> {
     ConfigLoader::new().with_config_paths(config_paths).load()
 }
@@ -252,9 +250,10 @@ pub fn load_config_with_paths<P: AsRef<Path>>(config_paths: Vec<P>) -> Result<Mc
 ///
 /// # Errors
 /// Returns an error if configuration cannot be loaded
-#[must_use]
 pub fn load_config_from_env() -> Result<McpServerConfig> {
-    ConfigLoader::new().with_config_paths(vec![]).load()
+    ConfigLoader::new()
+        .with_config_paths::<String>(vec![])
+        .load()
 }
 
 #[cfg(test)]

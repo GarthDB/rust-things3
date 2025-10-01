@@ -7,7 +7,6 @@ use crate::error::{Result, ThingsError};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::time::Duration;
 
 /// Comprehensive configuration for the MCP server
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -304,7 +303,6 @@ impl McpServerConfig {
     ///
     /// # Errors
     /// Returns an error if environment variables contain invalid values
-    #[must_use]
     pub fn from_env() -> Result<Self> {
         let mut config = Self::default();
 
@@ -448,15 +446,14 @@ impl McpServerConfig {
     ///
     /// # Errors
     /// Returns an error if the file cannot be read or parsed
-    #[must_use]
     pub fn from_file<P: AsRef<Path>>(path: P) -> Result<Self> {
         let path = path.as_ref();
         let content = std::fs::read_to_string(path).map_err(|e| {
-            ThingsError::io(format!(
+            ThingsError::Io(std::io::Error::other(format!(
                 "Failed to read config file {}: {}",
                 path.display(),
                 e
-            ))
+            )))
         })?;
 
         let config = if path.extension().and_then(|s| s.to_str()) == Some("yaml")
@@ -500,11 +497,11 @@ impl McpServerConfig {
         };
 
         std::fs::write(path, content).map_err(|e| {
-            ThingsError::io(format!(
+            ThingsError::Io(std::io::Error::other(format!(
                 "Failed to write config file {}: {}",
                 path.display(),
                 e
-            ))
+            )))
         })?;
 
         Ok(())
@@ -691,7 +688,6 @@ impl McpServerConfig {
     ///
     /// # Errors
     /// Returns an error if neither the specified path nor the default path exists
-    #[must_use]
     pub fn get_effective_database_path(&self) -> Result<PathBuf> {
         // Check if the specified path exists
         if self.database.path.exists() {
