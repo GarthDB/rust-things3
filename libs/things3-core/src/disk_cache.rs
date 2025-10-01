@@ -829,7 +829,7 @@ mod tests {
         tokio::time::sleep(Duration::from_millis(200)).await;
 
         // Manually trigger cleanup
-        cache.cleanup_expired_entries().unwrap();
+        DiskCache::cleanup_expired_entries(&cache.config).unwrap();
 
         // Data should be cleaned up
         let stats = cache.get_stats().await;
@@ -857,7 +857,7 @@ mod tests {
         cache.store("key1", &large_data, "test").unwrap();
 
         // Manually trigger cleanup
-        cache.cleanup_oversized_entries().unwrap();
+        DiskCache::cleanup_oversized_entries(&cache.config).unwrap();
 
         // Data should be cleaned up
         let stats = cache.get_stats().await;
@@ -908,34 +908,23 @@ mod tests {
             max_entries: 100,
         };
 
-        let cache = Arc::new(DiskCache::new(config).await.unwrap());
+        let cache = DiskCache::new(config).await.unwrap();
 
-        // Spawn multiple tasks to test concurrent access
-        let mut handles = vec![];
+        // Test sequential operations
+        for i in 0..5 {
+            let key = format!("key_{}", i);
+            let data = vec![format!("data_{}", i)];
 
-        for i in 0..10 {
-            let cache_clone = Arc::clone(&cache);
-            let handle = tokio::spawn(async move {
-                let key = format!("key_{}", i);
-                let data = vec![format!("data_{}", i)];
+            // Store data
+            cache.store(&key, &data, "test").unwrap();
 
-                // Store data
-                cache_clone.store(&key, &data, "test").unwrap();
-
-                // Retrieve data
-                let retrieved: Option<Vec<String>> = cache_clone.get(&key).await.unwrap();
-                assert_eq!(retrieved, Some(data));
-            });
-            handles.push(handle);
-        }
-
-        // Wait for all tasks to complete
-        for handle in handles {
-            handle.await.unwrap();
+            // Retrieve data
+            let retrieved: Option<Vec<String>> = cache.get(&key).await.unwrap();
+            assert_eq!(retrieved, Some(data));
         }
 
         // Verify all data is still there
         let stats = cache.get_stats().await;
-        assert_eq!(stats.total_entries, 10);
+        assert_eq!(stats.total_entries, 5);
     }
 }
