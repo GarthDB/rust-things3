@@ -305,9 +305,31 @@ mod tests {
     #[test]
     fn test_get_default_database_path_consistency() {
         // Test that the function returns the same path on multiple calls
+        // This test verifies the function is deterministic within the same environment
         let path1 = get_default_database_path();
         let path2 = get_default_database_path();
-        assert_eq!(path1, path2);
+
+        // The paths should be equal within the same environment
+        // In CI environments, HOME might be set differently, but the function should be consistent
+        assert_eq!(
+            path1, path2,
+            "get_default_database_path should return consistent results"
+        );
+
+        // Verify the path contains expected components regardless of environment
+        let path_str = path1.to_string_lossy();
+        assert!(
+            path_str.contains("Library"),
+            "Path should contain Library directory"
+        );
+        assert!(
+            path_str.contains("Group Containers"),
+            "Path should contain Group Containers"
+        );
+        assert!(
+            path_str.contains("Things Database.thingsdatabase"),
+            "Path should contain database file"
+        );
     }
 
     #[test]
