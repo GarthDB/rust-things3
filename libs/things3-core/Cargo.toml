@@ -37,6 +37,10 @@ zstd = "0.13"
 csv.workspace = true
 quick-xml.workspace = true
 
+# Configuration
+serde_yaml = "0.9"
+async-trait = "0.1"
+
 # Performance monitoring
 sysinfo.workspace = true
 

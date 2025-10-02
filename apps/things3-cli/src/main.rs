@@ -3,10 +3,10 @@
 use clap::Parser;
 use std::sync::Arc;
 // use things3_cli::bulk_operations::BulkOperationsManager; // Temporarily disabled
-use things3_cli::mcp::start_mcp_server;
+use things3_cli::mcp::{start_mcp_server, start_mcp_server_with_config};
 use things3_cli::{health_check, start_websocket_server, watch_updates, Cli, Commands};
 use things3_core::{
-    ObservabilityConfig, ObservabilityManager, Result, ThingsConfig, ThingsDatabase,
+    load_config, ObservabilityConfig, ObservabilityManager, Result, ThingsConfig, ThingsDatabase,
 };
 use tracing::{error, info};
 
@@ -96,7 +96,19 @@ async fn main() -> Result<()> {
         }
         Commands::Mcp => {
             info!("Starting MCP server...");
-            start_mcp_server(Arc::clone(&db), config)?;
+
+            // Try to load comprehensive configuration first
+            match load_config() {
+                Ok(mcp_config) => {
+                    info!("Loaded comprehensive MCP configuration");
+                    start_mcp_server_with_config(Arc::clone(&db), mcp_config)?;
+                }
+                Err(e) => {
+                    info!("Failed to load comprehensive configuration, falling back to basic config: {}", e);
+                    start_mcp_server(Arc::clone(&db), config)?;
+                }
+            }
+
             info!("MCP server started successfully");
         }
         Commands::Health => {

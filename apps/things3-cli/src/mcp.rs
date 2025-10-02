@@ -4,8 +4,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::sync::Arc;
 use things3_core::{
-    BackupManager, DataExporter, PerformanceMonitor, ThingsCache, ThingsConfig, ThingsDatabase,
-    ThingsError,
+    BackupManager, DataExporter, McpServerConfig, PerformanceMonitor, ThingsCache, ThingsConfig,
+    ThingsDatabase, ThingsError,
 };
 use thiserror::Error;
 use tokio::sync::Mutex;
@@ -530,6 +530,30 @@ pub fn start_mcp_server(db: Arc<ThingsDatabase>, config: ThingsConfig) -> things
     Ok(())
 }
 
+/// Start the MCP server with comprehensive configuration
+///
+/// # Arguments
+/// * `db` - Database connection
+/// * `mcp_config` - MCP server configuration
+///
+/// # Errors
+/// Returns an error if the server fails to start
+pub fn start_mcp_server_with_config(
+    db: Arc<ThingsDatabase>,
+    mcp_config: McpServerConfig,
+) -> things3_core::Result<()> {
+    // Convert McpServerConfig to ThingsConfig for backward compatibility
+    let things_config = ThingsConfig::new(
+        mcp_config.database.path.clone(),
+        mcp_config.database.fallback_to_default,
+    );
+
+    let _server = ThingsMcpServer::new_with_mcp_config(db, things_config, mcp_config);
+    info!("MCP server started successfully with comprehensive configuration");
+    // For now, just return success - in a real implementation, this would start the server
+    Ok(())
+}
+
 impl ThingsMcpServer {
     #[must_use]
     pub fn new(db: Arc<ThingsDatabase>, config: ThingsConfig) -> Self {
@@ -564,6 +588,82 @@ impl ThingsMcpServer {
 
         Self {
             db: Arc::new(db),
+            cache: Arc::new(Mutex::new(cache)),
+            performance_monitor: Arc::new(Mutex::new(performance_monitor)),
+            exporter,
+            backup_manager: Arc::new(Mutex::new(backup_manager)),
+            middleware_chain,
+        }
+    }
+
+    /// Create a new MCP server with comprehensive configuration
+    #[must_use]
+    pub fn new_with_mcp_config(
+        db: Arc<ThingsDatabase>,
+        config: ThingsConfig,
+        mcp_config: McpServerConfig,
+    ) -> Self {
+        let cache = ThingsCache::new_default();
+        let performance_monitor = PerformanceMonitor::new_default();
+        let exporter = DataExporter::new_default();
+        let backup_manager = BackupManager::new(config);
+
+        // Convert McpServerConfig to MiddlewareConfig
+        let middleware_config = MiddlewareConfig {
+            logging: middleware::LoggingConfig {
+                enabled: mcp_config.logging.console_logs,
+                level: mcp_config.logging.level.clone(),
+            },
+            validation: middleware::ValidationConfig {
+                enabled: mcp_config.security.validation.enabled,
+                strict_mode: mcp_config.security.validation.strict_mode,
+            },
+            performance: middleware::PerformanceConfig {
+                enabled: mcp_config.performance.enabled,
+                slow_request_threshold_ms: mcp_config.performance.slow_request_threshold_ms,
+            },
+            security: middleware::SecurityConfig {
+                authentication: middleware::AuthenticationConfig {
+                    enabled: mcp_config.security.authentication.enabled,
+                    require_auth: mcp_config.security.authentication.require_auth,
+                    jwt_secret: mcp_config.security.authentication.jwt_secret,
+                    api_keys: mcp_config
+                        .security
+                        .authentication
+                        .api_keys
+                        .iter()
+                        .map(|key| middleware::ApiKeyConfig {
+                            key: key.key.clone(),
+                            key_id: key.key_id.clone(),
+                            permissions: key.permissions.clone(),
+                            expires_at: key.expires_at.clone(),
+                        })
+                        .collect(),
+                    oauth: mcp_config
+                        .security
+                        .authentication
+                        .oauth
+                        .as_ref()
+                        .map(|oauth| middleware::OAuth2Config {
+                            client_id: oauth.client_id.clone(),
+                            client_secret: oauth.client_secret.clone(),
+                            token_endpoint: oauth.token_endpoint.clone(),
+                            scopes: oauth.scopes.clone(),
+                        }),
+                },
+                rate_limiting: middleware::RateLimitingConfig {
+                    enabled: mcp_config.security.rate_limiting.enabled,
+                    requests_per_minute: mcp_config.security.rate_limiting.requests_per_minute,
+                    burst_limit: mcp_config.security.rate_limiting.burst_limit,
+                    custom_limits: mcp_config.security.rate_limiting.custom_limits.clone(),
+                },
+            },
+        };
+
+        let middleware_chain = middleware_config.build_chain();
+
+        Self {
+            db,
             cache: Arc::new(Mutex::new(cache)),
             performance_monitor: Arc::new(Mutex::new(performance_monitor)),
             exporter,

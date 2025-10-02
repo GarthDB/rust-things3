@@ -1,0 +1,102 @@
+# Things 3 MCP Server Configuration
+# This is a YAML configuration file for the MCP server
+
+server:
+  name: "things3-mcp-server"
+  version: "1.0.0"
+  description: "Things 3 MCP Server - Development Configuration"
+  max_connections: 50
+  connection_timeout: 30
+  request_timeout: 60
+  graceful_shutdown: true
+  shutdown_timeout: 30
+
+database:
+  path: "~/Library/Group Containers/JLMPQHK86H.com.culturedcode.ThingsMac/ThingsData-0Z0Z2/Things Database.thingsdatabase/main.sqlite"
+  fallback_to_default: true
+  pool_size: 5
+  connection_timeout: 30
+  query_timeout: 60
+  enable_query_logging: true
+  enable_query_metrics: true
+
+logging:
+  level: "debug"
+  json_logs: false
+  log_file: null
+  console_logs: true
+  structured_logs: true
+  rotation:
+    enabled: true
+    max_file_size_mb: 50
+    max_files: 5
+    compress: false
+
+performance:
+  enabled: true
+  slow_request_threshold_ms: 2000
+  enable_profiling: true
+  memory_monitoring:
+    enabled: true
+    threshold_percentage: 90.0
+    check_interval: 60
+  cpu_monitoring:
+    enabled: true
+    threshold_percentage: 90.0
+    check_interval: 60
+
+security:
+  authentication:
+    enabled: false
+    require_auth: false
+    jwt_secret: "development-secret-key"
+    jwt_expiration: 3600
+    api_keys: []
+    oauth: null
+  rate_limiting:
+    enabled: true
+    requests_per_minute: 300
+    burst_limit: 50
+    custom_limits:
+      admin: 1000
+      api: 500
+      web: 200
+  cors:
+    enabled: true
+    allowed_origins: ["*"]
+    allowed_methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
+    allowed_headers: ["*"]
+    exposed_headers: []
+    allow_credentials: false
+    max_age: 86400
+  validation:
+    enabled: true
+    strict_mode: false
+    max_request_size: 1048576  # 1MB
+    max_field_length: 1000
+
+cache:
+  enabled: true
+  cache_type: "memory"
+  max_size_mb: 100
+  ttl_seconds: 1800
+  compression: false
+  eviction_policy: "lru"
+
+monitoring:
+  enabled: true
+  metrics_port: 9091
+  health_port: 8081
+  health_checks: true
+  metrics_collection: true
+  metrics_path: "/metrics"
+  health_path: "/health"
+
+features:
+  real_time_updates: true
+  websocket_server: true
+  dashboard: true
+  bulk_operations: true
+  data_export: true
+  backup: true
+  hot_reloading: true

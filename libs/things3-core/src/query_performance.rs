@@ -163,6 +163,7 @@ impl QueryPerformanceTracker {
     }
 
     /// Complete query tracking with results
+    #[allow(clippy::cast_possible_truncation)]
     pub fn complete_query(
         &self,
         context: QueryContext,
@@ -258,6 +259,7 @@ impl QueryPerformanceTracker {
 
     /// Get query performance summary
     #[must_use]
+    #[allow(clippy::cast_precision_loss)]
     pub fn get_performance_summary(&self) -> QueryPerformanceSummary {
         let stats = self.get_all_stats();
         let suggestions = self.get_optimization_suggestions();
@@ -296,6 +298,7 @@ impl QueryPerformanceTracker {
     }
 
     /// Update aggregated statistics
+    #[allow(clippy::cast_precision_loss)]
     fn update_stats(&self, metric: &QueryPerformanceMetrics) {
         let mut stats = self.stats.write();
         let entry =
@@ -382,6 +385,11 @@ impl QueryPerformanceTracker {
     }
 
     /// Calculate percentiles for execution time
+    #[allow(
+        clippy::cast_precision_loss,
+        clippy::cast_possible_truncation,
+        clippy::cast_sign_loss
+    )]
     fn calculate_percentiles(&self, stats: &mut QueryPerformanceStats) {
         // Get all execution times for this query type
         let metrics = self.metrics.read();
