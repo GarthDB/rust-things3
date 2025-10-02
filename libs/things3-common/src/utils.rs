@@ -765,8 +765,8 @@ mod tests {
         assert!(parse_date("invalid").is_err());
 
         // Test is_valid_uuid returns bool
-        assert_eq!(is_valid_uuid("550e8400-e29b-41d4-a716-446655440000"), true);
-        assert_eq!(is_valid_uuid("invalid"), false);
+        assert!(is_valid_uuid("550e8400-e29b-41d4-a716-446655440000"));
+        assert!(!is_valid_uuid("invalid"));
 
         // Test truncate_string returns String
         let result = truncate_string("test", 10);
@@ -798,7 +798,7 @@ mod tests {
 
         for input in &invalid_inputs {
             let result = parse_date(input);
-            assert!(result.is_err(), "Expected error for input: {}", input);
+            assert!(result.is_err(), "Expected error for input: {input}");
         }
 
         // Test is_valid_uuid with comprehensive invalid inputs
@@ -819,7 +819,7 @@ mod tests {
         ];
 
         for uuid in &invalid_uuids {
-            assert!(!is_valid_uuid(uuid), "Expected false for UUID: {}", uuid);
+            assert!(!is_valid_uuid(uuid), "Expected false for UUID: {uuid}");
         }
     }
 }
