@@ -866,6 +866,11 @@ mod tests {
 
     #[test]
     fn test_config_from_env() {
+        // Clean up any existing environment variables first
+        std::env::remove_var("MCP_SERVER_NAME");
+        std::env::remove_var("MCP_LOG_LEVEL");
+        std::env::remove_var("MCP_CACHE_ENABLED");
+
         std::env::set_var("MCP_SERVER_NAME", "test-server");
         std::env::set_var("MCP_LOG_LEVEL", "debug");
         std::env::set_var("MCP_CACHE_ENABLED", "false");
@@ -920,6 +925,265 @@ mod tests {
         assert!(!parse_bool("no"));
         assert!(!parse_bool("off"));
         assert!(!parse_bool("invalid"));
+    }
+
+    fn cleanup_env_vars() {
+        let env_vars = [
+            "MCP_SERVER_NAME",
+            "MCP_SERVER_VERSION",
+            "MCP_SERVER_DESCRIPTION",
+            "MCP_MAX_CONNECTIONS",
+            "MCP_CONNECTION_TIMEOUT",
+            "MCP_REQUEST_TIMEOUT",
+            "MCP_DATABASE_PATH",
+            "MCP_DATABASE_FALLBACK",
+            "MCP_DATABASE_POOL_SIZE",
+            "MCP_LOG_LEVEL",
+            "MCP_LOG_FILE",
+            "MCP_PERFORMANCE_ENABLED",
+            "MCP_SLOW_REQUEST_THRESHOLD",
+            "MCP_AUTH_ENABLED",
+            "MCP_JWT_SECRET",
+            "MCP_RATE_LIMIT_ENABLED",
+            "MCP_REQUESTS_PER_MINUTE",
+            "MCP_CACHE_ENABLED",
+            "MCP_CACHE_MAX_SIZE_MB",
+            "MCP_MONITORING_ENABLED",
+            "MCP_METRICS_PORT",
+            "MCP_HEALTH_PORT",
+            "MCP_REAL_TIME_UPDATES",
+            "MCP_WEBSOCKET_SERVER",
+            "MCP_DASHBOARD",
+            "MCP_BULK_OPERATIONS",
+            "MCP_DATA_EXPORT",
+            "MCP_BACKUP",
+            "MCP_HOT_RELOADING",
+        ];
+
+        for var in env_vars {
+            std::env::remove_var(var);
+        }
+    }
+
+    fn set_test_env_vars() {
+        std::env::set_var("MCP_SERVER_NAME", "test-server");
+        std::env::set_var("MCP_SERVER_VERSION", "1.2.3");
+        std::env::set_var("MCP_SERVER_DESCRIPTION", "Test Description");
+        std::env::set_var("MCP_MAX_CONNECTIONS", "150");
+        std::env::set_var("MCP_CONNECTION_TIMEOUT", "30");
+        std::env::set_var("MCP_REQUEST_TIMEOUT", "60");
+        std::env::set_var("MCP_DATABASE_PATH", "/test/db.sqlite");
+        std::env::set_var("MCP_DATABASE_FALLBACK", "false");
+        std::env::set_var("MCP_DATABASE_POOL_SIZE", "20");
+        std::env::set_var("MCP_LOG_LEVEL", "debug");
+        std::env::set_var("MCP_LOG_FILE", "/test/log.txt");
+        std::env::set_var("MCP_PERFORMANCE_ENABLED", "false");
+        std::env::set_var("MCP_SLOW_REQUEST_THRESHOLD", "5000");
+        std::env::set_var("MCP_AUTH_ENABLED", "true");
+        std::env::set_var("MCP_JWT_SECRET", "test-secret");
+        std::env::set_var("MCP_RATE_LIMIT_ENABLED", "true");
+        std::env::set_var("MCP_REQUESTS_PER_MINUTE", "120");
+        std::env::set_var("MCP_CACHE_ENABLED", "false");
+        std::env::set_var("MCP_CACHE_MAX_SIZE_MB", "500");
+        std::env::set_var("MCP_MONITORING_ENABLED", "false");
+        std::env::set_var("MCP_METRICS_PORT", "9090");
+        std::env::set_var("MCP_HEALTH_PORT", "8080");
+        std::env::set_var("MCP_REAL_TIME_UPDATES", "true");
+        std::env::set_var("MCP_WEBSOCKET_SERVER", "true");
+        std::env::set_var("MCP_DASHBOARD", "true");
+        std::env::set_var("MCP_BULK_OPERATIONS", "true");
+        std::env::set_var("MCP_DATA_EXPORT", "true");
+        std::env::set_var("MCP_BACKUP", "true");
+        std::env::set_var("MCP_HOT_RELOADING", "true");
+    }
+
+    fn assert_config_values(config: &McpServerConfig) {
+        assert_eq!(config.server.name, "test-server");
+        assert_eq!(config.server.version, "1.2.3");
+        assert_eq!(config.server.description, "Test Description");
+        assert_eq!(config.server.max_connections, 150);
+        assert_eq!(config.server.connection_timeout, 30);
+        assert_eq!(config.server.request_timeout, 60);
+        assert_eq!(config.database.path, PathBuf::from("/test/db.sqlite"));
+        assert!(!config.database.fallback_to_default);
+        assert_eq!(config.database.pool_size, 20);
+        assert_eq!(config.logging.level, "debug");
+        assert_eq!(
+            config.logging.log_file,
+            Some(PathBuf::from("/test/log.txt"))
+        );
+        assert!(!config.performance.enabled);
+        assert_eq!(config.performance.slow_request_threshold_ms, 5000);
+        assert!(config.security.authentication.enabled);
+        assert_eq!(config.security.authentication.jwt_secret, "test-secret");
+        assert!(config.security.rate_limiting.enabled);
+        assert_eq!(config.security.rate_limiting.requests_per_minute, 120);
+        assert!(!config.cache.enabled);
+        assert_eq!(config.cache.max_size_mb, 500);
+        assert!(!config.monitoring.enabled);
+        assert_eq!(config.monitoring.metrics_port, 9090);
+        assert_eq!(config.monitoring.health_port, 8080);
+        assert!(config.features.real_time_updates);
+        assert!(config.features.websocket_server);
+        assert!(config.features.dashboard);
+        assert!(config.features.bulk_operations);
+        assert!(config.features.data_export);
+        assert!(config.features.backup);
+        assert!(config.features.hot_reloading);
+    }
+
+    #[test]
+    fn test_config_from_env_comprehensive() {
+        // Clean up any existing environment variables first
+        cleanup_env_vars();
+
+        // Test all environment variables
+        set_test_env_vars();
+
+        let config = McpServerConfig::from_env().unwrap();
+        assert_config_values(&config);
+
+        // Clean up
+        cleanup_env_vars();
+    }
+
+    #[test]
+    fn test_config_from_env_invalid_values() {
+        // Clean up any existing environment variables first
+        std::env::remove_var("MCP_MAX_CONNECTIONS");
+        std::env::remove_var("MCP_CONNECTION_TIMEOUT");
+        std::env::remove_var("MCP_REQUEST_TIMEOUT");
+        std::env::remove_var("MCP_DATABASE_POOL_SIZE");
+        std::env::remove_var("MCP_SLOW_REQUEST_THRESHOLD");
+        std::env::remove_var("MCP_REQUESTS_PER_MINUTE");
+        std::env::remove_var("MCP_CACHE_MAX_SIZE_MB");
+        std::env::remove_var("MCP_METRICS_PORT");
+        std::env::remove_var("MCP_HEALTH_PORT");
+
+        // Test invalid numeric values
+        std::env::set_var("MCP_MAX_CONNECTIONS", "invalid");
+        let result = McpServerConfig::from_env();
+        assert!(result.is_err());
+        std::env::remove_var("MCP_MAX_CONNECTIONS");
+
+        std::env::set_var("MCP_CONNECTION_TIMEOUT", "not-a-number");
+        let result = McpServerConfig::from_env();
+        assert!(result.is_err());
+        std::env::remove_var("MCP_CONNECTION_TIMEOUT");
+
+        std::env::set_var("MCP_REQUEST_TIMEOUT", "abc");
+        let result = McpServerConfig::from_env();
+        assert!(result.is_err());
+        std::env::remove_var("MCP_REQUEST_TIMEOUT");
+    }
+
+    #[test]
+    fn test_config_from_file_nonexistent() {
+        let result = McpServerConfig::from_file("/nonexistent/file.json");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_config_from_file_invalid_yaml() {
+        let temp_file = NamedTempFile::new().unwrap();
+        let config_path = temp_file.path().with_extension("yaml");
+
+        std::fs::write(&config_path, "invalid: yaml: content: [").unwrap();
+
+        let result = McpServerConfig::from_file(&config_path);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_config_to_file_invalid_format() {
+        let config = McpServerConfig::default();
+        let temp_file = NamedTempFile::new().unwrap();
+        let config_path = temp_file.path().with_extension("txt");
+
+        let result = config.to_file(&config_path, "invalid");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_config_merge_comprehensive() {
+        let mut config1 = McpServerConfig::default();
+        config1.server.name = "server1".to_string();
+        config1.server.max_connections = 100;
+        config1.cache.enabled = true;
+        config1.cache.max_size_mb = 200;
+        config1.performance.enabled = false;
+        config1.security.authentication.enabled = true;
+        config1.security.authentication.jwt_secret = "secret1".to_string();
+
+        let mut config2 = McpServerConfig::default();
+        config2.server.name = "server2".to_string();
+        config2.server.max_connections = 0; // Should not override
+        config2.cache.enabled = false;
+        config2.cache.max_size_mb = 0; // Should not override
+        config2.performance.enabled = true;
+        config2.security.authentication.enabled = false;
+        config2.security.authentication.jwt_secret = "secret2".to_string();
+
+        config1.merge_with(&config2);
+
+        assert_eq!(config1.server.name, "server2");
+        assert_eq!(config1.server.max_connections, 100); // Should not be overridden
+        assert!(!config1.cache.enabled); // Should be overridden
+        assert_eq!(config1.cache.max_size_mb, 200); // Should not be overridden
+        assert!(config1.performance.enabled); // Should be overridden
+        assert!(!config1.security.authentication.enabled); // Should be overridden
+        assert_eq!(config1.security.authentication.jwt_secret, "secret2");
+    }
+
+    #[test]
+    fn test_config_validation_comprehensive() {
+        let mut config = McpServerConfig::default();
+
+        // Test empty server name
+        config.server.name = String::new();
+        assert!(config.validate().is_err());
+        config.server.name = "test".to_string();
+
+        // Test empty server version
+        config.server.version = String::new();
+        assert!(config.validate().is_err());
+        config.server.version = "1.0.0".to_string();
+
+        // Test zero max connections
+        config.server.max_connections = 0;
+        assert!(config.validate().is_err());
+        config.server.max_connections = 100;
+
+        // Test zero database pool size
+        config.database.pool_size = 0;
+        assert!(config.validate().is_err());
+        config.database.pool_size = 10;
+
+        // Test invalid log level
+        config.logging.level = "invalid".to_string();
+        assert!(config.validate().is_err());
+        config.logging.level = "info".to_string();
+
+        // Test performance enabled with zero threshold
+        config.performance.enabled = true;
+        config.performance.slow_request_threshold_ms = 0;
+        assert!(config.validate().is_err());
+        config.performance.slow_request_threshold_ms = 1000;
+
+        // Test auth enabled with empty JWT secret
+        config.security.authentication.enabled = true;
+        config.security.authentication.jwt_secret = String::new();
+        assert!(config.validate().is_err());
+        config.security.authentication.jwt_secret = "secret".to_string();
+
+        // Test cache enabled with zero size
+        config.cache.enabled = true;
+        config.cache.max_size_mb = 0;
+        assert!(config.validate().is_err());
+        config.cache.max_size_mb = 100;
+
+        // Should pass now
+        assert!(config.validate().is_ok());
     }
 
     #[test]

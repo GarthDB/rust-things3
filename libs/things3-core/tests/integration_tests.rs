@@ -36,15 +36,15 @@ async fn test_database_connection() -> Result<()> {
 async fn test_mock_database() {
     // Create a temporary database with mock data
     let temp_file = NamedTempFile::new().unwrap();
-    let db_path = temp_file.path();
+    let _db_path = temp_file.path();
 
     // Create test database with mock data
     #[cfg(feature = "test-utils")]
     {
-        test_utils::create_test_database(db_path).await.unwrap();
+        test_utils::create_test_database(_db_path).await.unwrap();
 
         // Test that we can connect to the mock database
-        let db = ThingsDatabase::new(db_path).await.unwrap();
+        let db = ThingsDatabase::new(_db_path).await.unwrap();
 
         // Test basic queries
         let inbox_tasks = db.get_inbox(Some(10)).await.unwrap();

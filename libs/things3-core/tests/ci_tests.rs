@@ -51,12 +51,12 @@ async fn test_fallback_to_mock_data() {
         // Real database not available, use mock data
         println!("Real database not available, using mock data for testing");
         let temp_file = NamedTempFile::new().unwrap();
-        let db_path = temp_file.path();
+        let _db_path = temp_file.path();
 
         #[cfg(feature = "test-utils")]
         {
-            test_utils::create_test_database(db_path).await.unwrap();
-            let db = ThingsDatabase::new(db_path).await.unwrap();
+            test_utils::create_test_database(_db_path).await.unwrap();
+            let db = ThingsDatabase::new(_db_path).await.unwrap();
             test_database_operations(&db);
         }
 
