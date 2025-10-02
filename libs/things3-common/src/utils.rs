@@ -52,6 +52,10 @@ pub fn truncate_string(s: &str, max_len: usize) -> String {
 mod tests {
     use super::*;
     use chrono::{Datelike, NaiveDate};
+    use std::sync::Mutex;
+
+    // Global mutex to synchronize environment variable access across tests
+    static ENV_MUTEX: Mutex<()> = Mutex::new(());
 
     #[test]
     fn test_get_default_database_path() {
@@ -304,32 +308,55 @@ mod tests {
 
     #[test]
     fn test_get_default_database_path_consistency() {
+        let _lock = ENV_MUTEX.lock().unwrap();
+
         // Test that the function returns the same path on multiple calls
         // This test verifies the function is deterministic within the same environment
+
+        // Capture the current HOME value to ensure consistency during the test
+        let original_home = std::env::var("HOME");
+
+        // Make multiple calls in quick succession to test consistency
         let path1 = get_default_database_path();
         let path2 = get_default_database_path();
+        let path3 = get_default_database_path();
 
-        // The paths should be equal within the same environment
-        // In CI environments, HOME might be set differently, but the function should be consistent
+        // All paths should be identical within the same test execution
         assert_eq!(
             path1, path2,
-            "get_default_database_path should return consistent results"
+            "get_default_database_path should return consistent results between calls"
+        );
+        assert_eq!(
+            path2, path3,
+            "get_default_database_path should return consistent results across multiple calls"
         );
 
         // Verify the path contains expected components regardless of environment
         let path_str = path1.to_string_lossy();
         assert!(
             path_str.contains("Library"),
-            "Path should contain Library directory"
+            "Path should contain Library directory, got: {path_str}"
         );
         assert!(
             path_str.contains("Group Containers"),
-            "Path should contain Group Containers"
+            "Path should contain Group Containers, got: {path_str}"
         );
         assert!(
             path_str.contains("Things Database.thingsdatabase"),
-            "Path should contain database file"
+            "Path should contain database file, got: {path_str}"
         );
+
+        // Verify that the path is either absolute or starts with ~ (tilde)
+        assert!(
+            path_str.starts_with('/') || path_str.starts_with('~'),
+            "Path should be absolute or start with ~, got: {path_str}"
+        );
+
+        // Restore original HOME if it was set
+        match original_home {
+            Ok(home) => std::env::set_var("HOME", home),
+            Err(_) => std::env::remove_var("HOME"),
+        }
     }
 
     #[test]
@@ -343,6 +370,8 @@ mod tests {
 
     #[test]
     fn test_get_default_database_path_with_no_home() {
+        let _lock = ENV_MUTEX.lock().unwrap();
+
         // Test behavior when HOME is not set
         let original_home = std::env::var("HOME");
         std::env::remove_var("HOME");
@@ -384,6 +413,8 @@ mod tests {
 
     #[test]
     fn test_get_default_database_path_with_no_home_and_restore() {
+        let _lock = ENV_MUTEX.lock().unwrap();
+
         // Test behavior when HOME is not set and we need to restore it
         let original_home = std::env::var("HOME");
 
@@ -422,6 +453,8 @@ mod tests {
 
     #[test]
     fn test_get_default_database_path_starts_with_tilde() {
+        let _lock = ENV_MUTEX.lock().unwrap();
+
         // Test that the path starts with ~ when HOME is not set
         let original_home = std::env::var("HOME");
         std::env::remove_var("HOME");
@@ -455,6 +488,8 @@ mod tests {
 
     #[test]
     fn test_get_default_database_path_or_branch_coverage() {
+        let _lock = ENV_MUTEX.lock().unwrap();
+
         // Test both branches of the || assertion
         let original_home = std::env::var("HOME");
 
