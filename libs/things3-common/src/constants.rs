@@ -290,4 +290,196 @@ mod tests {
         let mut datetime_format_iter = DATETIME_FORMATS.iter();
         assert!(datetime_format_iter.next().is_some());
     }
+
+    #[test]
+    fn test_constants_comprehensive_string_operations() {
+        // Test comprehensive string operations on constants to ensure full coverage
+
+        // Test DATABASE_FILENAME operations
+        assert_eq!(DATABASE_FILENAME.len(), 11); // "main.sqlite"
+        assert!(DATABASE_FILENAME.starts_with("main"));
+        assert!(DATABASE_FILENAME.ends_with(".sqlite"));
+        assert!(DATABASE_FILENAME.contains("."));
+        assert!(!DATABASE_FILENAME.is_empty());
+        assert!(DATABASE_FILENAME.is_ascii());
+
+        // Test string slicing and indexing
+        let filename_bytes = DATABASE_FILENAME.as_bytes();
+        assert_eq!(filename_bytes[0], b'm');
+        assert_eq!(filename_bytes[filename_bytes.len() - 1], b'e');
+
+        // Test DATABASE_DIR operations
+        assert!(DATABASE_DIR.len() > 10);
+        assert!(DATABASE_DIR.starts_with("Things"));
+        assert!(DATABASE_DIR.ends_with(".thingsdatabase"));
+        assert!(DATABASE_DIR.contains("Database"));
+        assert!(DATABASE_DIR.contains(" "));
+        assert!(!DATABASE_DIR.is_empty());
+        assert!(DATABASE_DIR.is_ascii());
+
+        // Test THINGS_CONTAINER operations
+        assert!(THINGS_CONTAINER.len() > 20);
+        assert!(THINGS_CONTAINER.starts_with("JLMPQHK8H4"));
+        assert!(THINGS_CONTAINER.ends_with("Things3"));
+        assert!(THINGS_CONTAINER.contains(".com."));
+        assert!(THINGS_CONTAINER.contains("culturedcode"));
+        assert!(!THINGS_CONTAINER.is_empty());
+        assert!(THINGS_CONTAINER.is_ascii());
+
+        // Test string transformations
+        let upper_filename = DATABASE_FILENAME.to_uppercase();
+        assert_eq!(upper_filename, "MAIN.SQLITE");
+
+        let lower_dir = DATABASE_DIR.to_lowercase();
+        assert!(lower_dir.contains("things"));
+        assert!(lower_dir.contains("database"));
+
+        // Test string splitting
+        let container_parts: Vec<&str> = THINGS_CONTAINER.split('.').collect();
+        assert!(container_parts.len() >= 4);
+        assert_eq!(container_parts[0], "JLMPQHK8H4");
+        assert_eq!(container_parts[1], "com");
+        assert_eq!(container_parts[2], "culturedcode");
+        assert_eq!(container_parts[3], "Things3");
+
+        // Test string replacement
+        let modified_filename = DATABASE_FILENAME.replace("main", "test");
+        assert_eq!(modified_filename, "test.sqlite");
+
+        let modified_dir = DATABASE_DIR.replace("Things", "Test");
+        assert!(modified_dir.contains("Test Database"));
+    }
+
+    #[test]
+    fn test_constants_array_comprehensive_operations() {
+        // Test comprehensive array operations on format constants
+
+        // Test DATE_FORMATS array operations
+        assert_eq!(DATE_FORMATS.len(), 3);
+        assert!(!DATE_FORMATS.is_empty());
+
+        // Test array indexing
+        assert_eq!(DATE_FORMATS[0], "%Y-%m-%d");
+        assert_eq!(DATE_FORMATS[1], "%m/%d/%Y");
+        assert_eq!(DATE_FORMATS[2], "%d/%m/%Y");
+
+        // Test array methods
+        assert!(DATE_FORMATS.contains(&"%Y-%m-%d"));
+        assert!(DATE_FORMATS.contains(&"%m/%d/%Y"));
+        assert!(DATE_FORMATS.contains(&"%d/%m/%Y"));
+        assert!(!DATE_FORMATS.contains(&"%Y/%m/%d"));
+
+        // Test first and last
+        assert_eq!(DATE_FORMATS.first(), Some(&"%Y-%m-%d"));
+        assert_eq!(DATE_FORMATS.last(), Some(&"%d/%m/%Y"));
+
+        // Test iteration
+        let mut count = 0;
+        for format in DATE_FORMATS {
+            assert!(format.contains('%'));
+            assert!(format.contains('Y'));
+            count += 1;
+        }
+        assert_eq!(count, 3);
+
+        // Test DATETIME_FORMATS array operations
+        assert_eq!(DATETIME_FORMATS.len(), 3);
+        assert!(!DATETIME_FORMATS.is_empty());
+
+        // Test array indexing
+        assert_eq!(DATETIME_FORMATS[0], "%Y-%m-%d %H:%M:%S");
+        assert_eq!(DATETIME_FORMATS[1], "%Y-%m-%dT%H:%M:%S");
+        assert_eq!(DATETIME_FORMATS[2], "%Y-%m-%d %H:%M:%S UTC");
+
+        // Test array methods
+        assert!(DATETIME_FORMATS.contains(&"%Y-%m-%d %H:%M:%S"));
+        assert!(DATETIME_FORMATS.contains(&"%Y-%m-%dT%H:%M:%S"));
+        assert!(DATETIME_FORMATS.contains(&"%Y-%m-%d %H:%M:%S UTC"));
+        assert!(!DATETIME_FORMATS.contains(&"%Y/%m/%d %H:%M:%S"));
+
+        // Test first and last
+        assert_eq!(DATETIME_FORMATS.first(), Some(&"%Y-%m-%d %H:%M:%S"));
+        assert_eq!(DATETIME_FORMATS.last(), Some(&"%Y-%m-%d %H:%M:%S UTC"));
+
+        // Test iteration with comprehensive checks
+        let mut datetime_count = 0;
+        for format in DATETIME_FORMATS {
+            assert!(format.contains('%'));
+            assert!(format.contains('Y'));
+            assert!(format.contains('H') || format.contains('M') || format.contains('S'));
+            datetime_count += 1;
+        }
+        assert_eq!(datetime_count, 3);
+
+        // Test array slicing
+        let date_slice = &DATE_FORMATS[0..2];
+        assert_eq!(date_slice.len(), 2);
+        assert_eq!(date_slice[0], "%Y-%m-%d");
+        assert_eq!(date_slice[1], "%m/%d/%Y");
+
+        let datetime_slice = &DATETIME_FORMATS[1..];
+        assert_eq!(datetime_slice.len(), 2);
+        assert_eq!(datetime_slice[0], "%Y-%m-%dT%H:%M:%S");
+        assert_eq!(datetime_slice[1], "%Y-%m-%d %H:%M:%S UTC");
+    }
+
+    #[test]
+    fn test_constants_numeric_comprehensive_operations() {
+        // Test comprehensive numeric operations on constants
+
+        // Test DEFAULT_QUERY_LIMIT operations
+        assert_eq!(DEFAULT_QUERY_LIMIT, 100);
+        assert!(DEFAULT_QUERY_LIMIT > 0);
+        assert!(DEFAULT_QUERY_LIMIT < 1000);
+        assert!(DEFAULT_QUERY_LIMIT % 10 == 0); // Divisible by 10
+
+        // Test arithmetic operations
+        let doubled_default = DEFAULT_QUERY_LIMIT * 2;
+        assert_eq!(doubled_default, 200);
+
+        let halved_default = DEFAULT_QUERY_LIMIT / 2;
+        assert_eq!(halved_default, 50);
+
+        let sum_limits = DEFAULT_QUERY_LIMIT + MAX_QUERY_LIMIT;
+        assert_eq!(sum_limits, 1100);
+
+        // Test MAX_QUERY_LIMIT operations
+        assert_eq!(MAX_QUERY_LIMIT, 1000);
+        assert!(MAX_QUERY_LIMIT > 0);
+        assert!(MAX_QUERY_LIMIT > DEFAULT_QUERY_LIMIT);
+        assert!(MAX_QUERY_LIMIT % 100 == 0); // Divisible by 100
+
+        // Test comparison operations
+        assert!(DEFAULT_QUERY_LIMIT < MAX_QUERY_LIMIT);
+        assert!(MAX_QUERY_LIMIT > DEFAULT_QUERY_LIMIT);
+        assert!(DEFAULT_QUERY_LIMIT != MAX_QUERY_LIMIT);
+        assert_eq!(MAX_QUERY_LIMIT / DEFAULT_QUERY_LIMIT, 10);
+
+        // Test DEFAULT_MCP_PORT operations
+        assert_eq!(DEFAULT_MCP_PORT, 3000);
+        assert!(DEFAULT_MCP_PORT > 0);
+        assert!(DEFAULT_MCP_PORT > 1024); // Above system ports
+        assert!(DEFAULT_MCP_PORT < 65535); // Within valid port range
+        assert!(DEFAULT_MCP_PORT % 1000 == 0); // Divisible by 1000
+
+        // Test port arithmetic
+        let port_plus_one = DEFAULT_MCP_PORT + 1;
+        assert_eq!(port_plus_one, 3001);
+
+        let port_range = DEFAULT_MCP_PORT..DEFAULT_MCP_PORT + 10;
+        assert!(port_range.contains(&3005));
+        assert!(!port_range.contains(&3010));
+
+        // Test type conversions
+        let port_as_u32 = u32::from(DEFAULT_MCP_PORT);
+        assert_eq!(port_as_u32, 3000);
+
+        let port_as_i32 = i32::from(DEFAULT_MCP_PORT);
+        assert_eq!(port_as_i32, 3000);
+
+        // Test bounds checking
+        assert!(DEFAULT_QUERY_LIMIT <= usize::MAX);
+        assert!(MAX_QUERY_LIMIT <= usize::MAX);
+        assert!(DEFAULT_MCP_PORT <= u16::MAX);
+    }
 }

@@ -959,4 +959,224 @@ mod tests {
             assert!(!is_valid_uuid(uuid), "Expected invalid UUID: {uuid}");
         }
     }
+
+    #[test]
+    fn test_truncate_string_exact_boundary_conditions() {
+        // Test exact boundary conditions for saturating_sub
+        // These tests target specific branches that might be missed
+
+        // Test when string length exactly equals max_len
+        assert_eq!(truncate_string("abc", 3), "abc");
+        assert_eq!(truncate_string("abcd", 4), "abcd");
+        assert_eq!(truncate_string("abcde", 5), "abcde");
+
+        // Test when max_len is exactly 3 (boundary for saturating_sub(3))
+        assert_eq!(truncate_string("abcd", 3), "...");
+        assert_eq!(truncate_string("abcde", 3), "...");
+
+        // Test when max_len is exactly 4 (first case where we get 1 char + ...)
+        assert_eq!(truncate_string("abcde", 4), "a...");
+        assert_eq!(truncate_string("abcdef", 4), "a...");
+
+        // Test when max_len is exactly 5 (2 chars + ...)
+        assert_eq!(truncate_string("abcdef", 5), "ab...");
+        assert_eq!(truncate_string("abcdefg", 5), "ab...");
+
+        // Test when max_len is exactly 6 (3 chars + ...)
+        assert_eq!(truncate_string("abcdefg", 6), "abc...");
+        assert_eq!(truncate_string("abcdefgh", 6), "abc...");
+    }
+
+    #[test]
+    fn test_get_default_database_path_exact_string_operations() {
+        // Test specific string operations and formatting in get_default_database_path
+        let _lock = ENV_MUTEX.lock().unwrap();
+        let original_home = std::env::var("HOME");
+
+        // Test with various HOME values to ensure format! macro is fully covered
+        let test_homes = [
+            "/Users/testuser",
+            "/home/testuser",
+            "/tmp/test",
+            "/very/long/path/to/home/directory/that/might/cause/issues",
+            "/path/with/unicode/测试/用户",
+            "/path/with/spaces and symbols!@#$%^&*()",
+        ];
+
+        for home in &test_homes {
+            std::env::set_var("HOME", home);
+            let path = get_default_database_path();
+            let path_str = path.to_string_lossy();
+
+            // Verify the format! macro correctly interpolates the home variable
+            assert!(
+                path_str.starts_with(home),
+                "Path should start with {home}, got: {path_str}"
+            );
+            assert!(
+                path_str.contains("Library/Group Containers"),
+                "Path should contain Library/Group Containers"
+            );
+            assert!(
+                path_str.contains("JLMPQHK86H.com.culturedcode.ThingsMac"),
+                "Path should contain app identifier"
+            );
+            assert!(
+                path_str.contains("ThingsData-0Z0Z2"),
+                "Path should contain data directory"
+            );
+            assert!(
+                path_str.contains("Things Database.thingsdatabase"),
+                "Path should contain database directory"
+            );
+            assert!(
+                path_str.ends_with("main.sqlite"),
+                "Path should end with main.sqlite"
+            );
+        }
+
+        // Restore original HOME
+        match original_home {
+            Ok(home) => std::env::set_var("HOME", home),
+            Err(_) => std::env::remove_var("HOME"),
+        }
+    }
+
+    #[test]
+    fn test_parse_date_comprehensive_error_conditions() {
+        // Test comprehensive error conditions to ensure all error paths are covered
+        // Focus on cases that definitely fail with our strict YYYY-MM-DD format
+        let error_cases = [
+            // Empty and clearly invalid
+            "",
+            "not-a-date",
+            "invalid",
+            "abc-def-ghi",
+            "year-mo-dy",
+            // Wrong format patterns
+            "2023",
+            "2023-01",
+            "01-2023",
+            "01-01-2023",
+            "2023/01/01",
+            "2023.01.01",
+            "2023_01_01",
+            "2023 01 01",
+            // Invalid separators
+            "2023--01-01",
+            "2023-01--01",
+            "2023-01-01-",
+            "2023-01-01-extra",
+            // Non-numeric content
+            "2023-ab-01",
+            "2023-01-cd",
+            "ab23-01-01",
+            "x2023-01-01",
+            // Invalid dates (these should definitely fail)
+            "2023-00-01", // Month 0
+            "2023-13-01", // Month 13
+            "2023-01-00", // Day 0
+            "2023-01-32", // Day 32
+            "2023-02-30", // Feb 30
+            "2023-04-31", // Apr 31
+            "2023-06-31", // Jun 31
+            "2023-09-31", // Sep 31
+            "2023-11-31", // Nov 31
+            "2023-02-29", // Non-leap year Feb 29
+            // Edge cases with extra content
+            "2023-01-01T00:00:00",
+            "2023-01-01 00:00:00",
+            "2023-01-01Z",
+            "2023-01-01+00:00",
+            "2023-01-01 extra",
+            // Very long strings
+            &"x".repeat(1000),
+        ];
+
+        for case in &error_cases {
+            let result = parse_date(case);
+            assert!(result.is_err(), "Expected error for input: '{case}'");
+        }
+    }
+
+    #[test]
+    fn test_is_valid_uuid_comprehensive_edge_cases() {
+        // Test comprehensive edge cases for UUID validation
+
+        // Test valid UUIDs with different formats
+        let valid_cases = [
+            // Standard format
+            "550e8400-e29b-41d4-a716-446655440000",
+            "6ba7b810-9dad-11d1-80b4-00c04fd430c8",
+            // All zeros and all f's
+            "00000000-0000-0000-0000-000000000000",
+            "ffffffff-ffff-ffff-ffff-ffffffffffff",
+            "FFFFFFFF-FFFF-FFFF-FFFF-FFFFFFFFFFFF",
+            // Mixed case
+            "550E8400-e29b-41D4-a716-446655440000",
+            "6BA7b810-9DAD-11d1-80B4-00c04fd430c8",
+            // All hex digits
+            "abcdef01-2345-6789-abcd-ef0123456789",
+            "ABCDEF01-2345-6789-ABCD-EF0123456789",
+            "deadbeef-cafe-babe-face-feeddeadbeef",
+        ];
+
+        for uuid in &valid_cases {
+            assert!(is_valid_uuid(uuid), "Expected valid UUID: {uuid}");
+        }
+
+        // Test invalid UUIDs with comprehensive patterns
+        let invalid_cases = [
+            // Empty and whitespace
+            "",
+            " ",
+            "\t",
+            "\n",
+            // Wrong length
+            "550e8400-e29b-41d4-a716-44665544000", // One char short
+            "550e8400-e29b-41d4-a716-4466554400000", // One char long
+            "550e8400-e29b-41d4-a716",             // Much too short
+            "550e8400-e29b-41d4-a716-446655440000-extra", // Extra content
+            // Invalid characters
+            "550e8400-e29b-41d4-a716-44665544000g", // 'g' not hex
+            "550e8400-e29b-41d4-a716-44665544000G", // 'G' not hex
+            "550e8400-e29b-41d4-a716-44665544000z", // 'z' not hex
+            "550e8400-e29b-41d4-a716-44665544000Z", // 'Z' not hex
+            "550e8400-e29b-41d4-a716-44665544000!", // Special char
+            "550e8400-e29b-41d4-a716-44665544000@", // @ symbol
+            "550e8400-e29b-41d4-a716-44665544000#", // # symbol
+            "550e8400-e29b-41d4-a716-44665544000$", // $ symbol
+            "550e8400-e29b-41d4-a716-44665544000%", // % symbol
+            "550e8400-e29b-41d4-a716-44665544000^", // ^ symbol
+            "550e8400-e29b-41d4-a716-44665544000&", // & symbol
+            "550e8400-e29b-41d4-a716-44665544000*", // * symbol
+            "550e8400-e29b-41d4-a716-44665544000(", // ( symbol
+            "550e8400-e29b-41d4-a716-44665544000)", // ) symbol
+            // Wrong format
+            "550e8400_e29b_41d4_a716_446655440000", // Underscores
+            "550e8400.e29b.41d4.a716.446655440000", // Dots
+            "550e8400:e29b:41d4:a716:446655440000", // Colons
+            "550e8400 e29b 41d4 a716 446655440000", // Spaces
+            // Note: UUID without hyphens is actually valid for uuid crate, so we skip that test
+
+            // Whitespace issues
+            " 550e8400-e29b-41d4-a716-446655440000", // Leading space
+            "550e8400-e29b-41d4-a716-446655440000 ", // Trailing space
+            "550e8400-e29b-41d4-a716-446655440000\n", // Newline
+            "550e8400-e29b-41d4-a716-446655440000\t", // Tab
+            "550e8400-e29b-41d4-a716-446655440000\r", // Carriage return
+            "550e8400-e29b-41d4-a716-446655440000\0", // Null byte
+            // Malformed structure
+            "550e8400--e29b-41d4-a716-446655440000", // Double dash
+            "550e8400-e29b--41d4-a716-446655440000", // Double dash
+            "550e8400-e29b-41d4--a716-446655440000", // Double dash
+            "550e8400-e29b-41d4-a716--446655440000", // Double dash
+            "-550e8400-e29b-41d4-a716-446655440000", // Leading dash
+            "550e8400-e29b-41d4-a716-446655440000-", // Trailing dash
+        ];
+
+        for uuid in &invalid_cases {
+            assert!(!is_valid_uuid(uuid), "Expected invalid UUID: '{uuid}'");
+        }
+    }
 }
