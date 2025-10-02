@@ -268,7 +268,11 @@ pub fn load_config_from_env() -> Result<McpServerConfig> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Mutex;
     use tempfile::TempDir;
+
+    // Global mutex to synchronize environment variable access across tests
+    static ENV_MUTEX: Mutex<()> = Mutex::new(());
 
     #[test]
     fn test_config_loader_default() {
@@ -280,6 +284,8 @@ mod tests {
 
     #[test]
     fn test_config_loader_with_base_config() {
+        let _lock = ENV_MUTEX.lock().unwrap();
+
         // Clear any existing environment variables
         std::env::remove_var("MCP_SERVER_NAME");
 
@@ -318,6 +324,8 @@ mod tests {
 
     #[test]
     fn test_config_loader_precedence() {
+        let _lock = ENV_MUTEX.lock().unwrap();
+
         let temp_dir = TempDir::new().unwrap();
         let config_file = temp_dir.path().join("test-config.json");
 
@@ -386,6 +394,8 @@ mod tests {
 
     #[test]
     fn test_load_config_from_env() {
+        let _lock = ENV_MUTEX.lock().unwrap();
+
         std::env::set_var("MCP_SERVER_NAME", "env-test");
         let config = load_config_from_env().unwrap();
         assert_eq!(config.server.name, "env-test");
@@ -533,6 +543,8 @@ mod tests {
 
     #[test]
     fn test_config_loader_without_validation() {
+        let _lock = ENV_MUTEX.lock().unwrap();
+
         // Clear any existing environment variables first
         std::env::remove_var("MCP_SERVER_NAME");
 
@@ -553,6 +565,8 @@ mod tests {
 
     #[test]
     fn test_config_loader_env_variable_edge_cases() {
+        let _lock = ENV_MUTEX.lock().unwrap();
+
         // Clear any existing environment variables first
         std::env::remove_var("MCP_SERVER_NAME");
 

@@ -830,7 +830,11 @@ fn parse_bool(value: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Mutex;
     use tempfile::NamedTempFile;
+
+    // Global mutex to synchronize environment variable access across tests
+    static ENV_MUTEX: Mutex<()> = Mutex::new(());
 
     #[test]
     fn test_default_config() {
@@ -866,6 +870,8 @@ mod tests {
 
     #[test]
     fn test_config_from_env() {
+        let _lock = ENV_MUTEX.lock().unwrap();
+
         // Clean up any existing environment variables first
         cleanup_env_vars();
 
@@ -1030,6 +1036,8 @@ mod tests {
 
     #[test]
     fn test_config_from_env_comprehensive() {
+        let _lock = ENV_MUTEX.lock().unwrap();
+
         // Clean up any existing environment variables first
         cleanup_env_vars();
 
@@ -1045,6 +1053,8 @@ mod tests {
 
     #[test]
     fn test_config_from_env_invalid_values() {
+        let _lock = ENV_MUTEX.lock().unwrap();
+
         // Clean up any existing environment variables first
         cleanup_env_vars();
 
