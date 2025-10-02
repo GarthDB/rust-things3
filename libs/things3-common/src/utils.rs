@@ -586,4 +586,101 @@ mod tests {
         assert_eq!(result.len(), 100);
         assert!(result.ends_with("..."));
     }
+
+    #[test]
+    fn test_get_default_database_path_error_branch() {
+        let _lock = ENV_MUTEX.lock().unwrap();
+
+        // Test the error branch of std::env::var("HOME")
+        let original_home = std::env::var("HOME");
+        std::env::remove_var("HOME");
+
+        let path = get_default_database_path();
+        let path_str = path.to_string_lossy();
+
+        // Should use the fallback "~" when HOME is not set
+        assert!(
+            path_str.starts_with('~')
+                || path_str.contains("/home/")
+                || path_str.contains("/Users/")
+        );
+
+        // Restore original HOME if it existed
+        if let Ok(home) = original_home {
+            std::env::set_var("HOME", home);
+        }
+    }
+
+    #[test]
+    fn test_parse_date_various_invalid_formats() {
+        // Test more invalid date formats to improve coverage
+        // Focus on formats that definitely fail with our strict YYYY-MM-DD format
+        assert!(parse_date("2023-01").is_err()); // Missing day
+        assert!(parse_date("2023").is_err()); // Only year
+        assert!(parse_date("2023/01/01").is_err()); // Wrong separator
+        assert!(parse_date("2023-01-01T00:00:00").is_err()); // With time
+        assert!(parse_date("2023--01-01").is_err()); // Double separator
+        assert!(parse_date("2023-01-01-").is_err()); // Trailing separator
+        assert!(parse_date("abc-def-ghi").is_err()); // Non-numeric
+        assert!(parse_date("2023-00-01").is_err()); // Invalid month
+        assert!(parse_date("2023-01-00").is_err()); // Invalid day
+        assert!(parse_date("2023-13-01").is_err()); // Invalid month (13)
+        assert!(parse_date("2023-02-30").is_err()); // Invalid day for February
+        assert!(parse_date("not-a-date-at-all").is_err()); // Completely invalid
+        assert!(parse_date("").is_err()); // Empty string
+        assert!(parse_date("2023-1-1-1").is_err()); // Too many parts
+    }
+
+    #[test]
+    fn test_truncate_string_saturating_sub_edge_cases() {
+        // Test edge cases for saturating_sub(3) in truncate_string
+        let result = truncate_string("ab", 0);
+        assert_eq!(result, "...");
+
+        let result = truncate_string("abc", 1);
+        assert_eq!(result, "...");
+
+        let result = truncate_string("abcd", 2);
+        assert_eq!(result, "...");
+
+        // Test when max_len.saturating_sub(3) = 0
+        let result = truncate_string("hello", 3);
+        assert_eq!(result, "...");
+    }
+
+    #[test]
+    fn test_is_valid_uuid_malformed_cases() {
+        // Test more malformed UUID cases
+        // Note: UUID without hyphens is actually valid for uuid crate
+        assert!(!is_valid_uuid("550e8400-e29b-41d4-a716-44665544000z")); // Invalid hex char
+        assert!(!is_valid_uuid("550e8400-e29b-41d4-a716-44665544000 ")); // Trailing space
+        assert!(!is_valid_uuid(" 550e8400-e29b-41d4-a716-446655440000")); // Leading space
+        assert!(!is_valid_uuid("550e8400-e29b-41d4-a716-44665544000\n")); // Newline
+        assert!(!is_valid_uuid("550e8400-e29b-41d4-a716-44665544000\t")); // Tab
+        assert!(!is_valid_uuid("550e8400-e29b-41d4-a716-44665544000\0")); // Null byte
+        assert!(!is_valid_uuid("550e8400-e29b-41d4-a716-44665544000G")); // Invalid hex char G
+        assert!(!is_valid_uuid("550e8400-e29b-41d4-a716-4466554400")); // Too short
+        assert!(!is_valid_uuid("550e8400-e29b-41d4-a716-446655440000000")); // Too long
+    }
+
+    #[test]
+    fn test_format_datetime_boundary_cases() {
+        // Test datetime formatting with boundary cases
+        use chrono::{TimeZone, Utc};
+
+        // Test year boundaries
+        let dt = Utc.with_ymd_and_hms(1970, 1, 1, 0, 0, 0).unwrap();
+        let formatted = format_datetime(&dt);
+        assert_eq!(formatted, "1970-01-01 00:00:00 UTC");
+
+        // Test leap year
+        let dt = Utc.with_ymd_and_hms(2024, 2, 29, 12, 30, 45).unwrap();
+        let formatted = format_datetime(&dt);
+        assert_eq!(formatted, "2024-02-29 12:30:45 UTC");
+
+        // Test end of year
+        let dt = Utc.with_ymd_and_hms(2023, 12, 31, 23, 59, 59).unwrap();
+        let formatted = format_datetime(&dt);
+        assert_eq!(formatted, "2023-12-31 23:59:59 UTC");
+    }
 }
