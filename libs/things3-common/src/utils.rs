@@ -683,4 +683,143 @@ mod tests {
         let formatted = format_datetime(&dt);
         assert_eq!(formatted, "2023-12-31 23:59:59 UTC");
     }
+
+    #[test]
+    fn test_all_public_functions_comprehensive() {
+        // Comprehensive test to ensure all public functions are exercised
+        use chrono::{TimeZone, Utc};
+
+        // Test get_default_database_path with different scenarios
+        let path = get_default_database_path();
+        assert!(!path.to_string_lossy().is_empty());
+
+        // Test format_date with various dates
+        let dates = [
+            chrono::NaiveDate::from_ymd_opt(2000, 1, 1).unwrap(),
+            chrono::NaiveDate::from_ymd_opt(2024, 12, 31).unwrap(),
+            chrono::NaiveDate::from_ymd_opt(2023, 6, 15).unwrap(),
+        ];
+        for date in &dates {
+            let formatted = format_date(date);
+            assert!(formatted.len() == 10); // YYYY-MM-DD format
+            assert!(formatted.contains('-'));
+        }
+
+        // Test format_datetime with various datetimes
+        let datetimes = [
+            Utc.with_ymd_and_hms(2000, 1, 1, 0, 0, 0).unwrap(),
+            Utc.with_ymd_and_hms(2024, 12, 31, 23, 59, 59).unwrap(),
+            Utc.with_ymd_and_hms(2023, 6, 15, 12, 30, 45).unwrap(),
+        ];
+        for dt in &datetimes {
+            let formatted = format_datetime(dt);
+            assert!(formatted.contains("UTC"));
+            assert!(formatted.len() > 15);
+        }
+
+        // Test parse_date with valid dates
+        let valid_dates = ["2023-01-01", "2024-12-31", "2000-06-15"];
+        for date_str in &valid_dates {
+            assert!(parse_date(date_str).is_ok());
+        }
+
+        // Test is_valid_uuid with various UUIDs
+        let valid_uuids = [
+            "550e8400-e29b-41d4-a716-446655440000",
+            "00000000-0000-0000-0000-000000000000",
+            "ffffffff-ffff-ffff-ffff-ffffffffffff",
+        ];
+        for uuid in &valid_uuids {
+            assert!(is_valid_uuid(uuid));
+        }
+
+        // Test truncate_string with various lengths
+        let test_string = "Hello, World! This is a test string.";
+        for len in [5, 10, 20, 50] {
+            let truncated = truncate_string(test_string, len);
+            assert!(truncated.len() <= len);
+        }
+    }
+
+    #[test]
+    fn test_function_return_types_and_signatures() {
+        // Test that functions return expected types and handle edge cases
+
+        // Test get_default_database_path returns PathBuf
+        let path = get_default_database_path();
+        assert!(path.is_absolute() || path.to_string_lossy().starts_with('~'));
+
+        // Test format_date returns String
+        let date = chrono::NaiveDate::from_ymd_opt(2023, 1, 1).unwrap();
+        let formatted = format_date(&date);
+        assert!(formatted.is_ascii());
+        assert_eq!(formatted.len(), 10);
+
+        // Test format_datetime returns String
+        let dt = chrono::Utc::now();
+        let formatted = format_datetime(&dt);
+        assert!(formatted.ends_with("UTC"));
+
+        // Test parse_date returns Result
+        assert!(parse_date("2023-01-01").is_ok());
+        assert!(parse_date("invalid").is_err());
+
+        // Test is_valid_uuid returns bool
+        assert_eq!(is_valid_uuid("550e8400-e29b-41d4-a716-446655440000"), true);
+        assert_eq!(is_valid_uuid("invalid"), false);
+
+        // Test truncate_string returns String
+        let result = truncate_string("test", 10);
+        assert_eq!(result, "test");
+    }
+
+    #[test]
+    fn test_error_path_coverage() {
+        // Ensure all error paths are covered
+
+        // Test parse_date with comprehensive invalid inputs
+        let invalid_inputs = [
+            "",
+            "invalid",
+            "2023",
+            "2023-13",
+            "2023-13-45",
+            "2023-00-01",
+            "2023-01-00",
+            "2023-02-30",
+            "2023-04-31",
+            "not-a-date",
+            "2023/01/01",
+            "01-01-2023",
+            "2023-1-1-1-1",
+            "2023-01-01T12:00:00",
+            "2023-01-01 12:00:00",
+        ];
+
+        for input in &invalid_inputs {
+            let result = parse_date(input);
+            assert!(result.is_err(), "Expected error for input: {}", input);
+        }
+
+        // Test is_valid_uuid with comprehensive invalid inputs
+        let invalid_uuids = [
+            "",
+            "invalid",
+            "550e8400",
+            "550e8400-e29b",
+            "550e8400-e29b-41d4",
+            "550e8400-e29b-41d4-a716",
+            "550e8400-e29b-41d4-a716-44665544000",
+            "550e8400-e29b-41d4-a716-4466554400000",
+            "550e8400-e29b-41d4-a716-44665544000g",
+            "550e8400-e29b-41d4-a716-44665544000 ",
+            " 550e8400-e29b-41d4-a716-446655440000",
+            "550e8400-e29b-41d4-a716-44665544000\n",
+            "550e8400-e29b-41d4-a716-44665544000\t",
+        ];
+
+        for uuid in &invalid_uuids {
+            assert!(!is_valid_uuid(uuid), "Expected false for UUID: {}", uuid);
+        }
+    }
 }
