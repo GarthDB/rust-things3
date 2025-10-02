@@ -921,6 +921,7 @@ impl DatabaseStats {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
     use tempfile::TempDir;
 
     #[tokio::test]
@@ -938,5 +939,154 @@ mod tests {
     async fn test_connection_string() {
         let result = super::ThingsDatabase::from_connection_string("sqlite::memory:").await;
         assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_task_status_from_i32() {
+        assert_eq!(TaskStatus::from_i32(0), Some(TaskStatus::Incomplete));
+        assert_eq!(TaskStatus::from_i32(1), Some(TaskStatus::Completed));
+        assert_eq!(TaskStatus::from_i32(2), Some(TaskStatus::Canceled));
+        assert_eq!(TaskStatus::from_i32(3), Some(TaskStatus::Trashed));
+        assert_eq!(TaskStatus::from_i32(4), None);
+        assert_eq!(TaskStatus::from_i32(-1), None);
+    }
+
+    #[test]
+    fn test_task_type_from_i32() {
+        assert_eq!(TaskType::from_i32(0), Some(TaskType::Todo));
+        assert_eq!(TaskType::from_i32(1), Some(TaskType::Project));
+        assert_eq!(TaskType::from_i32(2), Some(TaskType::Heading));
+        assert_eq!(TaskType::from_i32(3), Some(TaskType::Area));
+        assert_eq!(TaskType::from_i32(4), None);
+        assert_eq!(TaskType::from_i32(-1), None);
+    }
+
+    #[test]
+    fn test_database_stats_total_items() {
+        let stats = DatabaseStats {
+            task_count: 10,
+            project_count: 5,
+            area_count: 3,
+        };
+        assert_eq!(stats.total_items(), 18);
+
+        let empty_stats = DatabaseStats {
+            task_count: 0,
+            project_count: 0,
+            area_count: 0,
+        };
+        assert_eq!(empty_stats.total_items(), 0);
+    }
+
+    #[test]
+    fn test_database_pool_config_default() {
+        let config = DatabasePoolConfig::default();
+        assert_eq!(config.max_connections, 10);
+        assert_eq!(config.min_connections, 1);
+        assert_eq!(config.connect_timeout, Duration::from_secs(30));
+        assert_eq!(config.idle_timeout, Duration::from_secs(600));
+        assert_eq!(config.max_lifetime, Duration::from_secs(1800));
+        assert!(config.test_before_acquire);
+    }
+
+    #[test]
+    fn test_sqlite_optimizations_default() {
+        let opts = SqliteOptimizations::default();
+        assert!(opts.enable_wal_mode);
+        assert_eq!(opts.cache_size, -20000);
+        assert_eq!(opts.synchronous_mode, "NORMAL".to_string());
+        assert_eq!(opts.temp_store, "MEMORY".to_string());
+        assert_eq!(opts.journal_mode, "WAL".to_string());
+        assert_eq!(opts.mmap_size, 268_435_456);
+        assert!(opts.enable_foreign_keys);
+        assert!(opts.enable_query_planner);
+    }
+
+    #[test]
+    fn test_pool_health_status_creation() {
+        let status = PoolHealthStatus {
+            is_healthy: true,
+            pool_size: 8,
+            active_connections: 5,
+            idle_connections: 3,
+            max_connections: 10,
+            min_connections: 1,
+            connection_timeout: Duration::from_secs(30),
+            idle_timeout: Some(Duration::from_secs(600)),
+            max_lifetime: Some(Duration::from_secs(1800)),
+        };
+        assert!(status.is_healthy);
+        assert_eq!(status.active_connections, 5);
+        assert_eq!(status.idle_connections, 3);
+        assert_eq!(status.pool_size, 8);
+    }
+
+    #[test]
+    fn test_pool_metrics_creation() {
+        let metrics = PoolMetrics {
+            pool_size: 8,
+            active_connections: 5,
+            idle_connections: 3,
+            max_connections: 10,
+            min_connections: 1,
+            utilization_percentage: 80.0,
+            is_healthy: true,
+            response_time_ms: 50,
+            connection_timeout: Duration::from_secs(30),
+            idle_timeout: Some(Duration::from_secs(600)),
+            max_lifetime: Some(Duration::from_secs(1800)),
+        };
+        assert!(metrics.is_healthy);
+        assert_eq!(metrics.pool_size, 8);
+        assert_eq!(metrics.active_connections, 5);
+        assert_eq!(metrics.idle_connections, 3);
+        assert!((metrics.utilization_percentage - 80.0).abs() < f64::EPSILON);
+        assert_eq!(metrics.response_time_ms, 50);
+    }
+
+    #[test]
+    fn test_comprehensive_health_status_creation() {
+        let pool_health = PoolHealthStatus {
+            is_healthy: true,
+            pool_size: 8,
+            active_connections: 5,
+            idle_connections: 3,
+            max_connections: 10,
+            min_connections: 1,
+            connection_timeout: Duration::from_secs(30),
+            idle_timeout: Some(Duration::from_secs(600)),
+            max_lifetime: Some(Duration::from_secs(1800)),
+        };
+
+        let pool_metrics = PoolMetrics {
+            pool_size: 8,
+            active_connections: 5,
+            idle_connections: 3,
+            max_connections: 10,
+            min_connections: 1,
+            utilization_percentage: 80.0,
+            is_healthy: true,
+            response_time_ms: 50,
+            connection_timeout: Duration::from_secs(30),
+            idle_timeout: Some(Duration::from_secs(600)),
+            max_lifetime: Some(Duration::from_secs(1800)),
+        };
+
+        let db_stats = DatabaseStats {
+            task_count: 50,
+            project_count: 10,
+            area_count: 5,
+        };
+
+        let health_status = ComprehensiveHealthStatus {
+            overall_healthy: true,
+            pool_health,
+            pool_metrics,
+            database_stats: db_stats,
+            timestamp: Utc::now(),
+        };
+
+        assert!(health_status.overall_healthy);
+        assert_eq!(health_status.database_stats.total_items(), 65);
     }
 }
