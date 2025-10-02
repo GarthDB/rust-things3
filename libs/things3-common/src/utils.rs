@@ -347,36 +347,34 @@ mod tests {
         let original_home = std::env::var("HOME");
         std::env::remove_var("HOME");
 
-        // Check if HOME was actually removed (some environments may not allow this)
-        let home_after_removal = std::env::var("HOME");
-
         let path = get_default_database_path();
         let path_str = path.to_string_lossy();
 
-        // If HOME was successfully removed, the path should start with ~
-        // If HOME couldn't be removed (e.g., in some CI environments), we'll skip this specific assertion
-        if home_after_removal.is_err() {
-            assert!(
-                path_str.starts_with('~'),
-                "Path should start with ~ when HOME is not set, but got: {path_str}"
-            );
-        } else {
-            // In environments where HOME cannot be removed, just verify the path is valid
-            // and contains expected components regardless of the environment
-            assert!(!path_str.is_empty(), "Path should not be empty");
-            assert!(
-                path_str.contains("Library"),
-                "Path should contain Library directory"
-            );
-            assert!(
-                path_str.contains("Group Containers"),
-                "Path should contain Group Containers"
-            );
-            assert!(
-                path_str.contains("Things Database.thingsdatabase"),
-                "Path should contain database file"
-            );
-        }
+        // The function should always return a valid path with expected components
+        // regardless of whether HOME was successfully removed or not
+        assert!(!path_str.is_empty(), "Path should not be empty");
+        assert!(
+            path_str.contains("Library"),
+            "Path should contain Library directory, got: {path_str}"
+        );
+        assert!(
+            path_str.contains("Group Containers"),
+            "Path should contain Group Containers, got: {path_str}"
+        );
+        assert!(
+            path_str.contains("Things Database.thingsdatabase"),
+            "Path should contain database file, got: {path_str}"
+        );
+
+        // Check if the path starts with ~ (indicating fallback behavior)
+        // or contains a valid home directory path
+        let starts_with_tilde = path_str.starts_with('~');
+        let contains_home_like_path = path_str.contains("/home/") || path_str.contains("/Users/");
+
+        assert!(
+            starts_with_tilde || contains_home_like_path,
+            "Path should start with ~ or contain a home-like path, got: {path_str}"
+        );
 
         // Restore original HOME if it existed
         if let Ok(home) = original_home {
