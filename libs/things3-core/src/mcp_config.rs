@@ -867,9 +867,7 @@ mod tests {
     #[test]
     fn test_config_from_env() {
         // Clean up any existing environment variables first
-        std::env::remove_var("MCP_SERVER_NAME");
-        std::env::remove_var("MCP_LOG_LEVEL");
-        std::env::remove_var("MCP_CACHE_ENABLED");
+        cleanup_env_vars();
 
         std::env::set_var("MCP_SERVER_NAME", "test-server");
         std::env::set_var("MCP_LOG_LEVEL", "debug");
@@ -881,9 +879,7 @@ mod tests {
         assert!(!config.cache.enabled);
 
         // Clean up
-        std::env::remove_var("MCP_SERVER_NAME");
-        std::env::remove_var("MCP_LOG_LEVEL");
-        std::env::remove_var("MCP_CACHE_ENABLED");
+        cleanup_env_vars();
     }
 
     #[test]
@@ -1050,15 +1046,7 @@ mod tests {
     #[test]
     fn test_config_from_env_invalid_values() {
         // Clean up any existing environment variables first
-        std::env::remove_var("MCP_MAX_CONNECTIONS");
-        std::env::remove_var("MCP_CONNECTION_TIMEOUT");
-        std::env::remove_var("MCP_REQUEST_TIMEOUT");
-        std::env::remove_var("MCP_DATABASE_POOL_SIZE");
-        std::env::remove_var("MCP_SLOW_REQUEST_THRESHOLD");
-        std::env::remove_var("MCP_REQUESTS_PER_MINUTE");
-        std::env::remove_var("MCP_CACHE_MAX_SIZE_MB");
-        std::env::remove_var("MCP_METRICS_PORT");
-        std::env::remove_var("MCP_HEALTH_PORT");
+        cleanup_env_vars();
 
         // Test invalid numeric values
         std::env::set_var("MCP_MAX_CONNECTIONS", "invalid");
@@ -1075,6 +1063,9 @@ mod tests {
         let result = McpServerConfig::from_env();
         assert!(result.is_err());
         std::env::remove_var("MCP_REQUEST_TIMEOUT");
+
+        // Clean up
+        cleanup_env_vars();
     }
 
     #[test]
