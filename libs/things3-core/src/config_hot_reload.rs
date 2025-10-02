@@ -13,6 +13,7 @@ use tokio::time::interval;
 use tracing::{debug, error, info};
 
 /// Configuration hot reloader
+#[derive(Debug)]
 pub struct ConfigHotReloader {
     /// Current configuration
     config: Arc<RwLock<McpServerConfig>>,
@@ -525,5 +526,217 @@ mod tests {
                 .unwrap();
 
         assert!(reloader.reloader().is_enabled());
+    }
+
+    #[tokio::test]
+    async fn test_config_hot_reloader_nonexistent_file() {
+        let config_path = PathBuf::from("/nonexistent/config.json");
+        let config = McpServerConfig::default();
+
+        let result = ConfigHotReloader::new(config, config_path, Duration::from_secs(1));
+        assert!(result.is_err());
+        let error = result.unwrap_err();
+        assert!(matches!(error, ThingsError::Configuration { .. }));
+    }
+
+    #[tokio::test]
+    async fn test_config_hot_reloader_invalid_config_file() {
+        let temp_file = NamedTempFile::new().unwrap();
+        let config_path = temp_file.path().with_extension("json");
+
+        // Create valid config first
+        let config = McpServerConfig::default();
+        config.to_file(&config_path, "json").unwrap();
+
+        let reloader =
+            ConfigHotReloader::new(config, config_path.clone(), Duration::from_secs(1)).unwrap();
+
+        // Now write invalid JSON
+        std::fs::write(&config_path, "{ invalid json }").unwrap();
+
+        // The reloader creation succeeds, but reloading should fail
+        let result = reloader.reload_now().await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_config_hot_reloader_file_permission_error() {
+        let temp_file = NamedTempFile::new().unwrap();
+        let config_path = temp_file.path().with_extension("json");
+
+        let config = McpServerConfig::default();
+        config.to_file(&config_path, "json").unwrap();
+
+        // Create reloader first
+        let reloader =
+            ConfigHotReloader::new(config, config_path.clone(), Duration::from_secs(1)).unwrap();
+
+        // Remove the file to simulate permission error
+        std::fs::remove_file(&config_path).unwrap();
+
+        // Try to reload - should handle the error gracefully
+        let result = reloader.reload_now().await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_config_hot_reloader_concurrent_updates() {
+        let temp_file = NamedTempFile::new().unwrap();
+        let config_path = temp_file.path().with_extension("json");
+
+        let config = McpServerConfig::default();
+        config.to_file(&config_path, "json").unwrap();
+
+        let reloader =
+            ConfigHotReloader::new(config, config_path.clone(), Duration::from_secs(1)).unwrap();
+        let mut change_rx = reloader.subscribe_to_changes();
+
+        // Update config multiple times concurrently
+        let mut config1 = McpServerConfig::default();
+        config1.server.name = "config1".to_string();
+
+        let mut config2 = McpServerConfig::default();
+        config2.server.name = "config2".to_string();
+
+        // Update configs concurrently
+        let reloader_clone = Arc::new(reloader);
+        let reloader1 = Arc::clone(&reloader_clone);
+        let reloader2 = Arc::clone(&reloader_clone);
+
+        let handle1 = tokio::spawn(async move { reloader1.update_config(config1).await });
+
+        let handle2 = tokio::spawn(async move { reloader2.update_config(config2).await });
+
+        // Wait for both updates
+        let _ = handle1.await.unwrap();
+        let _ = handle2.await.unwrap();
+
+        // Should receive at least one change notification
+        let _received_config = change_rx.recv().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_config_hot_reloader_validation_error() {
+        let temp_file = NamedTempFile::new().unwrap();
+        let config_path = temp_file.path().with_extension("json");
+
+        let config = McpServerConfig::default();
+        config.to_file(&config_path, "json").unwrap();
+
+        let reloader = ConfigHotReloader::new(config, config_path, Duration::from_secs(1)).unwrap();
+
+        // Create an invalid config (empty server name should fail validation)
+        let mut invalid_config = McpServerConfig::default();
+        invalid_config.server.name = String::new(); // This should fail validation
+
+        let result = reloader.update_config(invalid_config).await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_config_hot_reloader_disabled_start() {
+        let temp_file = NamedTempFile::new().unwrap();
+        let config_path = temp_file.path().with_extension("json");
+
+        let config = McpServerConfig::default();
+        config.to_file(&config_path, "json").unwrap();
+
+        let mut reloader =
+            ConfigHotReloader::new(config, config_path, Duration::from_secs(1)).unwrap();
+        reloader.set_enabled(false);
+
+        // Start should succeed even when disabled
+        let result = reloader.start();
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_config_hot_reloader_reload_interval() {
+        let temp_file = NamedTempFile::new().unwrap();
+        let config_path = temp_file.path().with_extension("json");
+
+        let config = McpServerConfig::default();
+        config.to_file(&config_path, "json").unwrap();
+
+        let mut reloader =
+            ConfigHotReloader::new(config, config_path, Duration::from_secs(5)).unwrap();
+
+        assert_eq!(reloader.reload_interval(), Duration::from_secs(5));
+
+        reloader.set_reload_interval(Duration::from_secs(10));
+        assert_eq!(reloader.reload_interval(), Duration::from_secs(10));
+    }
+
+    #[tokio::test]
+    async fn test_config_hot_reloader_metadata_error() {
+        let temp_file = NamedTempFile::new().unwrap();
+        let config_path = temp_file.path().with_extension("json");
+
+        let config = McpServerConfig::default();
+        config.to_file(&config_path, "json").unwrap();
+
+        let reloader =
+            ConfigHotReloader::new(config, config_path.clone(), Duration::from_secs(1)).unwrap();
+
+        // Remove the file to cause metadata error
+        std::fs::remove_file(&config_path).unwrap();
+
+        // This should handle the error gracefully
+        let result = reloader.reload_now().await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_config_hot_reloader_with_handler_start() {
+        let temp_file = NamedTempFile::new().unwrap();
+        let config_path = temp_file.path().with_extension("json");
+
+        let config = McpServerConfig::default();
+        config.to_file(&config_path, "json").unwrap();
+
+        let handler = Arc::new(DefaultConfigChangeHandler);
+        let reloader =
+            ConfigHotReloaderWithHandler::new(config, config_path, Duration::from_secs(1), handler)
+                .unwrap();
+
+        // Start with handler should succeed
+        let result = reloader.start_with_handler();
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_config_hot_reloader_file_modified_time() {
+        let temp_file = NamedTempFile::new().unwrap();
+        let config_path = temp_file.path().with_extension("json");
+
+        let config = McpServerConfig::default();
+        config.to_file(&config_path, "json").unwrap();
+
+        // Test getting file modified time
+        let modified_time = ConfigHotReloader::get_file_modified_time(&config_path);
+        assert!(modified_time.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_config_hot_reloader_file_modified_time_nonexistent() {
+        let config_path = PathBuf::from("/nonexistent/file.json");
+
+        // Test getting file modified time for nonexistent file
+        let result = ConfigHotReloader::get_file_modified_time(&config_path);
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_config_hot_reloader_config_path() {
+        let temp_file = NamedTempFile::new().unwrap();
+        let config_path = temp_file.path().with_extension("json");
+
+        let config = McpServerConfig::default();
+        config.to_file(&config_path, "json").unwrap();
+
+        let reloader =
+            ConfigHotReloader::new(config, config_path.clone(), Duration::from_secs(1)).unwrap();
+
+        assert_eq!(reloader.config_path(), &config_path);
     }
 }

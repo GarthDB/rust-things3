@@ -262,9 +262,7 @@ pub fn load_config_with_paths<P: AsRef<Path>>(config_paths: Vec<P>) -> Result<Mc
 /// # Errors
 /// Returns an error if configuration cannot be loaded
 pub fn load_config_from_env() -> Result<McpServerConfig> {
-    ConfigLoader::new()
-        .with_config_paths::<String>(vec![])
-        .load()
+    McpServerConfig::from_env()
 }
 
 #[cfg(test)]
@@ -282,12 +280,20 @@ mod tests {
 
     #[test]
     fn test_config_loader_with_base_config() {
+        // Clear any existing environment variables
+        std::env::remove_var("MCP_SERVER_NAME");
+
         let mut base_config = McpServerConfig::default();
         base_config.server.name = "test-server".to_string();
 
         let loader = ConfigLoader::new()
             .with_base_config(base_config.clone())
+            .with_config_paths::<String>(vec![])
             .without_env_loading();
+
+        // Debug: Check if load_from_env is actually false
+        assert!(!loader.load_from_env);
+
         let loaded_config = loader.load().unwrap();
         assert_eq!(loaded_config.server.name, "test-server");
     }
@@ -323,7 +329,9 @@ mod tests {
         // Set environment variable
         std::env::set_var("MCP_SERVER_NAME", "env-server");
 
-        let loader = ConfigLoader::new().with_config_paths(vec![&config_file]);
+        let loader = ConfigLoader::new()
+            .with_config_paths(vec![&config_file])
+            .with_config_paths::<String>(vec![]); // Clear default paths
 
         let loaded_config = loader.load().unwrap();
         // Environment should take precedence
@@ -382,5 +390,256 @@ mod tests {
         let config = load_config_from_env().unwrap();
         assert_eq!(config.server.name, "env-test");
         std::env::remove_var("MCP_SERVER_NAME");
+    }
+
+    #[test]
+    fn test_config_loader_with_validation_disabled() {
+        let loader = ConfigLoader::new().with_validation(false);
+        let config = loader.load().unwrap();
+        assert!(!config.server.name.is_empty());
+    }
+
+    #[test]
+    fn test_config_loader_with_env_loading_disabled() {
+        let loader = ConfigLoader::new().with_env_loading(false);
+        let config = loader.load().unwrap();
+        // Should still load from files and defaults
+        assert!(!config.server.name.is_empty());
+    }
+
+    #[test]
+    fn test_config_loader_invalid_json_file() {
+        let temp_dir = TempDir::new().unwrap();
+        let config_file = temp_dir.path().join("invalid.json");
+
+        // Write invalid JSON
+        std::fs::write(&config_file, "{ invalid json }").unwrap();
+
+        let loader = ConfigLoader::new()
+            .with_config_paths(vec![&config_file])
+            .with_env_loading(false);
+
+        // Should handle invalid JSON gracefully and continue with defaults
+        let config = loader.load().unwrap();
+        assert!(!config.server.name.is_empty());
+    }
+
+    #[test]
+    fn test_config_loader_invalid_yaml_file() {
+        let temp_dir = TempDir::new().unwrap();
+        let config_file = temp_dir.path().join("invalid.yaml");
+
+        // Write invalid YAML
+        std::fs::write(&config_file, "invalid: yaml: content: [").unwrap();
+
+        let loader = ConfigLoader::new()
+            .with_config_paths(vec![&config_file])
+            .with_env_loading(false);
+
+        // Should handle invalid YAML gracefully and continue with defaults
+        let config = loader.load().unwrap();
+        assert!(!config.server.name.is_empty());
+    }
+
+    #[test]
+    fn test_config_loader_file_permission_error() {
+        let temp_dir = TempDir::new().unwrap();
+        let config_file = temp_dir.path().join("permission.json");
+
+        // Create file first
+        let mut config = McpServerConfig::default();
+        config.server.name = "test".to_string();
+        config.to_file(&config_file, "json").unwrap();
+
+        // Remove read permission (Unix only)
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mut perms = std::fs::metadata(&config_file).unwrap().permissions();
+            perms.set_mode(0o000); // No permissions
+            std::fs::set_permissions(&config_file, perms).unwrap();
+        }
+
+        let loader = ConfigLoader::new()
+            .with_config_paths(vec![&config_file])
+            .with_env_loading(false);
+
+        // Should handle permission error gracefully and continue with defaults
+        let config = loader.load().unwrap();
+        assert!(!config.server.name.is_empty());
+
+        // Restore permissions for cleanup
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mut perms = std::fs::metadata(&config_file).unwrap().permissions();
+            perms.set_mode(0o644);
+            std::fs::set_permissions(&config_file, perms).unwrap();
+        }
+    }
+
+    #[test]
+    fn test_config_loader_multiple_files_precedence() {
+        let temp_dir = TempDir::new().unwrap();
+        let file1 = temp_dir.path().join("config1.json");
+        let file2 = temp_dir.path().join("config2.json");
+
+        // Create two config files with different values
+        let mut config1 = McpServerConfig::default();
+        config1.server.name = "config1".to_string();
+        config1.to_file(&file1, "json").unwrap();
+
+        let mut config2 = McpServerConfig::default();
+        config2.server.name = "config2".to_string();
+        config2.to_file(&file2, "json").unwrap();
+
+        // Load with both files - later files should take precedence
+        let loader = ConfigLoader::new()
+            .with_config_paths(vec![&file1, &file2])
+            .with_env_loading(false);
+
+        let config = loader.load().unwrap();
+        assert_eq!(config.server.name, "config2");
+    }
+
+    #[test]
+    fn test_config_loader_empty_config_paths() {
+        let loader = ConfigLoader::new()
+            .with_config_paths::<String>(vec![])
+            .with_env_loading(false);
+
+        // Should load with defaults only
+        let config = loader.load().unwrap();
+        assert!(!config.server.name.is_empty());
+    }
+
+    #[test]
+    fn test_config_loader_validation_error() {
+        // Test validation by creating a config with invalid values directly
+        let mut invalid_config = McpServerConfig::default();
+        invalid_config.server.name = String::new(); // This should fail validation
+
+        let loader = ConfigLoader::new()
+            .with_base_config(invalid_config)
+            .with_config_paths::<String>(vec![])
+            .with_env_loading(false);
+
+        // Should fail validation
+        let result = loader.load();
+        assert!(result.is_err());
+        let error = result.unwrap_err();
+        assert!(matches!(error, ThingsError::Configuration { .. }));
+    }
+
+    #[test]
+    fn test_config_loader_without_validation() {
+        // Clear any existing environment variables first
+        std::env::remove_var("MCP_SERVER_NAME");
+
+        // Create a config with invalid values directly
+        let mut invalid_config = McpServerConfig::default();
+        invalid_config.server.name = String::new(); // This should fail validation
+
+        let loader = ConfigLoader::new()
+            .with_base_config(invalid_config)
+            .with_config_paths::<String>(vec![])
+            .with_env_loading(false)
+            .with_validation(false);
+
+        // Should succeed without validation
+        let config = loader.load().unwrap();
+        assert_eq!(config.server.name, "");
+    }
+
+    #[test]
+    fn test_config_loader_env_variable_edge_cases() {
+        // Clear any existing environment variables first
+        std::env::remove_var("MCP_SERVER_NAME");
+
+        // Test empty environment variable
+        std::env::set_var("MCP_SERVER_NAME", "");
+        let config = load_config_from_env().unwrap();
+        assert_eq!(config.server.name, "");
+        std::env::remove_var("MCP_SERVER_NAME");
+
+        // Test very long environment variable
+        let long_name = "a".repeat(1000);
+        std::env::set_var("MCP_SERVER_NAME", &long_name);
+        let config = load_config_from_env().unwrap();
+        assert_eq!(config.server.name, long_name);
+        std::env::remove_var("MCP_SERVER_NAME");
+
+        // Test special characters
+        std::env::set_var("MCP_SERVER_NAME", "test-server-123_!@#$%^&*()");
+        let config = load_config_from_env().unwrap();
+        assert_eq!(config.server.name, "test-server-123_!@#$%^&*()");
+        std::env::remove_var("MCP_SERVER_NAME");
+    }
+
+    #[test]
+    fn test_config_loader_create_all_sample_configs() {
+        let temp_dir = TempDir::new().unwrap();
+        let original_dir = std::env::current_dir().unwrap();
+
+        // Change to temp directory
+        std::env::set_current_dir(temp_dir.path()).unwrap();
+
+        // Create sample configs
+        let result = ConfigLoader::create_all_sample_configs();
+        assert!(result.is_ok());
+
+        // Check that files were created
+        assert!(PathBuf::from("mcp-config.json").exists());
+        assert!(PathBuf::from("mcp-config.yaml").exists());
+
+        // Restore original directory
+        std::env::set_current_dir(original_dir).unwrap();
+    }
+
+    #[test]
+    fn test_config_loader_create_sample_config_json() {
+        let temp_dir = TempDir::new().unwrap();
+        let json_file = temp_dir.path().join("sample.json");
+
+        let result = ConfigLoader::create_sample_config(&json_file, "json");
+        assert!(result.is_ok());
+        assert!(json_file.exists());
+
+        // Verify it's valid JSON
+        let content = std::fs::read_to_string(&json_file).unwrap();
+        let _: serde_json::Value = serde_json::from_str(&content).unwrap();
+    }
+
+    #[test]
+    fn test_config_loader_create_sample_config_yaml() {
+        let temp_dir = TempDir::new().unwrap();
+        let yaml_file = temp_dir.path().join("sample.yaml");
+
+        let result = ConfigLoader::create_sample_config(&yaml_file, "yaml");
+        assert!(result.is_ok());
+        assert!(yaml_file.exists());
+
+        // Verify it's valid YAML
+        let content = std::fs::read_to_string(&yaml_file).unwrap();
+        let _: serde_yaml::Value = serde_yaml::from_str(&content).unwrap();
+    }
+
+    #[test]
+    fn test_config_loader_create_sample_config_invalid_format() {
+        let temp_dir = TempDir::new().unwrap();
+        let file = temp_dir.path().join("sample.txt");
+
+        let result = ConfigLoader::create_sample_config(&file, "invalid");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_config_loader_directory_creation_error() {
+        // Test with a path that should fail directory creation
+        let invalid_path = PathBuf::from("/root/nonexistent/things3-mcp");
+
+        // This should fail on most systems due to permissions
+        let result = ConfigLoader::create_sample_config(&invalid_path, "json");
+        assert!(result.is_err());
     }
 }
