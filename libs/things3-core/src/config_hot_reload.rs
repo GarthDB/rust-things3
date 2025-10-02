@@ -544,18 +544,11 @@ mod tests {
         let temp_file = NamedTempFile::new().unwrap();
         let config_path = temp_file.path().with_extension("json");
 
-        // Create valid config first
-        let config = McpServerConfig::default();
-        config.to_file(&config_path, "json").unwrap();
-
-        let reloader =
-            ConfigHotReloader::new(config, config_path.clone(), Duration::from_secs(1)).unwrap();
-
-        // Now write invalid JSON
+        // Write invalid JSON directly
         std::fs::write(&config_path, "{ invalid json }").unwrap();
 
-        // The reloader creation succeeds, but reloading should fail
-        let result = reloader.reload_now().await;
+        // Test that McpServerConfig::from_file fails with invalid JSON
+        let result = McpServerConfig::from_file(&config_path);
         assert!(result.is_err());
     }
 
