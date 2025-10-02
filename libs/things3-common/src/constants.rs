@@ -174,4 +174,114 @@ mod tests {
         assert!(DATE_FORMATS.contains(&"%Y-%m-%d"));
         assert!(DATETIME_FORMATS.iter().any(|&f| f.contains("UTC")));
     }
+
+    #[test]
+    fn test_constants_comprehensive_coverage() {
+        // Comprehensive testing to ensure all constants are covered
+
+        // Test all date formats individually
+        for (i, format) in DATE_FORMATS.iter().enumerate() {
+            assert!(format.contains('%'), "Date format {i} should contain %");
+            assert!(format.contains('Y'), "Date format {i} should contain Y");
+            assert!(!format.is_empty(), "Date format {i} should not be empty");
+        }
+
+        // Test all datetime formats individually
+        for (i, format) in DATETIME_FORMATS.iter().enumerate() {
+            assert!(format.contains('%'), "DateTime format {i} should contain %");
+            assert!(format.contains('Y'), "DateTime format {i} should contain Y");
+            assert!(
+                !format.is_empty(),
+                "DateTime format {i} should not be empty"
+            );
+        }
+
+        // Test string constants with various operations
+        let db_filename_upper = DATABASE_FILENAME.to_uppercase();
+        assert!(db_filename_upper.contains("SQLITE"));
+
+        let db_dir_lower = DATABASE_DIR.to_lowercase();
+        assert!(db_dir_lower.contains("things"));
+
+        let container_parts: Vec<&str> = THINGS_CONTAINER.split('.').collect();
+        assert!(container_parts.len() >= 3);
+
+        // Test numeric constants in calculations
+        let total_limit = DEFAULT_QUERY_LIMIT + MAX_QUERY_LIMIT;
+        assert!(total_limit > DEFAULT_QUERY_LIMIT);
+        assert!(total_limit > MAX_QUERY_LIMIT);
+
+        let port_range = DEFAULT_MCP_PORT as u32 + 1000;
+        assert!(port_range > DEFAULT_MCP_PORT as u32);
+
+        // Test array operations
+        let date_format_count = DATE_FORMATS.len();
+        let datetime_format_count = DATETIME_FORMATS.len();
+        assert!(date_format_count > 0);
+        assert!(datetime_format_count > 0);
+
+        // Test first and last elements
+        let first_date_format = DATE_FORMATS.first().unwrap();
+        let last_date_format = DATE_FORMATS.last().unwrap();
+        assert!(!first_date_format.is_empty());
+        assert!(!last_date_format.is_empty());
+
+        let first_datetime_format = DATETIME_FORMATS.first().unwrap();
+        let last_datetime_format = DATETIME_FORMATS.last().unwrap();
+        assert!(!first_datetime_format.is_empty());
+        assert!(!last_datetime_format.is_empty());
+    }
+
+    #[test]
+    fn test_constants_edge_cases_and_boundaries() {
+        // Test edge cases and boundary conditions
+
+        // Test string constants are not just whitespace
+        assert!(!DATABASE_FILENAME.trim().is_empty());
+        assert!(!DATABASE_DIR.trim().is_empty());
+        assert!(!THINGS_CONTAINER.trim().is_empty());
+
+        // Test numeric constants are within reasonable ranges
+        assert!(DEFAULT_QUERY_LIMIT > 0);
+        assert!(DEFAULT_QUERY_LIMIT <= MAX_QUERY_LIMIT);
+        assert!(MAX_QUERY_LIMIT > DEFAULT_QUERY_LIMIT);
+        assert!(DEFAULT_MCP_PORT > 1024); // Above system ports
+        assert!(DEFAULT_MCP_PORT < 65535); // Within valid port range
+
+        // Test array constants have expected structure
+        for format in DATE_FORMATS {
+            // Each format should have at least one format specifier
+            let percent_count = format.chars().filter(|&c| c == '%').count();
+            assert!(
+                percent_count > 0,
+                "Format should have at least one % specifier: {format}"
+            );
+        }
+
+        for format in DATETIME_FORMATS {
+            // Each format should have at least one format specifier
+            let percent_count = format.chars().filter(|&c| c == '%').count();
+            assert!(
+                percent_count > 0,
+                "Format should have at least one % specifier: {format}"
+            );
+        }
+
+        // Test string constants have expected patterns
+        assert!(DATABASE_FILENAME.ends_with(".sqlite"));
+        assert!(DATABASE_DIR.contains("Database"));
+        assert!(THINGS_CONTAINER.contains("com.culturedcode"));
+
+        // Test that constants can be used in various contexts
+        let _as_bytes = DATABASE_FILENAME.as_bytes();
+        let _as_chars: Vec<char> = DATABASE_DIR.chars().collect();
+        let _as_string = THINGS_CONTAINER.to_string();
+
+        // Test array iteration
+        let mut date_format_iter = DATE_FORMATS.iter();
+        assert!(date_format_iter.next().is_some());
+
+        let mut datetime_format_iter = DATETIME_FORMATS.iter();
+        assert!(datetime_format_iter.next().is_some());
+    }
 }

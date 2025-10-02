@@ -822,4 +822,141 @@ mod tests {
             assert!(!is_valid_uuid(uuid), "Expected false for UUID: {uuid}");
         }
     }
+
+    #[test]
+    fn test_additional_edge_cases_for_codecov() {
+        // Additional edge cases that might be missing in CI coverage
+
+        // Test get_default_database_path with various HOME scenarios
+        let _lock = ENV_MUTEX.lock().unwrap();
+        let original_home = std::env::var("HOME");
+
+        // Test with empty HOME
+        std::env::set_var("HOME", "");
+        let path_empty = get_default_database_path();
+        assert!(!path_empty.to_string_lossy().is_empty());
+
+        // Test with very long HOME path
+        let long_home = "/".repeat(100);
+        std::env::set_var("HOME", &long_home);
+        let path_long = get_default_database_path();
+        assert!(path_long.to_string_lossy().contains("Library"));
+
+        // Test with HOME containing special characters
+        std::env::set_var("HOME", "/home/user with spaces & symbols!");
+        let path_special = get_default_database_path();
+        assert!(path_special.to_string_lossy().contains("Library"));
+
+        // Restore original HOME
+        match original_home {
+            Ok(home) => std::env::set_var("HOME", home),
+            Err(_) => std::env::remove_var("HOME"),
+        }
+
+        // Test truncate_string with extreme edge cases
+        assert_eq!(truncate_string("", 0), "");
+        assert_eq!(truncate_string("a", 0), "...");
+        assert_eq!(truncate_string("ab", 1), "...");
+        assert_eq!(truncate_string("abc", 2), "...");
+        assert_eq!(truncate_string("abcd", 3), "...");
+        assert_eq!(truncate_string("abcde", 4), "a...");
+
+        // Test with Unicode edge cases
+        assert_eq!(truncate_string("🦀", 1), "...");
+        assert_eq!(truncate_string("🦀🦀", 2), "...");
+        assert_eq!(truncate_string("🦀🦀🦀", 3), "...");
+
+        // Test parse_date with more edge cases
+        assert!(parse_date("9999-12-31").is_ok()); // Far future date
+        assert!(parse_date("1000-01-01").is_ok()); // Far past date
+        assert!(parse_date("2024-02-29").is_ok()); // Leap year
+        assert!(parse_date("2023-02-29").is_err()); // Non-leap year Feb 29
+        assert!(parse_date("2023-04-31").is_err()); // April 31st doesn't exist
+        assert!(parse_date("2023-06-31").is_err()); // June 31st doesn't exist
+        assert!(parse_date("2023-09-31").is_err()); // September 31st doesn't exist
+        assert!(parse_date("2023-11-31").is_err()); // November 31st doesn't exist
+
+        // Test is_valid_uuid with more edge cases
+        assert!(!is_valid_uuid("550e8400-e29b-41d4-a716-44665544000X")); // Invalid char at end
+        assert!(!is_valid_uuid("X50e8400-e29b-41d4-a716-446655440000")); // Invalid char at start
+        assert!(!is_valid_uuid("550e8400-e29b-41d4-a716-44665544000")); // One char short
+        assert!(!is_valid_uuid("550e8400-e29b-41d4-a716-4466554400000")); // One char long
+        assert!(!is_valid_uuid("550e8400-e29b-41d4-a716-44665544000\r")); // Carriage return
+        assert!(!is_valid_uuid("550e8400-e29b-41d4-a716-44665544000\0")); // Null terminator
+
+        // Test format functions with edge cases
+        let min_date = chrono::NaiveDate::from_ymd_opt(1, 1, 1).unwrap();
+        let formatted_min = format_date(&min_date);
+        assert_eq!(formatted_min, "0001-01-01");
+
+        let max_date = chrono::NaiveDate::from_ymd_opt(9999, 12, 31).unwrap();
+        let formatted_max = format_date(&max_date);
+        assert_eq!(formatted_max, "9999-12-31");
+    }
+
+    #[test]
+    fn test_format_functions_comprehensive() {
+        use chrono::{TimeZone, Utc};
+
+        // Test format_date with all months
+        for month in 1..=12 {
+            let date = chrono::NaiveDate::from_ymd_opt(2023, month, 1).unwrap();
+            let formatted = format_date(&date);
+            assert!(formatted.contains(&format!("{month:02}")));
+        }
+
+        // Test format_datetime with various times
+        let times = [
+            (0, 0, 0),    // Midnight
+            (12, 0, 0),   // Noon
+            (23, 59, 59), // End of day
+            (1, 1, 1),    // Early morning
+            (13, 30, 45), // Afternoon
+        ];
+
+        for (hour, min, sec) in times {
+            let dt = Utc.with_ymd_and_hms(2023, 6, 15, hour, min, sec).unwrap();
+            let formatted = format_datetime(&dt);
+            assert!(formatted.contains(&format!("{hour:02}:{min:02}:{sec:02}")));
+            assert!(formatted.ends_with("UTC"));
+        }
+    }
+
+    #[test]
+    fn test_comprehensive_uuid_validation() {
+        // Test all valid UUID formats
+        let valid_uuids = [
+            "00000000-0000-0000-0000-000000000000", // All zeros
+            "ffffffff-ffff-ffff-ffff-ffffffffffff", // All f's
+            "FFFFFFFF-FFFF-FFFF-FFFF-FFFFFFFFFFFF", // All F's (uppercase)
+            "12345678-1234-1234-1234-123456789abc", // Mixed
+            "abcdef01-2345-6789-abcd-ef0123456789", // All hex chars
+            "550e8400-e29b-41d4-a716-446655440000", // Standard format
+            "6ba7b810-9dad-11d1-80b4-00c04fd430c8", // Another valid UUID
+            "6ba7b811-9dad-11d1-80b4-00c04fd430c8", // Slight variation
+        ];
+
+        for uuid in &valid_uuids {
+            assert!(is_valid_uuid(uuid), "Expected valid UUID: {uuid}");
+        }
+
+        // Test invalid UUIDs with specific patterns
+        let invalid_patterns = [
+            "550e8400-e29b-41d4-a716-44665544000g", // 'g' is not hex
+            "550e8400-e29b-41d4-a716-44665544000G", // 'G' is not hex
+            "550e8400-e29b-41d4-a716-44665544000z", // 'z' is not hex
+            "550e8400-e29b-41d4-a716-44665544000Z", // 'Z' is not hex
+            "550e8400-e29b-41d4-a716-44665544000-", // Dash at end
+            "550e8400-e29b-41d4-a716-44665544000+", // Plus at end
+            "550e8400-e29b-41d4-a716-44665544000=", // Equals at end
+            "550e8400-e29b-41d4-a716-44665544000@", // At symbol
+            "550e8400-e29b-41d4-a716-44665544000#", // Hash
+            "550e8400-e29b-41d4-a716-44665544000$", // Dollar
+            "550e8400-e29b-41d4-a716-44665544000%", // Percent
+        ];
+
+        for uuid in &invalid_patterns {
+            assert!(!is_valid_uuid(uuid), "Expected invalid UUID: {uuid}");
+        }
+    }
 }
