@@ -299,7 +299,7 @@ mod tests {
         assert_eq!(DATABASE_FILENAME.len(), 11); // "main.sqlite"
         assert!(DATABASE_FILENAME.starts_with("main"));
         assert!(DATABASE_FILENAME.ends_with(".sqlite"));
-        assert!(DATABASE_FILENAME.contains("."));
+        assert!(DATABASE_FILENAME.contains('.'));
         // Test DATABASE_FILENAME operations - skip is_empty() as it's always false for const
         assert!(DATABASE_FILENAME.is_ascii());
 
@@ -313,7 +313,7 @@ mod tests {
         assert!(DATABASE_DIR.starts_with("Things"));
         assert!(DATABASE_DIR.ends_with(".thingsdatabase"));
         assert!(DATABASE_DIR.contains("Database"));
-        assert!(DATABASE_DIR.contains(" "));
+        assert!(DATABASE_DIR.contains(' '));
         // Skip is_empty() as it's always false for const
         assert!(DATABASE_DIR.is_ascii());
 
@@ -469,8 +469,8 @@ mod tests {
         let port_as_u32 = u32::from(DEFAULT_MCP_PORT);
         assert_eq!(port_as_u32, 3000);
 
-        let port_as_i32 = i32::from(DEFAULT_MCP_PORT);
-        assert_eq!(port_as_i32, 3000);
+        let port_as_i32_value = i32::from(DEFAULT_MCP_PORT);
+        assert_eq!(port_as_i32_value, 3000);
 
         // Test type compatibility - verify constants can be used in their expected contexts
         let default_limit: usize = DEFAULT_QUERY_LIMIT;

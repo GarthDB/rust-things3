@@ -4,6 +4,16 @@ use chrono::{DateTime, NaiveDate, Utc};
 use std::path::PathBuf;
 
 /// Get the default Things 3 database path
+///
+/// # Examples
+///
+/// ```
+/// use things3_common::get_default_database_path;
+///
+/// let path = get_default_database_path();
+/// assert!(!path.to_string_lossy().is_empty());
+/// assert!(path.to_string_lossy().contains("Library"));
+/// ```
 #[must_use]
 pub fn get_default_database_path() -> PathBuf {
     let home = std::env::var("HOME").unwrap_or_else(|_| "~".to_string());
@@ -39,6 +49,16 @@ pub fn is_valid_uuid(uuid_str: &str) -> bool {
 }
 
 /// Truncate a string to a maximum length
+///
+/// # Examples
+///
+/// ```
+/// use things3_common::truncate_string;
+///
+/// assert_eq!(truncate_string("hello world", 5), "he...");
+/// assert_eq!(truncate_string("hi", 10), "hi");
+/// assert_eq!(truncate_string("test", 3), "...");
+/// ```
 #[must_use]
 pub fn truncate_string(s: &str, max_len: usize) -> String {
     if s.len() <= max_len {
