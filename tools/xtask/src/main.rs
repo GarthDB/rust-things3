@@ -1753,7 +1753,7 @@ fn test_function_output_and_behavior() {
     ];
 
     for (i, func) in functions_to_test.iter().enumerate() {
-        let result = std::panic::catch_unwind(|| func());
+        let result = std::panic::catch_unwind(func);
         assert!(result.is_ok(), "Function {} should not panic", i);
     }
 }
@@ -1817,13 +1817,13 @@ fn test_cli_struct_construction() {
     for cli in test_cases {
         // Just verify the struct is valid by accessing its command field
         match cli.command {
-            Commands::Analyze => assert!(true),
-            Commands::PerfTest => assert!(true),
-            Commands::SetupHooks => assert!(true),
-            Commands::GenerateTests { target: _ } => assert!(true),
-            Commands::GenerateCode { code: _ } => assert!(true),
-            Commands::LocalDev { action: _ } => assert!(true),
-            Commands::Things { action: _ } => assert!(true),
+            Commands::Analyze => {}
+            Commands::PerfTest => {}
+            Commands::SetupHooks => {}
+            Commands::GenerateTests { target: _ } => {}
+            Commands::GenerateCode { code: _ } => {}
+            Commands::LocalDev { action: _ } => {}
+            Commands::Things { action: _ } => {}
         }
     }
 }
