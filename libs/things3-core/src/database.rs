@@ -5,7 +5,7 @@ use crate::{
 use chrono::{DateTime, NaiveDate, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::{pool::PoolOptions, Row, SqlitePool};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::time::Duration;
 use tracing::{debug, error, info, instrument};
 use uuid::Uuid;
@@ -917,6 +917,25 @@ impl DatabaseStats {
     pub fn total_items(&self) -> u64 {
         self.task_count + self.project_count + self.area_count
     }
+}
+
+/// Get the default Things 3 database path
+///
+/// # Examples
+///
+/// ```
+/// use things3_core::get_default_database_path;
+///
+/// let path = get_default_database_path();
+/// assert!(!path.to_string_lossy().is_empty());
+/// assert!(path.to_string_lossy().contains("Library"));
+/// ```
+#[must_use]
+pub fn get_default_database_path() -> PathBuf {
+    let home = std::env::var("HOME").unwrap_or_else(|_| "~".to_string());
+    PathBuf::from(format!(
+        "{home}/Library/Group Containers/JLMPQHK86H.com.culturedcode.ThingsMac/ThingsData-0Z0Z2/Things Database.thingsdatabase/main.sqlite"
+    ))
 }
 
 #[cfg(test)]

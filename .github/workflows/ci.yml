@@ -43,38 +43,6 @@ jobs:
     - name: Run clippy
       run: cargo clippy --all-targets --all-features -- -D warnings
 
-  # Run tests
-  test:
-    name: Test Suite
-    runs-on: ubuntu-latest
-    needs: lint
-    
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-    
-    - name: Install Rust
-      uses: dtolnay/rust-toolchain@stable
-      with:
-        components: llvm-tools-preview
-    
-    - name: Cache cargo registry
-      uses: actions/cache@v4
-      with:
-        path: |
-          ~/.cargo/registry
-          ~/.cargo/git
-          target
-        key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-        restore-keys: |
-          ${{ runner.os }}-cargo-
-    
-    - name: Run tests
-      run: cargo test --workspace --features test-utils
-    
-    - name: Run integration tests
-      run: cargo test --workspace --features test-utils --test '*'
-
   # Security audit
   security:
     name: Security Audit
@@ -98,11 +66,11 @@ jobs:
       # dependency and we don't directly use the affected MySQL binary protocol features
       run: cargo audit --ignore RUSTSEC-2023-0071 --ignore RUSTSEC-2024-0363
 
-  # Code coverage
-  coverage:
-    name: Code Coverage
+  # Combined test and coverage job - runs tests once and generates coverage
+  test-and-coverage:
+    name: Test and Coverage
     runs-on: ubuntu-latest
-    needs: test
+    needs: lint
     
     steps:
     - name: Checkout code
@@ -129,55 +97,61 @@ jobs:
     - name: Install cargo-llvm-cov
       run: cargo install cargo-llvm-cov
     
-    - name: Run coverage analysis
+    - name: Set up LLVM tools environment
       run: |
-        # Debug information
-        echo "Rust version: $(rustc --version)"
-        echo "Cargo version: $(cargo --version)"
-        echo "cargo-llvm-cov version: $(cargo llvm-cov --version)"
-        echo "LLVM tools available:"
-        rustup component list --installed | grep llvm || echo "No LLVM tools found"
+        echo "Setting up LLVM tools environment..."
+        RUST_SYSROOT=$(rustc --print sysroot)
+        TARGET=$(rustc -vV | grep host | cut -d' ' -f2)
+        LLVM_COV_PATH="$RUST_SYSROOT/lib/rustlib/$TARGET/bin/llvm-cov"
+        LLVM_PROFDATA_PATH="$RUST_SYSROOT/lib/rustlib/$TARGET/bin/llvm-profdata"
         
-        # Set LLVM environment variables for cargo-llvm-cov
-        export LLVM_COV=$(find ~/.rustup -name "llvm-cov" -type f | head -1)
-        export LLVM_PROFDATA=$(find ~/.rustup -name "llvm-profdata" -type f | head -1)
-        echo "LLVM_COV: $LLVM_COV"
-        echo "LLVM_PROFDATA: $LLVM_PROFDATA"
+        echo "LLVM_COV=$LLVM_COV_PATH" >> $GITHUB_ENV
+        echo "LLVM_PROFDATA=$LLVM_PROFDATA_PATH" >> $GITHUB_ENV
+        
+        # Verify the tools exist
+        if [ -f "$LLVM_COV_PATH" ]; then
+          echo "✅ llvm-cov found at $LLVM_COV_PATH"
+        else
+          echo "❌ llvm-cov not found, searching..."
+          find "$RUST_SYSROOT" -name "llvm-cov" -type f 2>/dev/null || echo "No llvm-cov found"
+        fi
+    
+    - name: Run tests with coverage
+      run: |
+        echo "Running tests with coverage analysis..."
         
         # Clean previous coverage data
         cargo llvm-cov clean
         
-        # Generate LCOV report (required for Codecov)
-        echo "Generating LCOV report..."
-        cargo llvm-cov --workspace --features test-utils --lcov --output-path lcov.info
+        # Run tests and generate coverage in one step
+        echo "Running workspace tests with coverage..."
+        cargo llvm-cov --workspace --all-features --lcov --output-path lcov.info
         
-        # Generate HTML report
+        # Generate additional report formats
         echo "Generating HTML report..."
-        cargo llvm-cov --workspace --features test-utils --html --output-dir target/llvm-cov/html
+        cargo llvm-cov --workspace --all-features --html --output-dir target/llvm-cov/html --no-run
         
-        # Generate JSON report
         echo "Generating JSON report..."
-        cargo llvm-cov --workspace --features test-utils --json --output-path coverage.json
+        cargo llvm-cov --workspace --all-features --json --output-path coverage.json --no-run
         
-        # Generate Cobertura report
         echo "Generating Cobertura report..."
-        cargo llvm-cov --workspace --features test-utils --cobertura --output-path cobertura.xml
+        cargo llvm-cov --workspace --all-features --cobertura --output-path cobertura.xml --no-run
         
-        # Generate text report
         echo "Generating text report..."
-        cargo llvm-cov --workspace --features test-utils --text --output-path coverage.txt
+        cargo llvm-cov --workspace --all-features --text --output-path coverage.txt --no-run
         
-        echo "Coverage analysis completed successfully!"
+        echo "Coverage analysis completed!"
     
     - name: Upload coverage to Codecov
-      uses: codecov/codecov-action@v4
+      uses: codecov/codecov-action@v5
       with:
-        file: lcov.info
+        token: ${{ secrets.CODECOV_TOKEN }}
+        files: lcov.info
         flags: unittests
         name: codecov-umbrella
         fail_ci_if_error: false
         verbose: true
-        token: ${{ secrets.CODECOV_TOKEN }}
+      continue-on-error: true
     
     - name: Upload coverage artifacts
       uses: actions/upload-artifact@v4
@@ -193,11 +167,11 @@ jobs:
     
     - name: Display coverage summary
       run: |
-        echo "## 📊 Coverage Analysis"
+        echo "## 📊 Coverage Summary"
         echo ""
         if [ -f "coverage.txt" ]; then
           echo "```"
-          grep -E "(TOTAL|Summary|Coverage|Lines:|Functions:|Regions:)" coverage.txt || echo "Coverage analysis completed"
+          cat coverage.txt
           echo "```"
           echo ""
           echo "📁 [View detailed HTML report](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})"
@@ -209,7 +183,7 @@ jobs:
   build:
     name: Build and Package
     runs-on: ubuntu-latest
-    needs: [test, security]
+    needs: [test-and-coverage, security]
     
     steps:
     - name: Checkout code
@@ -249,7 +223,7 @@ jobs:
   summary:
     name: CI Summary
     runs-on: ubuntu-latest
-    needs: [lint, test, security, coverage, build]
+    needs: [lint, test-and-coverage, security, build]
     if: always()
     
     steps:
@@ -261,22 +235,24 @@ jobs:
       with:
         name: coverage-reports
         path: coverage/
+      continue-on-error: true
     
     - name: Display CI summary
       run: |
         echo "## 🚀 CI/CD Pipeline Summary"
         echo
-        echo "### ✅ Completed Jobs:"
+        echo "### ✅ Job Results:"
         echo "- Lint and Format: ${{ needs.lint.result }}"
-        echo "- Test Suite: ${{ needs.test.result }}"
+        echo "- Test and Coverage: ${{ needs.test-and-coverage.result }}"
         echo "- Security Audit: ${{ needs.security.result }}"
-        echo "- Code Coverage: ${{ needs.coverage.result }}"
         echo "- Build and Package: ${{ needs.build.result }}"
         echo
         
         if [ -f "coverage/coverage.txt" ]; then
           echo "### 📊 Coverage Summary:"
+          echo "```"
           cat coverage/coverage.txt
+          echo "```"
           echo
         fi
         

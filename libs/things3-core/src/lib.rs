@@ -38,8 +38,8 @@ pub use config_hot_reload::{
 };
 pub use config_loader::{load_config, load_config_from_env, load_config_with_paths, ConfigLoader};
 pub use database::{
-    ComprehensiveHealthStatus, DatabasePoolConfig, DatabaseStats, PoolHealthStatus, PoolMetrics,
-    SqliteOptimizations, ThingsDatabase,
+    get_default_database_path, ComprehensiveHealthStatus, DatabasePoolConfig, DatabaseStats,
+    PoolHealthStatus, PoolMetrics, SqliteOptimizations, ThingsDatabase,
 };
 pub use disk_cache::{DiskCache, DiskCacheConfig, DiskCacheStats};
 pub use error::{Result, ThingsError};

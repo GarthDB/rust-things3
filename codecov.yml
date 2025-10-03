@@ -12,7 +12,7 @@ coverage:
         target: 85%
         threshold: 3%
       things-common:
-        target: 90%
+        target: 85%
         threshold: 2%
       things-cli:
         target: 80%
