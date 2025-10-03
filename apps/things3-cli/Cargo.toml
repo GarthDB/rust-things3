@@ -11,6 +11,10 @@ description = "CLI tool for Things 3 with integrated MCP server"
 name = "things3"
 path = "src/main.rs"
 
+[[bin]]
+name = "test-mcp-real-data"
+path = "src/bin/test_mcp_real_data.rs"
+
 [dependencies]
 # Core
 things3-core = { path = "../../libs/things3-core", features = ["test-utils"] }

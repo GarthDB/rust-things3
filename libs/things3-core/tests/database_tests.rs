@@ -12,7 +12,7 @@ use uuid::Uuid;
 async fn create_test_schema(db: &ThingsDatabase) -> Result<(), Box<dyn std::error::Error>> {
     let pool = db.pool();
 
-    // Create the Things 3 schema
+    // Create the Things 3 schema - matches real database structure
     sqlx::query(
         r"
         -- TMTask table (main tasks table) - matches real Things 3 schema
@@ -22,40 +22,23 @@ async fn create_test_schema(db: &ThingsDatabase) -> Result<(), Box<dyn std::erro
             type INTEGER NOT NULL DEFAULT 0,
             status INTEGER NOT NULL DEFAULT 0,
             notes TEXT,
-            start_date TEXT,
-            due_date TEXT,
-            created TEXT NOT NULL,
-            modified TEXT NOT NULL,
-            project_uuid TEXT,
-            area_uuid TEXT,
-            parent_uuid TEXT,
-            tags TEXT DEFAULT '[]'
+            startDate INTEGER,
+            deadline INTEGER,
+            creationDate REAL NOT NULL,
+            userModificationDate REAL NOT NULL,
+            project TEXT,
+            area TEXT,
+            parent TEXT,
+            trashed INTEGER NOT NULL DEFAULT 0,
+            tags TEXT DEFAULT '[]',
+            cachedTags BLOB
         )
         ",
     )
     .execute(pool)
     .await?;
 
-    sqlx::query(
-        r"
-        -- TMProject table (projects table) - matches real Things 3 schema
-        CREATE TABLE IF NOT EXISTS TMProject (
-            uuid TEXT PRIMARY KEY,
-            title TEXT NOT NULL,
-            type INTEGER NOT NULL DEFAULT 1,
-            status INTEGER NOT NULL DEFAULT 0,
-            notes TEXT,
-            start_date TEXT,
-            due_date TEXT,
-            created TEXT NOT NULL,
-            modified TEXT NOT NULL,
-            area_uuid TEXT,
-            tags TEXT DEFAULT '[]'
-        )
-        ",
-    )
-    .execute(pool)
-    .await?;
+    // Note: Projects are stored in TMTask table with type=1, no separate TMProject table
 
     sqlx::query(
         r"
@@ -63,12 +46,8 @@ async fn create_test_schema(db: &ThingsDatabase) -> Result<(), Box<dyn std::erro
         CREATE TABLE IF NOT EXISTS TMArea (
             uuid TEXT PRIMARY KEY,
             title TEXT NOT NULL,
-            type INTEGER NOT NULL DEFAULT 3,
-            status INTEGER NOT NULL DEFAULT 0,
-            notes TEXT,
-            created TEXT NOT NULL,
-            modified TEXT NOT NULL,
-            tags TEXT DEFAULT '[]'
+            visible INTEGER NOT NULL DEFAULT 1,
+            'index' INTEGER NOT NULL DEFAULT 0
         )
         ",
     )
@@ -76,41 +55,46 @@ async fn create_test_schema(db: &ThingsDatabase) -> Result<(), Box<dyn std::erro
     .await?;
 
     // Insert test data
-    let now = Utc::now().to_rfc3339();
+    // Use a safe conversion for timestamp to avoid precision loss
+    let timestamp_i64 = Utc::now().timestamp();
+    let now_timestamp = if timestamp_i64 <= i64::from(i32::MAX) {
+        f64::from(i32::try_from(timestamp_i64).unwrap_or(0))
+    } else {
+        // For very large timestamps, use a reasonable test value
+        1_700_000_000.0 // Represents a date around 2023
+    };
     let area_uuid = Uuid::new_v4().to_string();
     let project_uuid = Uuid::new_v4().to_string();
     let inbox_task_uuid = Uuid::new_v4().to_string();
     let project_task_uuid = Uuid::new_v4().to_string();
 
     // Insert test area
-    sqlx::query(
-        "INSERT INTO TMArea (uuid, title, type, status, created, modified) VALUES (?, ?, ?, ?, ?, ?)"
-    )
-    .bind(&area_uuid)
-    .bind("Work")
-    .bind(3) // Area type
-    .bind(0) // Incomplete
-    .bind(&now)
-    .bind(&now)
-    .execute(pool).await?;
+    sqlx::query("INSERT INTO TMArea (uuid, title, visible, 'index') VALUES (?, ?, ?, ?)")
+        .bind(&area_uuid)
+        .bind("Work")
+        .bind(1) // Visible
+        .bind(0) // Index
+        .execute(pool)
+        .await?;
 
-    // Insert test project
+    // Insert test project (as TMTask with type=1)
     sqlx::query(
-        "INSERT INTO TMProject (uuid, title, type, status, area_uuid, created, modified) VALUES (?, ?, ?, ?, ?, ?, ?)"
+        "INSERT INTO TMTask (uuid, title, type, status, area, creationDate, userModificationDate, trashed) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
     )
     .bind(&project_uuid)
     .bind("Website Redesign")
     .bind(1) // Project type
     .bind(0) // Incomplete
     .bind(&area_uuid)
-    .bind(&now)
-    .bind(&now)
+    .bind(now_timestamp)
+    .bind(now_timestamp)
+    .bind(0) // Not trashed
     .execute(pool).await?;
 
     // Insert inbox task (no project) with today's date
-    let today = Utc::now().date_naive().format("%Y-%m-%d").to_string();
+    let today_timestamp = Utc::now().timestamp();
     sqlx::query(
-        "INSERT INTO TMTask (uuid, title, type, status, project_uuid, area_uuid, created, modified, start_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
+        "INSERT INTO TMTask (uuid, title, type, status, project, area, creationDate, userModificationDate, startDate, trashed) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
     )
     .bind(&inbox_task_uuid)
     .bind("Inbox Task")
@@ -118,14 +102,15 @@ async fn create_test_schema(db: &ThingsDatabase) -> Result<(), Box<dyn std::erro
     .bind(0) // Incomplete
     .bind::<Option<String>>(None) // No project (inbox)
     .bind(&area_uuid) // Has area
-    .bind(&now)
-    .bind(&now)
-    .bind(&today)
+    .bind(now_timestamp)
+    .bind(now_timestamp)
+    .bind(today_timestamp)
+    .bind(0) // Not trashed
     .execute(pool).await?;
 
     // Insert project task with today's date
     sqlx::query(
-        "INSERT INTO TMTask (uuid, title, type, status, project_uuid, area_uuid, created, modified, start_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
+        "INSERT INTO TMTask (uuid, title, type, status, project, area, creationDate, userModificationDate, startDate, trashed) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
     )
     .bind(&project_task_uuid)
     .bind("Research competitors")
@@ -133,9 +118,10 @@ async fn create_test_schema(db: &ThingsDatabase) -> Result<(), Box<dyn std::erro
     .bind(0) // Incomplete
     .bind(&project_uuid)
     .bind(&area_uuid) // Has area
-    .bind(&now)
-    .bind(&now)
-    .bind(&today)
+    .bind(now_timestamp)
+    .bind(now_timestamp)
+    .bind(today_timestamp)
+    .bind(0) // Not trashed
     .execute(pool).await?;
 
     Ok(())

@@ -172,8 +172,8 @@ async fn test_mock_database_functionality() {
         uuid: "new-task".to_string(),
         title: "New Task".to_string(),
         status: "incomplete".to_string(),
-        project_uuid: Some("project-1".to_string()),
-        area_uuid: Some("area-1".to_string()),
+        project: Some("project-1".to_string()),
+        area: Some("area-1".to_string()),
     });
     assert_eq!(db.tasks.len(), 5);
 

@@ -10,6 +10,61 @@ use std::time::Duration;
 use tracing::{debug, error, info, instrument};
 use uuid::Uuid;
 
+/// Convert f64 timestamp to i64 safely
+fn safe_timestamp_convert(ts_f64: f64) -> i64 {
+    // Use try_from to avoid clippy warnings about casting
+    if ts_f64.is_finite() && ts_f64 >= 0.0 {
+        // Use a reasonable upper bound for timestamps (year 2100)
+        let max_timestamp = 4_102_444_800_f64; // 2100-01-01 00:00:00 UTC
+        if ts_f64 <= max_timestamp {
+            // Convert via string to avoid precision loss warnings
+            let ts_str = format!("{:.0}", ts_f64.trunc());
+            ts_str.parse::<i64>().unwrap_or(0)
+        } else {
+            0 // Use epoch if too large
+        }
+    } else {
+        0 // Use epoch if invalid
+    }
+}
+
+/// Convert Things 3 UUID format to standard UUID
+/// Things 3 uses base64-like strings, we'll generate a UUID from the hash
+fn things_uuid_to_uuid(things_uuid: &str) -> Uuid {
+    // For now, create a deterministic UUID from the Things 3 ID
+    // This ensures consistent mapping between Things 3 IDs and UUIDs
+    use std::collections::hash_map::DefaultHasher;
+    use std::hash::{Hash, Hasher};
+
+    let mut hasher = DefaultHasher::new();
+    things_uuid.hash(&mut hasher);
+    let hash = hasher.finish();
+
+    // Create a UUID from the hash (not cryptographically secure, but consistent)
+    // Use proper byte extraction without truncation warnings
+    let bytes = [
+        ((hash >> 56) & 0xFF) as u8,
+        ((hash >> 48) & 0xFF) as u8,
+        ((hash >> 40) & 0xFF) as u8,
+        ((hash >> 32) & 0xFF) as u8,
+        ((hash >> 24) & 0xFF) as u8,
+        ((hash >> 16) & 0xFF) as u8,
+        ((hash >> 8) & 0xFF) as u8,
+        (hash & 0xFF) as u8,
+        // Fill remaining bytes with a pattern based on the string
+        u8::try_from(things_uuid.len().min(255)).unwrap_or(255),
+        things_uuid.chars().next().unwrap_or('0') as u8,
+        things_uuid.chars().nth(1).unwrap_or('0') as u8,
+        things_uuid.chars().nth(2).unwrap_or('0') as u8,
+        things_uuid.chars().nth(3).unwrap_or('0') as u8,
+        things_uuid.chars().nth(4).unwrap_or('0') as u8,
+        things_uuid.chars().nth(5).unwrap_or('0') as u8,
+        things_uuid.chars().nth(6).unwrap_or('0') as u8,
+    ];
+
+    Uuid::from_bytes(bytes)
+}
+
 impl TaskStatus {
     fn from_i32(value: i32) -> Option<Self> {
         match value {
@@ -444,7 +499,7 @@ impl ThingsDatabase {
             .await
             .map_err(|e| ThingsError::unknown(format!("Failed to get task count: {e}")))?;
 
-        let project_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM TMProject")
+        let project_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM TMTask WHERE type = 1")
             .fetch_one(&self.pool)
             .await
             .map_err(|e| ThingsError::unknown(format!("Failed to get project count: {e}")))?;
@@ -525,7 +580,7 @@ impl ThingsDatabase {
         Ok(tasks)
     }
 
-    /// Get all projects
+    /// Get all projects (from `TMTask` table where type = 1)
     ///
     /// # Errors
     ///
@@ -536,10 +591,12 @@ impl ThingsDatabase {
             r"
             SELECT 
                 uuid, title, status, 
-                area_uuid, notes, 
-                created, modified
-            FROM TMProject
-            ORDER BY created DESC
+                area, notes, 
+                creationDate, userModificationDate,
+                startDate, deadline
+            FROM TMTask
+            WHERE type = 1 AND trashed = 0
+            ORDER BY creationDate DESC
             ",
         )
         .fetch_all(&self.pool)
@@ -549,24 +606,33 @@ impl ThingsDatabase {
         let mut projects = Vec::new();
         for row in rows {
             let project = Project {
-                uuid: Uuid::parse_str(&row.get::<String, _>("uuid"))
-                    .map_err(|e| ThingsError::unknown(format!("Invalid project UUID: {e}")))?,
+                uuid: things_uuid_to_uuid(&row.get::<String, _>("uuid")),
                 title: row.get("title"),
                 status: TaskStatus::from_i32(row.get("status")).unwrap_or(TaskStatus::Incomplete),
                 area_uuid: row
-                    .get::<Option<String>, _>("area_uuid")
-                    .and_then(|s| Uuid::parse_str(&s).ok()),
+                    .get::<Option<String>, _>("area")
+                    .map(|s| things_uuid_to_uuid(&s)),
                 notes: row.get("notes"),
-                deadline: None,    // Not available in this query
-                start_date: None,  // Not available in this query
-                tags: Vec::new(),  // Not available in this query
-                tasks: Vec::new(), // Not available in this query
-                created: DateTime::parse_from_rfc3339(&row.get::<String, _>("created"))
-                    .ok()
-                    .map_or_else(Utc::now, |dt| dt.with_timezone(&Utc)),
-                modified: DateTime::parse_from_rfc3339(&row.get::<String, _>("modified"))
-                    .ok()
-                    .map_or_else(Utc::now, |dt| dt.with_timezone(&Utc)),
+                deadline: row
+                    .get::<Option<i64>, _>("deadline")
+                    .and_then(|ts| DateTime::from_timestamp(ts, 0))
+                    .map(|dt| dt.date_naive()),
+                start_date: row
+                    .get::<Option<i64>, _>("startDate")
+                    .and_then(|ts| DateTime::from_timestamp(ts, 0))
+                    .map(|dt| dt.date_naive()),
+                tags: Vec::new(),  // TODO: Load tags separately
+                tasks: Vec::new(), // TODO: Load child tasks separately
+                created: {
+                    let ts_f64 = row.get::<f64, _>("creationDate");
+                    let ts = safe_timestamp_convert(ts_f64);
+                    DateTime::from_timestamp(ts, 0).unwrap_or_else(Utc::now)
+                },
+                modified: {
+                    let ts_f64 = row.get::<f64, _>("userModificationDate");
+                    let ts = safe_timestamp_convert(ts_f64);
+                    DateTime::from_timestamp(ts, 0).unwrap_or_else(Utc::now)
+                },
             };
             projects.push(project);
         }
@@ -585,11 +651,10 @@ impl ThingsDatabase {
         let rows = sqlx::query(
             r"
             SELECT 
-                uuid, title, 
-                notes, 
-                created, modified
+                uuid, title, visible, `index`
              FROM TMArea 
-            ORDER BY created DESC
+             WHERE visible = 1
+            ORDER BY `index` ASC
             ",
         )
         .fetch_all(&self.pool)
@@ -599,18 +664,13 @@ impl ThingsDatabase {
         let mut areas = Vec::new();
         for row in rows {
             let area = Area {
-                uuid: Uuid::parse_str(&row.get::<String, _>("uuid"))
-                    .map_err(|e| ThingsError::unknown(format!("Invalid area UUID: {e}")))?,
+                uuid: things_uuid_to_uuid(&row.get::<String, _>("uuid")),
                 title: row.get("title"),
-                notes: row.get("notes"),
-                projects: Vec::new(), // Not available in this query
-                tags: Vec::new(),     // Not available in this query
-                created: DateTime::parse_from_rfc3339(&row.get::<String, _>("created"))
-                    .ok()
-                    .map_or_else(Utc::now, |dt| dt.with_timezone(&Utc)),
-                modified: DateTime::parse_from_rfc3339(&row.get::<String, _>("modified"))
-                    .ok()
-                    .map_or_else(Utc::now, |dt| dt.with_timezone(&Utc)),
+                notes: None,          // Notes not stored in TMArea table
+                projects: Vec::new(), // TODO: Load projects separately
+                tags: Vec::new(),     // TODO: Load tags separately
+                created: Utc::now(),  // Creation date not available in TMArea
+                modified: Utc::now(), // Modification date not available in TMArea
             };
             areas.push(area);
         }
@@ -698,13 +758,13 @@ impl ThingsDatabase {
             r"
             SELECT 
                 uuid, title, status, type, 
-                start_date, due_date, 
-                project_uuid, area_uuid, 
-                notes, tags, 
-                created, modified
+                startDate, deadline, 
+                project, area,
+                notes, cachedTags, 
+                creationDate, userModificationDate
             FROM TMTask
-            WHERE title LIKE ? OR notes LIKE ?
-            ORDER BY created DESC
+            WHERE (title LIKE ? OR notes LIKE ?) AND trashed = 0 AND type = 0
+            ORDER BY creationDate DESC
             ",
         )
         .bind(&search_pattern)
@@ -716,36 +776,41 @@ impl ThingsDatabase {
         let mut tasks = Vec::new();
         for row in rows {
             let task = Task {
-                uuid: Uuid::parse_str(&row.get::<String, _>("uuid"))
-                    .map_err(|e| ThingsError::unknown(format!("Invalid task UUID: {e}")))?,
+                uuid: things_uuid_to_uuid(&row.get::<String, _>("uuid")),
                 title: row.get("title"),
                 status: TaskStatus::from_i32(row.get("status")).unwrap_or(TaskStatus::Incomplete),
                 task_type: TaskType::from_i32(row.get("type")).unwrap_or(TaskType::Todo),
                 start_date: row
-                    .get::<Option<String>, _>("start_date")
-                    .and_then(|s| NaiveDate::parse_from_str(&s, "%Y-%m-%d").ok()),
+                    .get::<Option<i64>, _>("startDate")
+                    .and_then(|ts| DateTime::from_timestamp(ts, 0))
+                    .map(|dt| dt.date_naive()),
                 deadline: row
-                    .get::<Option<String>, _>("due_date")
-                    .and_then(|s| NaiveDate::parse_from_str(&s, "%Y-%m-%d").ok()),
+                    .get::<Option<i64>, _>("deadline")
+                    .and_then(|ts| DateTime::from_timestamp(ts, 0))
+                    .map(|dt| dt.date_naive()),
                 project_uuid: row
-                    .get::<Option<String>, _>("project_uuid")
-                    .and_then(|s| Uuid::parse_str(&s).ok()),
+                    .get::<Option<String>, _>("project")
+                    .map(|s| things_uuid_to_uuid(&s)),
                 area_uuid: row
-                    .get::<Option<String>, _>("area_uuid")
-                    .and_then(|s| Uuid::parse_str(&s).ok()),
-                parent_uuid: None, // Not available in this query
+                    .get::<Option<String>, _>("area")
+                    .map(|s| things_uuid_to_uuid(&s)),
+                parent_uuid: None, // No parent column in real schema
                 notes: row.get("notes"),
                 tags: row
-                    .get::<Option<String>, _>("tags")
-                    .map(|s| s.split(',').map(|s| s.trim().to_string()).collect())
+                    .get::<Option<Vec<u8>>, _>("cachedTags")
+                    .map(|_| Vec::new()) // TODO: Parse binary tag data
                     .unwrap_or_default(),
                 children: Vec::new(), // Not available in this query
-                created: DateTime::parse_from_rfc3339(&row.get::<String, _>("created"))
-                    .ok()
-                    .map_or_else(Utc::now, |dt| dt.with_timezone(&Utc)),
-                modified: DateTime::parse_from_rfc3339(&row.get::<String, _>("modified"))
-                    .ok()
-                    .map_or_else(Utc::now, |dt| dt.with_timezone(&Utc)),
+                created: {
+                    let ts_f64 = row.get::<f64, _>("creationDate");
+                    let ts = safe_timestamp_convert(ts_f64);
+                    DateTime::from_timestamp(ts, 0).unwrap_or_else(Utc::now)
+                },
+                modified: {
+                    let ts_f64 = row.get::<f64, _>("userModificationDate");
+                    let ts = safe_timestamp_convert(ts_f64);
+                    DateTime::from_timestamp(ts, 0).unwrap_or_else(Utc::now)
+                },
             };
             tasks.push(task);
         }
@@ -762,9 +827,9 @@ impl ThingsDatabase {
     #[instrument(skip(self))]
     pub async fn get_inbox(&self, limit: Option<usize>) -> ThingsResult<Vec<Task>> {
         let query = if let Some(limit) = limit {
-            format!("SELECT * FROM TMTask WHERE status = 0 AND project_uuid IS NULL ORDER BY created DESC LIMIT {limit}")
+            format!("SELECT uuid, title, type, status, notes, startDate, deadline, creationDate, userModificationDate, project, area, parent, tags FROM TMTask WHERE type = 0 AND status = 0 AND project IS NULL AND trashed = 0 ORDER BY creationDate DESC LIMIT {limit}")
         } else {
-            "SELECT * FROM TMTask WHERE status = 0 AND project_uuid IS NULL ORDER BY created DESC"
+            "SELECT uuid, title, type, status, notes, startDate, deadline, creationDate, userModificationDate, project, area, parent, tags FROM TMTask WHERE type = 0 AND status = 0 AND project IS NULL AND trashed = 0 ORDER BY creationDate DESC"
                 .to_string()
         };
 
@@ -777,32 +842,39 @@ impl ThingsDatabase {
             .into_iter()
             .map(|row| {
                 Ok(Task {
-                    uuid: Uuid::parse_str(&row.get::<String, _>("uuid"))
-                        .map_err(|e| ThingsError::unknown(format!("Invalid task UUID: {e}")))?,
+                    uuid: things_uuid_to_uuid(&row.get::<String, _>("uuid")),
                     title: row.get("title"),
                     task_type: TaskType::from_i32(row.get("type")).unwrap_or(TaskType::Todo),
                     status: TaskStatus::from_i32(row.get("status"))
                         .unwrap_or(TaskStatus::Incomplete),
                     notes: row.get("notes"),
                     start_date: row
-                        .get::<Option<String>, _>("start_date")
-                        .and_then(|s| s.parse::<chrono::NaiveDate>().ok()),
+                        .get::<Option<i64>, _>("startDate")
+                        .and_then(|ts| DateTime::from_timestamp(ts, 0))
+                        .map(|dt| dt.date_naive()),
                     deadline: row
-                        .get::<Option<String>, _>("due_date")
-                        .and_then(|s| s.parse::<chrono::NaiveDate>().ok()),
-                    created: DateTime::parse_from_rfc3339(&row.get::<String, _>("created"))
-                        .ok()
-                        .map_or_else(Utc::now, |dt| dt.with_timezone(&Utc)),
-                    modified: DateTime::parse_from_rfc3339(&row.get::<String, _>("modified"))
-                        .ok()
-                        .map_or_else(Utc::now, |dt| dt.with_timezone(&Utc)),
+                        .get::<Option<i64>, _>("deadline")
+                        .and_then(|ts| DateTime::from_timestamp(ts, 0))
+                        .map(|dt| dt.date_naive()),
+                    created: {
+                        let ts_f64 = row.get::<f64, _>("creationDate");
+                        let ts = safe_timestamp_convert(ts_f64);
+                        DateTime::from_timestamp(ts, 0).unwrap_or_else(Utc::now)
+                    },
+                    modified: {
+                        let ts_f64 = row.get::<f64, _>("userModificationDate");
+                        let ts = safe_timestamp_convert(ts_f64);
+                        DateTime::from_timestamp(ts, 0).unwrap_or_else(Utc::now)
+                    },
                     project_uuid: row
-                        .get::<Option<String>, _>("project_uuid")
-                        .and_then(|s| Uuid::parse_str(&s).ok()),
+                        .get::<Option<String>, _>("project")
+                        .map(|s| things_uuid_to_uuid(&s)),
                     area_uuid: row
-                        .get::<Option<String>, _>("area_uuid")
-                        .and_then(|s| Uuid::parse_str(&s).ok()),
-                    parent_uuid: None,
+                        .get::<Option<String>, _>("area")
+                        .map(|s| things_uuid_to_uuid(&s)),
+                    parent_uuid: row
+                        .get::<Option<String>, _>("parent")
+                        .map(|s| things_uuid_to_uuid(&s)),
                     tags: row
                         .get::<Option<String>, _>("tags")
                         .map(|s| s.split(',').map(|s| s.trim().to_string()).collect())
@@ -820,22 +892,29 @@ impl ThingsDatabase {
     /// # Errors
     ///
     /// Returns an error if the database query fails or if task data is invalid
+    ///
+    /// # Panics
+    ///
+    /// Panics if the current date cannot be converted to a valid time with hours, minutes, and seconds
     #[instrument(skip(self))]
     pub async fn get_today(&self, limit: Option<usize>) -> ThingsResult<Vec<Task>> {
         let today = chrono::Utc::now().date_naive();
-        let today_str = today.format("%Y-%m-%d").to_string();
+        let start_of_day = today.and_hms_opt(0, 0, 0).unwrap().and_utc().timestamp();
+        let end_of_day = today.and_hms_opt(23, 59, 59).unwrap().and_utc().timestamp();
 
         let query = if let Some(limit) = limit {
             format!(
-                "SELECT * FROM TMTask WHERE status = 0 AND (due_date = ? OR start_date = ?) ORDER BY created DESC LIMIT {limit}"
+                "SELECT uuid, title, type, status, notes, startDate, deadline, creationDate, userModificationDate, project, area, parent, tags FROM TMTask WHERE status = 0 AND ((deadline >= ? AND deadline <= ?) OR (startDate >= ? AND startDate <= ?)) AND trashed = 0 ORDER BY creationDate DESC LIMIT {limit}"
             )
         } else {
-            "SELECT * FROM TMTask WHERE status = 0 AND (due_date = ? OR start_date = ?) ORDER BY created DESC".to_string()
+            "SELECT uuid, title, type, status, notes, startDate, deadline, creationDate, userModificationDate, project, area, parent, tags FROM TMTask WHERE status = 0 AND ((deadline >= ? AND deadline <= ?) OR (startDate >= ? AND startDate <= ?)) AND trashed = 0 ORDER BY creationDate DESC".to_string()
         };
 
         let rows = sqlx::query(&query)
-            .bind(&today_str)
-            .bind(&today_str)
+            .bind(start_of_day)
+            .bind(end_of_day)
+            .bind(start_of_day)
+            .bind(end_of_day)
             .fetch_all(&self.pool)
             .await
             .map_err(|e| ThingsError::unknown(format!("Failed to fetch today's tasks: {e}")))?;
@@ -844,32 +923,39 @@ impl ThingsDatabase {
             .into_iter()
             .map(|row| {
                 Ok(Task {
-                    uuid: Uuid::parse_str(&row.get::<String, _>("uuid"))
-                        .map_err(|e| ThingsError::unknown(format!("Invalid task UUID: {e}")))?,
+                    uuid: things_uuid_to_uuid(&row.get::<String, _>("uuid")),
                     title: row.get("title"),
                     task_type: TaskType::from_i32(row.get("type")).unwrap_or(TaskType::Todo),
                     status: TaskStatus::from_i32(row.get("status"))
                         .unwrap_or(TaskStatus::Incomplete),
                     notes: row.get("notes"),
                     start_date: row
-                        .get::<Option<String>, _>("start_date")
-                        .and_then(|s| s.parse::<chrono::NaiveDate>().ok()),
+                        .get::<Option<i64>, _>("startDate")
+                        .and_then(|ts| DateTime::from_timestamp(ts, 0))
+                        .map(|dt| dt.date_naive()),
                     deadline: row
-                        .get::<Option<String>, _>("due_date")
-                        .and_then(|s| s.parse::<chrono::NaiveDate>().ok()),
-                    created: DateTime::parse_from_rfc3339(&row.get::<String, _>("created"))
-                        .ok()
-                        .map_or_else(Utc::now, |dt| dt.with_timezone(&Utc)),
-                    modified: DateTime::parse_from_rfc3339(&row.get::<String, _>("modified"))
-                        .ok()
-                        .map_or_else(Utc::now, |dt| dt.with_timezone(&Utc)),
+                        .get::<Option<i64>, _>("deadline")
+                        .and_then(|ts| DateTime::from_timestamp(ts, 0))
+                        .map(|dt| dt.date_naive()),
+                    created: {
+                        let ts_f64 = row.get::<f64, _>("creationDate");
+                        let ts = safe_timestamp_convert(ts_f64);
+                        DateTime::from_timestamp(ts, 0).unwrap_or_else(Utc::now)
+                    },
+                    modified: {
+                        let ts_f64 = row.get::<f64, _>("userModificationDate");
+                        let ts = safe_timestamp_convert(ts_f64);
+                        DateTime::from_timestamp(ts, 0).unwrap_or_else(Utc::now)
+                    },
                     project_uuid: row
-                        .get::<Option<String>, _>("project_uuid")
-                        .and_then(|s| Uuid::parse_str(&s).ok()),
+                        .get::<Option<String>, _>("project")
+                        .map(|s| things_uuid_to_uuid(&s)),
                     area_uuid: row
-                        .get::<Option<String>, _>("area_uuid")
-                        .and_then(|s| Uuid::parse_str(&s).ok()),
-                    parent_uuid: None,
+                        .get::<Option<String>, _>("area")
+                        .map(|s| things_uuid_to_uuid(&s)),
+                    parent_uuid: row
+                        .get::<Option<String>, _>("parent")
+                        .map(|s| things_uuid_to_uuid(&s)),
                     tags: row
                         .get::<Option<String>, _>("tags")
                         .map(|s| s.split(',').map(|s| s.trim().to_string()).collect())

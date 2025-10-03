@@ -17,7 +17,7 @@ pub async fn create_test_database<P: AsRef<Path>>(db_path: P) -> crate::Result<(
         .await
         .map_err(|e| crate::ThingsError::Database(format!("Failed to connect to database: {e}")))?;
 
-    // Create the Things 3 schema
+    // Create the Things 3 schema - matches real database structure
     sqlx::query(
         r"
         -- TMTask table (main tasks table) - matches real Things 3 schema
@@ -27,14 +27,16 @@ pub async fn create_test_database<P: AsRef<Path>>(db_path: P) -> crate::Result<(
             type INTEGER NOT NULL DEFAULT 0,
             status INTEGER NOT NULL DEFAULT 0,
             notes TEXT,
-            start_date TEXT,
-            due_date TEXT,
-            created TEXT NOT NULL,
-            modified TEXT NOT NULL,
-            project_uuid TEXT,
-            area_uuid TEXT,
-            parent_uuid TEXT,
-            tags TEXT DEFAULT '[]'
+            startDate INTEGER,
+            deadline INTEGER,
+            creationDate REAL NOT NULL,
+            userModificationDate REAL NOT NULL,
+            project TEXT,
+            area TEXT,
+            parent TEXT,
+            trashed INTEGER NOT NULL DEFAULT 0,
+            tags TEXT DEFAULT '[]',
+            cachedTags BLOB
         )
         ",
     )
@@ -42,44 +44,16 @@ pub async fn create_test_database<P: AsRef<Path>>(db_path: P) -> crate::Result<(
     .await
     .map_err(|e| crate::ThingsError::Database(format!("Failed to create TMTask table: {e}")))?;
 
-    sqlx::query(
-        r"
-        -- TMProject table (projects table)
-        CREATE TABLE IF NOT EXISTS TMProject (
-            uuid TEXT PRIMARY KEY,
-            title TEXT NOT NULL,
-            type INTEGER NOT NULL DEFAULT 1,
-            status INTEGER NOT NULL DEFAULT 0,
-            notes TEXT,
-            start_date TEXT,
-            due_date TEXT,
-            created TEXT NOT NULL,
-            modified TEXT NOT NULL,
-            area_uuid TEXT,
-            parent_uuid TEXT,
-            tags TEXT DEFAULT '[]'
-        )
-        ",
-    )
-    .execute(&pool)
-    .await
-    .map_err(|e| crate::ThingsError::Database(format!("Failed to create TMProject table: {e}")))?;
+    // Note: Projects are stored in TMTask table with type=1, no separate TMProject table
 
     sqlx::query(
         r"
-        -- TMArea table (areas table)
+        -- TMArea table (areas table) - matches real Things 3 schema
         CREATE TABLE IF NOT EXISTS TMArea (
             uuid TEXT PRIMARY KEY,
             title TEXT NOT NULL,
-            type INTEGER NOT NULL DEFAULT 3,
-            status INTEGER NOT NULL DEFAULT 0,
-            notes TEXT,
-            start_date TEXT,
-            due_date TEXT,
-            created TEXT NOT NULL,
-            modified TEXT NOT NULL,
-            parent_uuid TEXT,
-            tags TEXT DEFAULT '[]'
+            visible INTEGER NOT NULL DEFAULT 1,
+            'index' INTEGER NOT NULL DEFAULT 0
         )
         ",
     )
@@ -95,7 +69,14 @@ pub async fn create_test_database<P: AsRef<Path>>(db_path: P) -> crate::Result<(
 }
 
 async fn insert_test_data(pool: &sqlx::SqlitePool) -> crate::Result<()> {
-    let now = Utc::now().to_rfc3339();
+    // Use a safe conversion for timestamp to avoid precision loss
+    let timestamp_i64 = Utc::now().timestamp();
+    let now_timestamp = if timestamp_i64 <= i64::from(i32::MAX) {
+        f64::from(i32::try_from(timestamp_i64).unwrap_or(0))
+    } else {
+        // For very large timestamps, use a reasonable test value
+        1_700_000_000.0 // Represents a date around 2023
+    };
 
     // Generate valid UUIDs for test data
     let area_uuid = Uuid::new_v4().to_string();
@@ -103,57 +84,57 @@ async fn insert_test_data(pool: &sqlx::SqlitePool) -> crate::Result<()> {
     let task_uuid = Uuid::new_v4().to_string();
 
     // Insert test areas
-    sqlx::query(
-        "INSERT INTO TMArea (uuid, title, type, status, created, modified) VALUES (?, ?, ?, ?, ?, ?)"
-    )
-    .bind(&area_uuid)
-    .bind("Work")
-    .bind(3) // Area type
-    .bind(0) // Incomplete
-    .bind(&now)
-    .bind(&now)
-    .execute(pool).await
-    .map_err(|e| crate::ThingsError::Database(format!("Failed to insert test area: {e}")))?;
+    sqlx::query("INSERT INTO TMArea (uuid, title, visible, 'index') VALUES (?, ?, ?, ?)")
+        .bind(&area_uuid)
+        .bind("Work")
+        .bind(1) // Visible
+        .bind(0) // Index
+        .execute(pool)
+        .await
+        .map_err(|e| crate::ThingsError::Database(format!("Failed to insert test area: {e}")))?;
 
-    // Insert test projects
+    // Insert test projects (as TMTask with type=1)
     sqlx::query(
-        "INSERT INTO TMProject (uuid, title, type, status, area_uuid, created, modified) VALUES (?, ?, ?, ?, ?, ?, ?)"
+        "INSERT INTO TMTask (uuid, title, type, status, area, creationDate, userModificationDate, trashed) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
     )
     .bind(&project_uuid)
     .bind("Website Redesign")
     .bind(1) // Project type
     .bind(0) // Incomplete
     .bind(&area_uuid)
-    .bind(&now)
-    .bind(&now)
+    .bind(now_timestamp)
+    .bind(now_timestamp)
+    .bind(0) // Not trashed
     .execute(pool).await
     .map_err(|e| crate::ThingsError::Database(format!("Failed to insert test project: {e}")))?;
 
     // Insert test tasks - one in inbox (no project), one in project
     let inbox_task_uuid = Uuid::new_v4().to_string();
     sqlx::query(
-        "INSERT INTO TMTask (uuid, title, type, status, project_uuid, created, modified) VALUES (?, ?, ?, ?, ?, ?, ?)"
+        "INSERT INTO TMTask (uuid, title, type, status, project, creationDate, userModificationDate, trashed) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
     )
     .bind(&inbox_task_uuid)
     .bind("Inbox Task")
     .bind(0) // Todo type
     .bind(0) // Incomplete
     .bind::<Option<String>>(None) // No project (inbox) - use NULL instead of empty string
-    .bind(&now)
-    .bind(&now)
+    .bind(now_timestamp)
+    .bind(now_timestamp)
+    .bind(0) // Not trashed
     .execute(pool).await
     .map_err(|e| crate::ThingsError::Database(format!("Failed to insert inbox test task: {e}")))?;
 
     sqlx::query(
-        "INSERT INTO TMTask (uuid, title, type, status, project_uuid, created, modified) VALUES (?, ?, ?, ?, ?, ?, ?)"
+        "INSERT INTO TMTask (uuid, title, type, status, project, creationDate, userModificationDate, trashed) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
     )
     .bind(&task_uuid)
     .bind("Research competitors")
     .bind(0) // Todo type
     .bind(0) // Incomplete
     .bind(&project_uuid)
-    .bind(&now)
-    .bind(&now)
+    .bind(now_timestamp)
+    .bind(now_timestamp)
+    .bind(0) // Not trashed
     .execute(pool).await
     .map_err(|e| crate::ThingsError::Database(format!("Failed to insert test task: {e}")))?;
 

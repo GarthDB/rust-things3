@@ -34,41 +34,23 @@ async fn create_test_schema(db: &ThingsDatabase) -> Result<(), Box<dyn std::erro
             type INTEGER NOT NULL DEFAULT 0,
             status INTEGER NOT NULL DEFAULT 0,
             notes TEXT,
-            start_date TEXT,
-            due_date TEXT,
-            created TEXT NOT NULL,
-            modified TEXT NOT NULL,
-            project_uuid TEXT,
-            area_uuid TEXT,
-            parent_uuid TEXT,
-            tags TEXT DEFAULT '[]'
+            startDate INTEGER,
+            deadline INTEGER,
+            creationDate REAL NOT NULL,
+            userModificationDate REAL NOT NULL,
+            project TEXT,
+            area TEXT,
+            parent TEXT,
+            trashed INTEGER NOT NULL DEFAULT 0,
+            tags TEXT DEFAULT '[]',
+            cachedTags BLOB
         )
         ",
     )
     .execute(pool)
     .await?;
 
-    sqlx::query(
-        r"
-        -- TMProject table (projects table)
-        CREATE TABLE IF NOT EXISTS TMProject (
-            uuid TEXT PRIMARY KEY,
-            title TEXT NOT NULL,
-            type INTEGER NOT NULL DEFAULT 1,
-            status INTEGER NOT NULL DEFAULT 0,
-            notes TEXT,
-            start_date TEXT,
-            due_date TEXT,
-            created TEXT NOT NULL,
-            modified TEXT NOT NULL,
-            area_uuid TEXT,
-            parent_uuid TEXT,
-            tags TEXT DEFAULT '[]'
-        )
-        ",
-    )
-    .execute(pool)
-    .await?;
+    // Note: Projects are stored in TMTask table with type=1, no separate TMProject table
 
     sqlx::query(
         r"
@@ -76,15 +58,8 @@ async fn create_test_schema(db: &ThingsDatabase) -> Result<(), Box<dyn std::erro
         CREATE TABLE IF NOT EXISTS TMArea (
             uuid TEXT PRIMARY KEY,
             title TEXT NOT NULL,
-            type INTEGER NOT NULL DEFAULT 3,
-            status INTEGER NOT NULL DEFAULT 0,
-            notes TEXT,
-            start_date TEXT,
-            due_date TEXT,
-            created TEXT NOT NULL,
-            modified TEXT NOT NULL,
-            parent_uuid TEXT,
-            tags TEXT DEFAULT '[]'
+            visible INTEGER NOT NULL DEFAULT 1,
+            'index' INTEGER NOT NULL DEFAULT 0
         )
         ",
     )
@@ -102,7 +77,7 @@ async fn insert_test_data(pool: &SqlitePool) -> Result<(), Box<dyn std::error::E
     use chrono::Utc;
     use uuid::Uuid;
 
-    let now = Utc::now().to_rfc3339();
+    let _now = Utc::now().to_rfc3339(); // Keep for potential future use
 
     // Generate valid UUIDs for test data
     let area_uuid = Uuid::new_v4().to_string();
@@ -110,54 +85,55 @@ async fn insert_test_data(pool: &SqlitePool) -> Result<(), Box<dyn std::error::E
     let task_uuid = Uuid::new_v4().to_string();
 
     // Insert test areas
-    sqlx::query(
-        "INSERT INTO TMArea (uuid, title, type, status, created, modified) VALUES (?, ?, ?, ?, ?, ?)"
-    )
-    .bind(&area_uuid)
-    .bind("Work")
-    .bind(3) // Area type
-    .bind(0) // Incomplete
-    .bind(&now)
-    .bind(&now)
-    .execute(pool).await?;
+    sqlx::query("INSERT INTO TMArea (uuid, title, visible, 'index') VALUES (?, ?, ?, ?)")
+        .bind(&area_uuid)
+        .bind("Work")
+        .bind(1) // Visible
+        .bind(0) // Index
+        .execute(pool)
+        .await?;
 
-    // Insert test projects
+    // Insert test projects (stored in TMTask with type=1)
+    let now_timestamp = 1_700_000_000.0; // Test timestamp
     sqlx::query(
-        "INSERT INTO TMProject (uuid, title, type, status, area_uuid, created, modified) VALUES (?, ?, ?, ?, ?, ?, ?)"
+        "INSERT INTO TMTask (uuid, title, type, status, area, creationDate, userModificationDate, trashed) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
     )
     .bind(&project_uuid)
     .bind("Website Redesign")
     .bind(1) // Project type
     .bind(0) // Incomplete
     .bind(&area_uuid)
-    .bind(&now)
-    .bind(&now)
+    .bind(now_timestamp)
+    .bind(now_timestamp)
+    .bind(0) // Not trashed
     .execute(pool).await?;
 
     // Insert test tasks - one in inbox (no project), one in project
     let inbox_task_uuid = Uuid::new_v4().to_string();
     sqlx::query(
-        "INSERT INTO TMTask (uuid, title, type, status, project_uuid, created, modified) VALUES (?, ?, ?, ?, ?, ?, ?)"
+        "INSERT INTO TMTask (uuid, title, type, status, project, creationDate, userModificationDate, trashed) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
     )
     .bind(&inbox_task_uuid)
     .bind("Inbox Task")
     .bind(0) // Todo type
     .bind(0) // Incomplete
-    .bind::<Option<String>>(None) // No project (inbox) - use NULL instead of empty string
-    .bind(&now)
-    .bind(&now)
+    .bind::<Option<String>>(None) // No project (inbox)
+    .bind(now_timestamp)
+    .bind(now_timestamp)
+    .bind(0) // Not trashed
     .execute(pool).await?;
 
     sqlx::query(
-        "INSERT INTO TMTask (uuid, title, type, status, project_uuid, created, modified) VALUES (?, ?, ?, ?, ?, ?, ?)"
+        "INSERT INTO TMTask (uuid, title, type, status, project, creationDate, userModificationDate, trashed) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
     )
     .bind(&task_uuid)
     .bind("Research competitors")
     .bind(0) // Todo type
     .bind(0) // Incomplete
     .bind(&project_uuid)
-    .bind(&now)
-    .bind(&now)
+    .bind(now_timestamp)
+    .bind(now_timestamp)
+    .bind(0) // Not trashed
     .execute(pool).await?;
 
     Ok(())

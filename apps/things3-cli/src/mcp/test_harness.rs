@@ -20,7 +20,7 @@ impl McpTestHarness {
     /// Create a new test harness with a fresh database
     ///
     /// # Panics
-    /// Panics if the database cannot be created or the server cannot be initialized
+    /// Panics if the database cannot be creationDate or the server cannot be initialized
     #[must_use]
     pub fn new() -> Self {
         Self::new_with_config(crate::mcp::MiddlewareConfig::default())
@@ -29,7 +29,7 @@ impl McpTestHarness {
     /// Create a new test harness with a fresh database and custom middleware config
     ///
     /// # Panics
-    /// Panics if the database cannot be created or the server cannot be initialized
+    /// Panics if the database cannot be creationDate or the server cannot be initialized
     #[must_use]
     pub fn new_with_config(middleware_config: crate::mcp::MiddlewareConfig) -> Self {
         let temp_file = NamedTempFile::new().unwrap();
@@ -54,7 +54,7 @@ impl McpTestHarness {
     /// Create a test harness with custom middleware configuration
     ///
     /// # Panics
-    /// Panics if the database cannot be created or the server cannot be initialized
+    /// Panics if the database cannot be creationDate or the server cannot be initialized
     #[must_use]
     pub fn with_middleware_config(middleware_config: crate::mcp::MiddlewareConfig) -> Self {
         Self::new_with_config(middleware_config)
@@ -333,7 +333,7 @@ impl McpTestHarness {
         let database_url = format!("sqlite:{}", db_path.as_ref().display());
         let pool = SqlitePool::connect(&database_url).await.unwrap();
 
-        // Create the Things 3 schema
+        // Create the Things 3 schema - matches real database structure
         sqlx::query(
             r"
             -- TMTask table (main tasks table) - matches real Things 3 schema
@@ -343,14 +343,16 @@ impl McpTestHarness {
                 type INTEGER NOT NULL DEFAULT 0,
                 status INTEGER NOT NULL DEFAULT 0,
                 notes TEXT,
-                start_date TEXT,
-                due_date TEXT,
-                created TEXT NOT NULL,
-                modified TEXT NOT NULL,
-                project_uuid TEXT,
-                area_uuid TEXT,
-                parent_uuid TEXT,
-                tags TEXT DEFAULT '[]'
+                startDate INTEGER,
+                deadline INTEGER,
+                creationDate REAL NOT NULL,
+                userModificationDate REAL NOT NULL,
+                project TEXT,
+                area TEXT,
+                parent TEXT,
+                trashed INTEGER NOT NULL DEFAULT 0,
+                tags TEXT DEFAULT '[]',
+                cachedTags BLOB
             )
             ",
         )
@@ -358,44 +360,16 @@ impl McpTestHarness {
         .await
         .unwrap();
 
-        sqlx::query(
-            r"
-            -- TMProject table (projects table)
-            CREATE TABLE IF NOT EXISTS TMProject (
-                uuid TEXT PRIMARY KEY,
-                title TEXT NOT NULL,
-                type INTEGER NOT NULL DEFAULT 1,
-                status INTEGER NOT NULL DEFAULT 0,
-                notes TEXT,
-                start_date TEXT,
-                due_date TEXT,
-                created TEXT NOT NULL,
-                modified TEXT NOT NULL,
-                area_uuid TEXT,
-                parent_uuid TEXT,
-                tags TEXT DEFAULT '[]'
-            )
-            ",
-        )
-        .execute(&pool)
-        .await
-        .unwrap();
+        // Note: Projects are stored in TMTask table with type=1, no separate TMProject table
 
         sqlx::query(
             r"
-            -- TMArea table (areas table)
+            -- TMArea table (areas table) - matches real Things 3 schema
             CREATE TABLE IF NOT EXISTS TMArea (
                 uuid TEXT PRIMARY KEY,
                 title TEXT NOT NULL,
-                type INTEGER NOT NULL DEFAULT 3,
-                status INTEGER NOT NULL DEFAULT 0,
-                notes TEXT,
-                start_date TEXT,
-                due_date TEXT,
-                created TEXT NOT NULL,
-                modified TEXT NOT NULL,
-                parent_uuid TEXT,
-                tags TEXT DEFAULT '[]'
+                visible INTEGER NOT NULL DEFAULT 1,
+                'index' INTEGER NOT NULL DEFAULT 0
             )
             ",
         )
@@ -404,122 +378,120 @@ impl McpTestHarness {
         .unwrap();
 
         // Insert test data
-        let now = chrono::Utc::now().to_rfc3339();
+        // Use a safe conversion for timestamp to avoid precision loss
+        let timestamp_i64 = chrono::Utc::now().timestamp();
+        let now_timestamp = if timestamp_i64 <= i64::from(i32::MAX) {
+            f64::from(i32::try_from(timestamp_i64).unwrap_or(0))
+        } else {
+            // For very large timestamps, use a reasonable test value
+            1_700_000_000.0 // Represents a date around 2023
+        };
 
         // Insert test areas
-        sqlx::query(
-            "INSERT INTO TMArea (uuid, title, type, status, notes, created, modified, tags) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
-        )
-        .bind("550e8400-e29b-41d4-a716-446655440001")
-        .bind("Work")
-        .bind(3) // type: area
-        .bind(0) // status: active
-        .bind("Work-related tasks")
-        .bind(&now)
-        .bind(&now)
-        .bind("[\"work\"]")
-        .execute(&pool).await.unwrap();
+        sqlx::query("INSERT INTO TMArea (uuid, title, visible, 'index') VALUES (?, ?, ?, ?)")
+            .bind("550e8400-e29b-41d4-a716-446655440001")
+            .bind("Work")
+            .bind(1) // visible
+            .bind(0) // index
+            .execute(&pool)
+            .await
+            .unwrap();
 
-        sqlx::query(
-            "INSERT INTO TMArea (uuid, title, type, status, notes, created, modified, tags) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
-        )
-        .bind("550e8400-e29b-41d4-a716-446655440002")
-        .bind("Personal")
-        .bind(3) // type: area
-        .bind(0) // status: active
-        .bind("Personal tasks")
-        .bind(&now)
-        .bind(&now)
-        .bind("[\"personal\"]")
-        .execute(&pool).await.unwrap();
+        sqlx::query("INSERT INTO TMArea (uuid, title, visible, 'index') VALUES (?, ?, ?, ?)")
+            .bind("550e8400-e29b-41d4-a716-446655440002")
+            .bind("Personal")
+            .bind(1) // visible
+            .bind(1) // index
+            .execute(&pool)
+            .await
+            .unwrap();
 
-        // Insert test projects
+        // Insert test projects (as TMTask with type=1)
         sqlx::query(
-            "INSERT INTO TMProject (uuid, title, type, status, notes, start_date, due_date, created, modified, area_uuid, parent_uuid, tags) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+            "INSERT INTO TMTask (uuid, title, type, status, notes, creationDate, userModificationDate, area, trashed, tags) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
         )
         .bind("550e8400-e29b-41d4-a716-446655440010")
         .bind("Website Redesign")
         .bind(1) // type: project
         .bind(0) // status: active
         .bind("Complete redesign of company website")
-        .bind("")
-        .bind("")
-        .bind(&now)
-        .bind(&now)
-        .bind("550e8400-e29b-41d4-a716-446655440001")
-        .bind("") // parent_uuid: empty for top-level project
+        .bind(now_timestamp)
+        .bind(now_timestamp)
+        .bind("550e8400-e29b-41d4-a716-446655440001") // work area
+        .bind(0) // not trashed
         .bind("[\"work\", \"web\"]")
         .execute(&pool).await.unwrap();
 
         sqlx::query(
-            "INSERT INTO TMProject (uuid, title, type, status, notes, start_date, due_date, created, modified, area_uuid, parent_uuid, tags) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+            "INSERT INTO TMTask (uuid, title, type, status, notes, creationDate, userModificationDate, area, trashed, tags) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
         )
         .bind("550e8400-e29b-41d4-a716-446655440011")
         .bind("Learn Rust")
         .bind(1) // type: project
         .bind(0) // status: active
         .bind("Learn the Rust programming language")
-        .bind("")
-        .bind("")
-        .bind(&now)
-        .bind(&now)
+        .bind(now_timestamp)
+        .bind(now_timestamp)
         .bind("550e8400-e29b-41d4-a716-446655440002")
-        .bind("") // parent_uuid: empty for top-level project
+        .bind(0) // not trashed
         .bind("[\"personal\", \"learning\"]")
         .execute(&pool).await.unwrap();
 
         // Insert test tasks - one in inbox (no project), one in project
         sqlx::query(
-            "INSERT INTO TMTask (uuid, title, type, status, notes, start_date, due_date, created, modified, project_uuid, area_uuid, parent_uuid, tags) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+            "INSERT INTO TMTask (uuid, title, type, status, notes, startDate, deadline, creationDate, userModificationDate, project, area, parent, trashed, tags) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
         )
         .bind("550e8400-e29b-41d4-a716-446655440099")
         .bind("Inbox Task")
         .bind(0)
         .bind(0)
         .bind("A task in the inbox")
-        .bind("")
-        .bind("")
-        .bind(&now)
-        .bind(&now)
+        .bind::<Option<i64>>(None) // startDate: NULL
+        .bind::<Option<i64>>(None) // deadline: NULL
+        .bind(now_timestamp)
+        .bind(now_timestamp)
         .bind::<Option<String>>(None) // No project (inbox) - use NULL instead of empty string
-        .bind("")
-        .bind("")
+        .bind("550e8400-e29b-41d4-a716-446655440001") // area: work area
+        .bind("") // parent: empty for top-level task
+        .bind(0) // not trashed
         .bind("[\"inbox\"]")
         .execute(&pool).await.unwrap();
 
         sqlx::query(
-            "INSERT INTO TMTask (uuid, title, type, status, notes, start_date, due_date, created, modified, project_uuid, area_uuid, parent_uuid, tags) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+            "INSERT INTO TMTask (uuid, title, type, status, notes, startDate, deadline, creationDate, userModificationDate, project, area, parent, trashed, tags) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
         )
         .bind("550e8400-e29b-41d4-a716-446655440100")
         .bind("Research competitors")
         .bind(0)
         .bind(0)
         .bind("Look at competitor websites for inspiration")
-        .bind("")
-        .bind("")
-        .bind(&now)
-        .bind(&now)
+        .bind::<Option<i64>>(None) // startDate: NULL
+        .bind::<Option<i64>>(None) // deadline: NULL
+        .bind(now_timestamp)
+        .bind(now_timestamp)
         .bind("550e8400-e29b-41d4-a716-446655440010")
-        .bind("")
-        .bind("")
+        .bind("550e8400-e29b-41d4-a716-446655440001") // area: work area
+        .bind("") // parent: empty for top-level task
+        .bind(0) // not trashed
         .bind("[\"research\"]")
         .execute(&pool).await.unwrap();
 
         sqlx::query(
-            "INSERT INTO TMTask (uuid, title, type, status, notes, start_date, due_date, created, modified, project_uuid, area_uuid, parent_uuid, tags) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+            "INSERT INTO TMTask (uuid, title, type, status, notes, startDate, deadline, creationDate, userModificationDate, project, area, parent, trashed, tags) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
         )
         .bind("550e8400-e29b-41d4-a716-446655440101")
         .bind("Read Rust book")
         .bind(0)
         .bind(0)
         .bind("Read The Rust Programming Language book")
-        .bind("")
-        .bind("")
-        .bind(&now)
-        .bind(&now)
+        .bind::<Option<i64>>(None) // startDate: NULL
+        .bind::<Option<i64>>(None) // deadline: NULL
+        .bind(now_timestamp)
+        .bind(now_timestamp)
         .bind("550e8400-e29b-41d4-a716-446655440011")
-        .bind("")
-        .bind("")
+        .bind("550e8400-e29b-41d4-a716-446655440002") // area: personal area
+        .bind("") // parent: empty for top-level task
+        .bind(0) // not trashed
         .bind("[\"reading\"]")
         .execute(&pool).await.unwrap();
 
@@ -546,15 +518,15 @@ pub struct MockTask {
     pub uuid: String,
     pub title: String,
     pub status: String,
-    pub project_uuid: Option<String>,
-    pub area_uuid: Option<String>,
+    pub project: Option<String>,
+    pub area: Option<String>,
 }
 
 #[derive(Debug, Clone)]
 pub struct MockProject {
     pub uuid: String,
     pub title: String,
-    pub area_uuid: Option<String>,
+    pub area: Option<String>,
     pub status: String,
 }
 
@@ -608,18 +580,18 @@ impl MockDatabase {
     }
 
     #[must_use]
-    pub fn get_tasks_by_project(&self, project_uuid: &str) -> Vec<&MockTask> {
+    pub fn get_tasks_by_project(&self, project: &str) -> Vec<&MockTask> {
         self.tasks
             .iter()
-            .filter(|t| t.project_uuid.as_ref() == Some(&project_uuid.to_string()))
+            .filter(|t| t.project.as_ref() == Some(&project.to_string()))
             .collect()
     }
 
     #[must_use]
-    pub fn get_tasks_by_area(&self, area_uuid: &str) -> Vec<&MockTask> {
+    pub fn get_tasks_by_area(&self, area: &str) -> Vec<&MockTask> {
         self.tasks
             .iter()
-            .filter(|t| t.area_uuid.as_ref() == Some(&area_uuid.to_string()))
+            .filter(|t| t.area.as_ref() == Some(&area.to_string()))
             .collect()
     }
 }
@@ -778,14 +750,14 @@ impl McpTestUtils {
         db.add_project(MockProject {
             uuid: "project-1".to_string(),
             title: "Website Redesign".to_string(),
-            area_uuid: Some("area-1".to_string()),
+            area: Some("area-1".to_string()),
             status: "incomplete".to_string(),
         });
 
         db.add_project(MockProject {
             uuid: "project-2".to_string(),
             title: "Another Project".to_string(),
-            area_uuid: Some("area-2".to_string()),
+            area: Some("area-2".to_string()),
             status: "incomplete".to_string(),
         });
 
@@ -801,32 +773,32 @@ impl McpTestUtils {
             uuid: "task-1".to_string(),
             title: "Research competitors".to_string(),
             status: "incomplete".to_string(),
-            project_uuid: Some("project-1".to_string()),
-            area_uuid: None,
+            project: Some("project-1".to_string()),
+            area: None,
         });
 
         db.add_task(MockTask {
             uuid: "task-urgent".to_string(),
             title: "Urgent Task".to_string(),
             status: "incomplete".to_string(),
-            project_uuid: Some("project-1".to_string()),
-            area_uuid: None,
+            project: Some("project-1".to_string()),
+            area: None,
         });
 
         db.add_task(MockTask {
             uuid: "task-completed".to_string(),
             title: "Completed Task".to_string(),
             status: "completed".to_string(),
-            project_uuid: Some("project-2".to_string()),
-            area_uuid: None,
+            project: Some("project-2".to_string()),
+            area: None,
         });
 
         db.add_task(MockTask {
             uuid: "task-2".to_string(),
             title: "Read Rust book".to_string(),
             status: "completed".to_string(),
-            project_uuid: Some("project-2".to_string()),
-            area_uuid: None,
+            project: Some("project-2".to_string()),
+            area: None,
         });
 
         db
@@ -1067,8 +1039,8 @@ mod tests {
             uuid: "test-task".to_string(),
             title: "Test Task".to_string(),
             status: "incomplete".to_string(),
-            project_uuid: None,
-            area_uuid: None,
+            project: None,
+            area: None,
         });
 
         let task = db.get_task("test-task");

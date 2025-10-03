@@ -54,13 +54,11 @@ async fn main() -> Result<()> {
     let db = Arc::new(db);
 
     match cli.command {
-        Commands::Inbox { limit: _ } => {
-            error!("Inbox command is temporarily disabled during SQLx migration");
-            println!("🚧 Inbox command is temporarily disabled");
-            println!("   This feature is being migrated to use SQLx for better async support");
-            return Err(things3_core::ThingsError::unknown(
-                "Inbox command temporarily disabled".to_string(),
-            ));
+        Commands::Inbox { limit } => {
+            info!("Fetching inbox tasks...");
+            let tasks = db.get_inbox(limit).await?;
+            let json = serde_json::to_string_pretty(&tasks)?;
+            println!("{json}");
         }
         Commands::Today { limit: _ } => {
             error!("Today command is temporarily disabled during SQLx migration");
@@ -70,29 +68,26 @@ async fn main() -> Result<()> {
                 "Today command temporarily disabled".to_string(),
             ));
         }
-        Commands::Projects { area: _, limit: _ } => {
-            error!("Projects command is temporarily disabled during SQLx migration");
-            println!("🚧 Projects command is temporarily disabled");
-            println!("   This feature is being migrated to use SQLx for better async support");
-            return Err(things3_core::ThingsError::unknown(
-                "Projects command temporarily disabled".to_string(),
-            ));
+        Commands::Projects { area: _, limit } => {
+            info!("Fetching projects...");
+            let projects = db.get_projects(limit).await?;
+            let json = serde_json::to_string_pretty(&projects)?;
+            println!("{json}");
         }
         Commands::Areas { limit: _ } => {
-            error!("Areas command is temporarily disabled during SQLx migration");
-            println!("🚧 Areas command is temporarily disabled");
-            println!("   This feature is being migrated to use SQLx for better async support");
-            return Err(things3_core::ThingsError::unknown(
-                "Areas command temporarily disabled".to_string(),
-            ));
+            info!("Fetching areas...");
+            let areas = db.get_areas().await?;
+            let json = serde_json::to_string_pretty(&areas)?;
+            println!("{json}");
         }
-        Commands::Search { query: _, limit: _ } => {
-            error!("Search command is temporarily disabled during SQLx migration");
-            println!("🚧 Search command is temporarily disabled");
-            println!("   This feature is being migrated to use SQLx for better async support");
-            return Err(things3_core::ThingsError::unknown(
-                "Search command temporarily disabled".to_string(),
-            ));
+        Commands::Search { query, limit } => {
+            let tasks = db.search_tasks(&query).await?;
+            let limited_tasks: Vec<_> = if let Some(limit) = limit {
+                tasks.into_iter().take(limit).collect()
+            } else {
+                tasks
+            };
+            println!("{}", serde_json::to_string_pretty(&limited_tasks)?);
         }
         Commands::Mcp => {
             info!("Starting MCP server...");
