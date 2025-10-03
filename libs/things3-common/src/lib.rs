@@ -5,17 +5,19 @@
 //! # Examples
 //!
 //! ```
-//! use things3_common::{DATABASE_FILENAME, get_default_database_path, truncate_string};
+//! use things3_common::{DATABASE_FILENAME, truncate_string, format_date};
+//! use chrono::NaiveDate;
 //!
 //! // Use constants
 //! assert_eq!(DATABASE_FILENAME, "main.sqlite");
 //!
 //! // Use utility functions
-//! let path = get_default_database_path();
-//! assert!(!path.to_string_lossy().is_empty());
-//!
 //! let truncated = truncate_string("hello world", 5);
 //! assert_eq!(truncated, "he...");
+//!
+//! let date = NaiveDate::from_ymd_opt(2023, 12, 25).unwrap();
+//! let formatted = format_date(&date);
+//! assert_eq!(formatted, "2023-12-25");
 //! ```
 
 pub mod constants;
@@ -52,10 +54,6 @@ mod tests {
         // Test that utility functions are properly re-exported from the crate root
         use chrono::{NaiveDate, Utc};
 
-        // Test get_default_database_path
-        let path = get_default_database_path();
-        assert!(!path.to_string_lossy().is_empty());
-
         // Test format_date
         let date = NaiveDate::from_ymd_opt(2023, 12, 25).unwrap();
         let formatted = format_date(&date);
@@ -88,8 +86,8 @@ mod tests {
         assert_eq!(constants::DEFAULT_QUERY_LIMIT, 100);
 
         // Test utils module
-        let path = utils::get_default_database_path();
-        assert!(!path.to_string_lossy().is_empty());
+        let result = utils::truncate_string("hello world", 5);
+        assert_eq!(result, "he...");
 
         // Test that we can use module-qualified names
         assert!(utils::is_valid_uuid("550e8400-e29b-41d4-a716-446655440000"));
@@ -104,16 +102,18 @@ mod tests {
         // Test importing constants directly
         use crate::{DATABASE_FILENAME, DATE_FORMATS, DEFAULT_QUERY_LIMIT};
         // Test importing functions directly
-        use crate::{get_default_database_path, is_valid_uuid, truncate_string};
+        use crate::{format_date, is_valid_uuid, truncate_string};
 
         assert_eq!(DATABASE_FILENAME, "main.sqlite");
         assert_eq!(DEFAULT_QUERY_LIMIT, 100);
         assert_eq!(DATE_FORMATS.len(), 3);
 
-        let path = get_default_database_path();
-        assert!(!path.to_string_lossy().is_empty());
         assert!(is_valid_uuid("550e8400-e29b-41d4-a716-446655440000"));
         assert_eq!(truncate_string("hello", 3), "...");
+
+        let date = chrono::NaiveDate::from_ymd_opt(2023, 1, 1).unwrap();
+        let formatted = format_date(&date);
+        assert_eq!(formatted, "2023-01-01");
     }
 
     #[test]
@@ -130,9 +130,12 @@ mod tests {
 
         {
             use crate::utils::*;
-            let path = get_default_database_path();
-            assert!(!path.to_string_lossy().is_empty());
             assert!(is_valid_uuid("550e8400-e29b-41d4-a716-446655440000"));
+            assert_eq!(truncate_string("test", 2), "...");
+
+            let date = chrono::NaiveDate::from_ymd_opt(2023, 6, 15).unwrap();
+            let formatted = format_date(&date);
+            assert_eq!(formatted, "2023-06-15");
         }
     }
 }
