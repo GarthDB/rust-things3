@@ -2,7 +2,7 @@
 
 A high-performance Rust library and CLI for Things 3 integration with integrated MCP (Model Context Protocol) server support for AI/LLM environments.
 
-[![CI](https://github.com/GarthDB/rust-things3/workflows/CI/badge.svg)](https://github.com/GarthDB/rust-things3/actions)
+[![CI/CD Pipeline](https://github.com/GarthDB/rust-things3/actions/workflows/ci.yml/badge.svg)](https://github.com/GarthDB/rust-things3/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/gh/GarthDB/rust-things3/branch/main/graph/badge.svg)](https://codecov.io/gh/GarthDB/rust-things3)
 [![Crates.io](https://img.shields.io/crates/v/things3-cli.svg)](https://crates.io/crates/things3-cli)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
