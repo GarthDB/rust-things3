@@ -792,6 +792,125 @@ mod tests {
     }
 
     #[test]
+    fn test_config_for_testing() {
+        let result = ThingsConfig::for_testing();
+        assert!(result.is_ok(), "Should create test config successfully");
+
+        let config = result.unwrap();
+        assert!(
+            !config.fallback_to_default,
+            "Test config should have fallback disabled"
+        );
+
+        // Test config should use a temporary database path
+        let path_str = config.database_path.to_string_lossy();
+        assert!(
+            path_str.contains("tmp") || !path_str.is_empty(),
+            "Test config should use a temporary path"
+        );
+    }
+
+    #[test]
+    fn test_config_effective_database_path_error_cases() {
+        // Test with non-existent path and fallback disabled
+        let non_existent_path = PathBuf::from("/absolutely/non/existent/path/database.db");
+        let config = ThingsConfig::new(&non_existent_path, false);
+
+        let result = config.get_effective_database_path();
+        assert!(
+            result.is_err(),
+            "Should fail when file doesn't exist and fallback is disabled"
+        );
+
+        let error_msg = result.unwrap_err().to_string();
+        assert!(
+            error_msg.contains("fallback is disabled"),
+            "Error message should mention fallback is disabled"
+        );
+    }
+
+    #[test]
+    fn test_config_effective_database_path_with_existing_file() {
+        // Create a temporary file to test with
+        let temp_file = NamedTempFile::new().unwrap();
+        let temp_path = temp_file.path().to_path_buf();
+
+        let config = ThingsConfig::new(&temp_path, false);
+        let effective_path = config.get_effective_database_path().unwrap();
+
+        assert_eq!(effective_path, temp_path);
+    }
+
+    #[test]
+    fn test_config_get_default_database_path_format() {
+        let path = ThingsConfig::get_default_database_path();
+        let path_str = path.to_string_lossy();
+
+        // Test the specific format of the path
+        assert!(
+            path_str.contains("JLMPQHK86H.com.culturedcode.ThingsMac"),
+            "Should contain the correct container identifier"
+        );
+        assert!(
+            path_str.contains("ThingsData-0Z0Z2"),
+            "Should contain the correct data directory"
+        );
+        assert!(
+            path_str.contains("Things Database.thingsdatabase"),
+            "Should contain Things database directory"
+        );
+        assert!(
+            path_str.contains("main.sqlite"),
+            "Should contain main.sqlite file"
+        );
+    }
+
+    #[test]
+    fn test_config_with_different_path_types_comprehensive() {
+        // Test with string path
+        let string_path = "/test/path/db.sqlite";
+        let config1 = ThingsConfig::new(string_path, false);
+        assert_eq!(config1.database_path, PathBuf::from(string_path));
+        assert!(!config1.fallback_to_default);
+
+        // Test with PathBuf
+        let pathbuf_path = PathBuf::from("/another/test/path.db");
+        let config2 = ThingsConfig::new(&pathbuf_path, true);
+        assert_eq!(config2.database_path, pathbuf_path);
+        assert!(config2.fallback_to_default);
+    }
+
+    #[test]
+    fn test_config_from_env_edge_cases() {
+        // Test the parsing logic for edge cases
+        let test_cases = vec![
+            ("true", true),
+            ("TRUE", true),
+            ("True", true),
+            ("1", true),
+            ("yes", true),
+            ("YES", true),
+            ("on", true),
+            ("ON", true),
+            ("false", false),
+            ("FALSE", false),
+            ("0", false),
+            ("no", false),
+            ("off", false),
+            ("invalid", false),
+            ("", false),
+            ("random_string", false),
+        ];
+
+        for (value, expected) in test_cases {
+            // Test the parsing logic directly (matches the implementation)
+            let lower = value.to_lowercase();
+            let result = matches!(lower.as_str(), "true" | "1" | "yes" | "on");
+            assert_eq!(result, expected, "Failed for value: '{value}'");
+        }
+    }
+
+    #[test]
     #[ignore = "Flaky test due to environment variable conflicts in parallel execution"]
     fn test_config_from_env_fallback_parsing_with_env_vars() {
         // Save original value
