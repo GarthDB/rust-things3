@@ -349,7 +349,7 @@ impl McpTestHarness {
                 userModificationDate REAL NOT NULL,
                 project TEXT,
                 area TEXT,
-                parent TEXT,
+                heading TEXT,
                 trashed INTEGER NOT NULL DEFAULT 0,
                 tags TEXT DEFAULT '[]',
                 cachedTags BLOB
@@ -439,7 +439,7 @@ impl McpTestHarness {
 
         // Insert test tasks - one in inbox (no project), one in project
         sqlx::query(
-            "INSERT INTO TMTask (uuid, title, type, status, notes, startDate, deadline, creationDate, userModificationDate, project, area, parent, trashed, tags) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+            "INSERT INTO TMTask (uuid, title, type, status, notes, startDate, deadline, creationDate, userModificationDate, project, area, heading, trashed, tags) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
         )
         .bind("550e8400-e29b-41d4-a716-446655440099")
         .bind("Inbox Task")
@@ -452,13 +452,13 @@ impl McpTestHarness {
         .bind(now_timestamp)
         .bind::<Option<String>>(None) // No project (inbox) - use NULL instead of empty string
         .bind("550e8400-e29b-41d4-a716-446655440001") // area: work area
-        .bind("") // parent: empty for top-level task
+        .bind("") // heading: empty for top-level task
         .bind(0) // not trashed
         .bind("[\"inbox\"]")
         .execute(&pool).await.unwrap();
 
         sqlx::query(
-            "INSERT INTO TMTask (uuid, title, type, status, notes, startDate, deadline, creationDate, userModificationDate, project, area, parent, trashed, tags) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+            "INSERT INTO TMTask (uuid, title, type, status, notes, startDate, deadline, creationDate, userModificationDate, project, area, heading, trashed, tags) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
         )
         .bind("550e8400-e29b-41d4-a716-446655440100")
         .bind("Research competitors")
@@ -471,13 +471,13 @@ impl McpTestHarness {
         .bind(now_timestamp)
         .bind("550e8400-e29b-41d4-a716-446655440010")
         .bind("550e8400-e29b-41d4-a716-446655440001") // area: work area
-        .bind("") // parent: empty for top-level task
+        .bind("") // heading: empty for top-level task
         .bind(0) // not trashed
         .bind("[\"research\"]")
         .execute(&pool).await.unwrap();
 
         sqlx::query(
-            "INSERT INTO TMTask (uuid, title, type, status, notes, startDate, deadline, creationDate, userModificationDate, project, area, parent, trashed, tags) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+            "INSERT INTO TMTask (uuid, title, type, status, notes, startDate, deadline, creationDate, userModificationDate, project, area, heading, trashed, tags) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
         )
         .bind("550e8400-e29b-41d4-a716-446655440101")
         .bind("Read Rust book")
@@ -490,7 +490,7 @@ impl McpTestHarness {
         .bind(now_timestamp)
         .bind("550e8400-e29b-41d4-a716-446655440011")
         .bind("550e8400-e29b-41d4-a716-446655440002") // area: personal area
-        .bind("") // parent: empty for top-level task
+        .bind("") // heading: empty for top-level task
         .bind(0) // not trashed
         .bind("[\"reading\"]")
         .execute(&pool).await.unwrap();
