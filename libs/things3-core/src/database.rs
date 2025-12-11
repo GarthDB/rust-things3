@@ -827,9 +827,9 @@ impl ThingsDatabase {
     #[instrument(skip(self))]
     pub async fn get_inbox(&self, limit: Option<usize>) -> ThingsResult<Vec<Task>> {
         let query = if let Some(limit) = limit {
-            format!("SELECT uuid, title, type, status, notes, startDate, deadline, creationDate, userModificationDate, project, area, parent, tags FROM TMTask WHERE type = 0 AND status = 0 AND project IS NULL AND trashed = 0 ORDER BY creationDate DESC LIMIT {limit}")
+            format!("SELECT uuid, title, type, status, notes, startDate, deadline, creationDate, userModificationDate, project, area, heading, tags FROM TMTask WHERE type = 0 AND status = 0 AND project IS NULL AND trashed = 0 ORDER BY creationDate DESC LIMIT {limit}")
         } else {
-            "SELECT uuid, title, type, status, notes, startDate, deadline, creationDate, userModificationDate, project, area, parent, tags FROM TMTask WHERE type = 0 AND status = 0 AND project IS NULL AND trashed = 0 ORDER BY creationDate DESC"
+            "SELECT uuid, title, type, status, notes, startDate, deadline, creationDate, userModificationDate, project, area, heading, tags FROM TMTask WHERE type = 0 AND status = 0 AND project IS NULL AND trashed = 0 ORDER BY creationDate DESC"
                 .to_string()
         };
 
@@ -873,7 +873,7 @@ impl ThingsDatabase {
                         .get::<Option<String>, _>("area")
                         .map(|s| things_uuid_to_uuid(&s)),
                     parent_uuid: row
-                        .get::<Option<String>, _>("parent")
+                        .get::<Option<String>, _>("heading")
                         .map(|s| things_uuid_to_uuid(&s)),
                     tags: row
                         .get::<Option<String>, _>("tags")
@@ -904,10 +904,10 @@ impl ThingsDatabase {
 
         let query = if let Some(limit) = limit {
             format!(
-                "SELECT uuid, title, type, status, notes, startDate, deadline, creationDate, userModificationDate, project, area, parent, tags FROM TMTask WHERE status = 0 AND ((deadline >= ? AND deadline <= ?) OR (startDate >= ? AND startDate <= ?)) AND trashed = 0 ORDER BY creationDate DESC LIMIT {limit}"
+                "SELECT uuid, title, type, status, notes, startDate, deadline, creationDate, userModificationDate, project, area, heading, tags FROM TMTask WHERE status = 0 AND ((deadline >= ? AND deadline <= ?) OR (startDate >= ? AND startDate <= ?)) AND trashed = 0 ORDER BY creationDate DESC LIMIT {limit}"
             )
         } else {
-            "SELECT uuid, title, type, status, notes, startDate, deadline, creationDate, userModificationDate, project, area, parent, tags FROM TMTask WHERE status = 0 AND ((deadline >= ? AND deadline <= ?) OR (startDate >= ? AND startDate <= ?)) AND trashed = 0 ORDER BY creationDate DESC".to_string()
+            "SELECT uuid, title, type, status, notes, startDate, deadline, creationDate, userModificationDate, project, area, heading, tags FROM TMTask WHERE status = 0 AND ((deadline >= ? AND deadline <= ?) OR (startDate >= ? AND startDate <= ?)) AND trashed = 0 ORDER BY creationDate DESC".to_string()
         };
 
         let rows = sqlx::query(&query)
@@ -954,7 +954,7 @@ impl ThingsDatabase {
                         .get::<Option<String>, _>("area")
                         .map(|s| things_uuid_to_uuid(&s)),
                     parent_uuid: row
-                        .get::<Option<String>, _>("parent")
+                        .get::<Option<String>, _>("heading")
                         .map(|s| things_uuid_to_uuid(&s)),
                     tags: row
                         .get::<Option<String>, _>("tags")

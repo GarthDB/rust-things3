@@ -33,7 +33,7 @@ pub async fn create_test_database<P: AsRef<Path>>(db_path: P) -> crate::Result<(
             userModificationDate REAL NOT NULL,
             project TEXT,
             area TEXT,
-            parent TEXT,
+            heading TEXT,
             trashed INTEGER NOT NULL DEFAULT 0,
             tags TEXT DEFAULT '[]',
             cachedTags BLOB
