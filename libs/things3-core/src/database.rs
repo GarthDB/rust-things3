@@ -1027,7 +1027,7 @@ pub fn get_default_database_path() -> PathBuf {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tempfile::TempDir;
+    use tempfile::{NamedTempFile, TempDir};
 
     #[tokio::test]
     async fn test_database_connection() {
@@ -1193,5 +1193,277 @@ mod tests {
 
         assert!(health_status.overall_healthy);
         assert_eq!(health_status.database_stats.total_items(), 65);
+    }
+
+    #[test]
+    fn test_safe_timestamp_convert_edge_cases() {
+        // Test normal timestamp
+        assert_eq!(safe_timestamp_convert(1_609_459_200.0), 1_609_459_200); // 2021-01-01
+
+        // Test zero
+        assert_eq!(safe_timestamp_convert(0.0), 0);
+
+        // Test negative (should return 0)
+        assert_eq!(safe_timestamp_convert(-1.0), 0);
+
+        // Test infinity (should return 0)
+        assert_eq!(safe_timestamp_convert(f64::INFINITY), 0);
+
+        // Test NaN (should return 0)
+        assert_eq!(safe_timestamp_convert(f64::NAN), 0);
+
+        // Test very large timestamp (should return 0)
+        assert_eq!(safe_timestamp_convert(5_000_000_000.0), 0);
+
+        // Test max valid timestamp
+        let max_timestamp = 4_102_444_800_f64; // 2100-01-01
+        assert_eq!(safe_timestamp_convert(max_timestamp), 4_102_444_800);
+    }
+
+    #[test]
+    fn test_things_uuid_to_uuid_consistency() {
+        // Test consistent UUID generation
+        let things_id = "test-id-123";
+        let uuid1 = things_uuid_to_uuid(things_id);
+        let uuid2 = things_uuid_to_uuid(things_id);
+        assert_eq!(uuid1, uuid2, "UUIDs should be consistent for same input");
+
+        // Test different inputs produce different UUIDs
+        let uuid3 = things_uuid_to_uuid("different-id");
+        assert_ne!(
+            uuid1, uuid3,
+            "Different inputs should produce different UUIDs"
+        );
+
+        // Test empty string
+        let uuid_empty = things_uuid_to_uuid("");
+        assert!(!uuid_empty.to_string().is_empty());
+
+        // Test very long string
+        let long_string = "a".repeat(1000);
+        let uuid_long = things_uuid_to_uuid(&long_string);
+        assert!(!uuid_long.to_string().is_empty());
+    }
+
+    #[test]
+    fn test_task_status_from_i32_all_variants() {
+        assert_eq!(TaskStatus::from_i32(0), Some(TaskStatus::Incomplete));
+        assert_eq!(TaskStatus::from_i32(1), Some(TaskStatus::Completed));
+        assert_eq!(TaskStatus::from_i32(2), Some(TaskStatus::Canceled));
+        assert_eq!(TaskStatus::from_i32(3), Some(TaskStatus::Trashed));
+        assert_eq!(TaskStatus::from_i32(999), None);
+        assert_eq!(TaskStatus::from_i32(-1), None);
+    }
+
+    #[test]
+    fn test_task_type_from_i32_all_variants() {
+        assert_eq!(TaskType::from_i32(0), Some(TaskType::Todo));
+        assert_eq!(TaskType::from_i32(1), Some(TaskType::Project));
+        assert_eq!(TaskType::from_i32(2), Some(TaskType::Heading));
+        assert_eq!(TaskType::from_i32(3), Some(TaskType::Area));
+        assert_eq!(TaskType::from_i32(999), None);
+        assert_eq!(TaskType::from_i32(-1), None);
+    }
+
+    #[test]
+    fn test_database_pool_config_default_values() {
+        let config = DatabasePoolConfig::default();
+        assert_eq!(config.max_connections, 10);
+        assert_eq!(config.min_connections, 1);
+        assert_eq!(config.connect_timeout, Duration::from_secs(30));
+        assert_eq!(config.idle_timeout, Duration::from_secs(600));
+        assert_eq!(config.max_lifetime, Duration::from_secs(1800));
+        assert!(config.test_before_acquire);
+    }
+
+    #[test]
+    fn test_database_stats_total_items_calculation() {
+        let stats = DatabaseStats {
+            task_count: 10,
+            project_count: 5,
+            area_count: 3,
+        };
+        assert_eq!(stats.total_items(), 18); // 10 + 5 + 3
+
+        // Test with zero values
+        let empty_stats = DatabaseStats {
+            task_count: 0,
+            project_count: 0,
+            area_count: 0,
+        };
+        assert_eq!(empty_stats.total_items(), 0);
+    }
+
+    #[test]
+    fn test_pool_health_status_creation_comprehensive() {
+        let status = PoolHealthStatus {
+            is_healthy: true,
+            pool_size: 8,
+            active_connections: 2,
+            idle_connections: 3,
+            max_connections: 10,
+            min_connections: 1,
+            connection_timeout: Duration::from_secs(30),
+            idle_timeout: Some(Duration::from_secs(600)),
+            max_lifetime: Some(Duration::from_secs(1800)),
+        };
+        assert!(status.is_healthy);
+        assert_eq!(status.pool_size, 8);
+        assert_eq!(status.max_connections, 10);
+    }
+
+    #[test]
+    fn test_pool_metrics_creation_comprehensive() {
+        let metrics = PoolMetrics {
+            pool_size: 8,
+            active_connections: 5,
+            idle_connections: 3,
+            max_connections: 10,
+            min_connections: 1,
+            utilization_percentage: 80.0,
+            is_healthy: true,
+            response_time_ms: 50,
+            connection_timeout: Duration::from_secs(30),
+            idle_timeout: Some(Duration::from_secs(600)),
+            max_lifetime: Some(Duration::from_secs(1800)),
+        };
+        assert_eq!(metrics.pool_size, 8);
+        assert_eq!(metrics.response_time_ms, 50);
+        assert!(metrics.is_healthy);
+    }
+
+    #[test]
+    fn test_comprehensive_health_status_creation_full() {
+        let pool_health = PoolHealthStatus {
+            is_healthy: true,
+            pool_size: 8,
+            active_connections: 2,
+            idle_connections: 3,
+            max_connections: 10,
+            min_connections: 1,
+            connection_timeout: Duration::from_secs(30),
+            idle_timeout: Some(Duration::from_secs(600)),
+            max_lifetime: Some(Duration::from_secs(1800)),
+        };
+
+        let pool_metrics = PoolMetrics {
+            pool_size: 8,
+            active_connections: 5,
+            idle_connections: 3,
+            max_connections: 10,
+            min_connections: 1,
+            utilization_percentage: 80.0,
+            is_healthy: true,
+            response_time_ms: 50,
+            connection_timeout: Duration::from_secs(30),
+            idle_timeout: Some(Duration::from_secs(600)),
+            max_lifetime: Some(Duration::from_secs(1800)),
+        };
+
+        let database_stats = DatabaseStats {
+            task_count: 100,
+            project_count: 20,
+            area_count: 5,
+        };
+
+        let status = ComprehensiveHealthStatus {
+            overall_healthy: true,
+            pool_health,
+            pool_metrics,
+            database_stats,
+            timestamp: Utc::now(),
+        };
+
+        assert!(status.overall_healthy);
+        assert_eq!(status.database_stats.total_items(), 125);
+    }
+
+    #[test]
+    fn test_sqlite_optimizations_default_values() {
+        let opts = SqliteOptimizations::default();
+        assert!(opts.enable_wal_mode);
+        assert!(opts.enable_foreign_keys);
+        assert_eq!(opts.cache_size, -20000);
+        assert_eq!(opts.temp_store, "MEMORY");
+        assert_eq!(opts.mmap_size, 268_435_456);
+        assert_eq!(opts.synchronous_mode, "NORMAL");
+        assert_eq!(opts.journal_mode, "WAL");
+    }
+
+    #[test]
+    fn test_get_default_database_path_format() {
+        let path = get_default_database_path();
+        let path_str = path.to_string_lossy();
+        assert!(path_str.contains("Things Database.thingsdatabase"));
+        assert!(path_str.contains("main.sqlite"));
+        assert!(path_str.contains("Library/Group Containers"));
+    }
+
+    #[tokio::test]
+    async fn test_database_new_with_config() {
+        let temp_file = NamedTempFile::new().unwrap();
+        let db_path = temp_file.path();
+
+        crate::test_utils::create_test_database(db_path)
+            .await
+            .unwrap();
+
+        let config = DatabasePoolConfig {
+            max_connections: 5,
+            min_connections: 1,
+            connect_timeout: Duration::from_secs(10),
+            idle_timeout: Duration::from_secs(300),
+            max_lifetime: Duration::from_secs(900),
+            test_before_acquire: true,
+            sqlite_optimizations: SqliteOptimizations::default(),
+        };
+
+        let database = ThingsDatabase::new_with_config(db_path, config)
+            .await
+            .unwrap();
+        let pool = database.pool();
+        assert!(!pool.is_closed());
+    }
+
+    #[tokio::test]
+    async fn test_database_error_handling_invalid_path() {
+        // Test with non-existent database path
+        let result = ThingsDatabase::new(Path::new("/non/existent/path.db")).await;
+        assert!(result.is_err(), "Should fail with non-existent path");
+    }
+
+    #[tokio::test]
+    async fn test_database_get_stats() {
+        let temp_file = NamedTempFile::new().unwrap();
+        let db_path = temp_file.path();
+
+        crate::test_utils::create_test_database(db_path)
+            .await
+            .unwrap();
+        let database = ThingsDatabase::new(db_path).await.unwrap();
+
+        let stats = database.get_stats().await.unwrap();
+        assert!(stats.task_count > 0, "Should have test tasks");
+        assert!(stats.area_count > 0, "Should have test areas");
+        assert!(stats.total_items() > 0, "Should have total items");
+    }
+
+    #[tokio::test]
+    async fn test_database_comprehensive_health_check() {
+        let temp_file = NamedTempFile::new().unwrap();
+        let db_path = temp_file.path();
+
+        crate::test_utils::create_test_database(db_path)
+            .await
+            .unwrap();
+        let database = ThingsDatabase::new(db_path).await.unwrap();
+
+        let health = database.comprehensive_health_check().await.unwrap();
+        assert!(health.overall_healthy, "Database should be healthy");
+        assert!(health.pool_health.is_healthy, "Pool should be healthy");
+        assert!(
+            health.pool_metrics.is_healthy,
+            "Pool metrics should be healthy"
+        );
     }
 }

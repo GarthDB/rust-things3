@@ -811,4 +811,228 @@ mod tests {
         assert!(all_metrics.iter().any(|m| m.operation_name == "test_op"));
         assert!(all_metrics.iter().any(|m| m.operation_name == "test_op2"));
     }
+
+    #[test]
+    fn test_performance_stats_new_initialization() {
+        let stats = PerformanceStats::new("test_operation".to_string());
+        assert_eq!(stats.operation_name, "test_operation");
+        assert_eq!(stats.total_calls, 0);
+        assert_eq!(stats.successful_calls, 0);
+        assert_eq!(stats.failed_calls, 0);
+        assert!((stats.success_rate - 0.0).abs() < f64::EPSILON);
+        assert_eq!(stats.average_duration, Duration::from_millis(0));
+        assert_eq!(stats.min_duration, Duration::MAX);
+        assert_eq!(stats.max_duration, Duration::ZERO);
+        assert!(stats.last_called.is_none());
+    }
+
+    #[test]
+    fn test_performance_stats_update_single_success() {
+        let mut stats = PerformanceStats::new("test_op".to_string());
+
+        let metric = OperationMetrics {
+            operation_name: "test_op".to_string(),
+            duration: Duration::from_millis(100),
+            timestamp: Utc::now(),
+            success: true,
+            error_message: None,
+        };
+
+        stats.add_metric(&metric);
+
+        assert_eq!(stats.total_calls, 1);
+        assert_eq!(stats.successful_calls, 1);
+        assert_eq!(stats.failed_calls, 0);
+        assert!((stats.success_rate - 1.0).abs() < f64::EPSILON);
+        assert_eq!(stats.average_duration, Duration::from_millis(100));
+        assert_eq!(stats.min_duration, Duration::from_millis(100));
+        assert_eq!(stats.max_duration, Duration::from_millis(100));
+        assert!(stats.last_called.is_some());
+    }
+
+    #[test]
+    fn test_performance_stats_update_multiple_operations() {
+        let mut stats = PerformanceStats::new("test_op".to_string());
+
+        // Add successful operation
+        let metric1 = OperationMetrics {
+            operation_name: "test_op".to_string(),
+            duration: Duration::from_millis(100),
+            timestamp: Utc::now(),
+            success: true,
+            error_message: None,
+        };
+        stats.add_metric(&metric1);
+
+        // Add failed operation
+        let metric2 = OperationMetrics {
+            operation_name: "test_op".to_string(),
+            duration: Duration::from_millis(200),
+            timestamp: Utc::now(),
+            success: false,
+            error_message: Some("Error".to_string()),
+        };
+        stats.add_metric(&metric2);
+
+        // Add another successful operation
+        let metric3 = OperationMetrics {
+            operation_name: "test_op".to_string(),
+            duration: Duration::from_millis(50),
+            timestamp: Utc::now(),
+            success: true,
+            error_message: None,
+        };
+        stats.add_metric(&metric3);
+
+        assert_eq!(stats.total_calls, 3);
+        assert_eq!(stats.successful_calls, 2);
+        assert_eq!(stats.failed_calls, 1);
+        assert!((stats.success_rate - 0.666_666_666_666_666_6).abs() < 0.001); // 2/3
+                                                                               // Average should be approximately 116-117ms due to rounding
+        assert!(
+            stats.average_duration >= Duration::from_millis(116)
+                && stats.average_duration <= Duration::from_millis(117)
+        );
+        assert_eq!(stats.min_duration, Duration::from_millis(50));
+        assert_eq!(stats.max_duration, Duration::from_millis(200));
+    }
+
+    #[test]
+    fn test_system_metrics_creation() {
+        let metrics = SystemMetrics {
+            timestamp: Utc::now(),
+            memory_usage_mb: 512.0,
+            cpu_usage_percent: 25.5,
+            available_memory_mb: 1024.0,
+            total_memory_mb: 2048.0,
+        };
+
+        assert!((metrics.cpu_usage_percent - 25.5).abs() < f64::EPSILON);
+        assert!((metrics.memory_usage_mb - 512.0).abs() < f64::EPSILON);
+        assert!((metrics.total_memory_mb - 2048.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn test_cache_metrics_creation() {
+        let metrics = CacheMetrics {
+            cache_type: "l1".to_string(),
+            hits: 100,
+            misses: 25,
+            hit_rate: 0.8,
+            total_entries: 125,
+            memory_usage_bytes: 1024 * 1024,
+            evictions: 5,
+            insertions: 130,
+            invalidations: 2,
+            warming_entries: 0,
+            average_access_time_ms: 1.5,
+            last_accessed: Some(Utc::now()),
+        };
+
+        assert_eq!(metrics.hits, 100);
+        assert_eq!(metrics.misses, 25);
+        assert!((metrics.hit_rate - 0.8).abs() < f64::EPSILON);
+        assert_eq!(metrics.total_entries, 125);
+        assert_eq!(metrics.evictions, 5);
+    }
+
+    #[test]
+    fn test_query_metrics_creation() {
+        let metrics = QueryMetrics {
+            query_type: "tasks".to_string(),
+            total_queries: 1000,
+            cached_queries: 950,
+            database_queries: 50,
+            cache_hit_rate: 0.95,
+            average_query_time_ms: 150.0,
+            average_cache_time_ms: 5.0,
+            average_database_time_ms: 200.0,
+            slowest_query_ms: 2000,
+            fastest_query_ms: 10,
+            query_size_bytes: 1024,
+            compression_ratio: 0.8,
+        };
+
+        assert_eq!(metrics.total_queries, 1000);
+        assert_eq!(metrics.cached_queries, 950);
+        assert_eq!(metrics.database_queries, 50);
+        assert!((metrics.average_query_time_ms - 150.0).abs() < f64::EPSILON);
+        assert_eq!(metrics.slowest_query_ms, 2000);
+        assert_eq!(metrics.fastest_query_ms, 10);
+    }
+
+    #[test]
+    fn test_operation_timer_success() {
+        let monitor = PerformanceMonitor::new_default();
+        let timer = monitor.start_operation("test_operation");
+
+        // Simulate some work
+        std::thread::sleep(Duration::from_millis(10));
+
+        timer.success();
+
+        let stats = monitor.get_operation_stats("test_operation").unwrap();
+        assert_eq!(stats.operation_name, "test_operation");
+        assert_eq!(stats.total_calls, 1);
+        assert_eq!(stats.successful_calls, 1);
+        assert!(stats.average_duration >= Duration::from_millis(10));
+    }
+
+    #[test]
+    fn test_operation_timer_error() {
+        let monitor = PerformanceMonitor::new_default();
+        let timer = monitor.start_operation("test_operation");
+
+        timer.error("Test error occurred".to_string());
+
+        let stats = monitor.get_operation_stats("test_operation").unwrap();
+        assert_eq!(stats.operation_name, "test_operation");
+        assert_eq!(stats.total_calls, 1);
+        assert_eq!(stats.failed_calls, 1);
+    }
+
+    #[test]
+    fn test_performance_monitor_get_summary_empty_comprehensive() {
+        let monitor = PerformanceMonitor::new_default();
+        let summary = monitor.get_summary();
+
+        assert_eq!(summary.total_operations, 0);
+        assert_eq!(summary.operation_count, 0);
+    }
+
+    #[test]
+    fn test_performance_monitor_record_and_get_summary() {
+        let monitor = PerformanceMonitor::new_default();
+
+        // Record some operations
+        let metric1 = OperationMetrics {
+            operation_name: "op1".to_string(),
+            duration: Duration::from_millis(100),
+            timestamp: Utc::now(),
+            success: true,
+            error_message: None,
+        };
+        monitor.record_operation(&metric1);
+
+        let metric2 = OperationMetrics {
+            operation_name: "op2".to_string(),
+            duration: Duration::from_millis(200),
+            timestamp: Utc::now(),
+            success: false,
+            error_message: Some("Error".to_string()),
+        };
+        monitor.record_operation(&metric2);
+
+        let summary = monitor.get_summary();
+        assert_eq!(summary.total_operations, 2);
+        assert_eq!(summary.operation_count, 2);
+
+        let op1_stats = monitor.get_operation_stats("op1").unwrap();
+        assert_eq!(op1_stats.total_calls, 1);
+        assert_eq!(op1_stats.successful_calls, 1);
+
+        let op2_stats = monitor.get_operation_stats("op2").unwrap();
+        assert_eq!(op2_stats.total_calls, 1);
+        assert_eq!(op2_stats.failed_calls, 1);
+    }
 }
