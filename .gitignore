@@ -18,3 +18,12 @@ cobertura.xml
 
 # Homebrew tap (separate repository)
 homebrew-tap/
+
+# Database analysis and diagnostic files
+intel_mac_analysis/
+intel_mac_analysis.zip
+machine_comparison_results/
+CROSS_MACHINE_COMPATIBILITY_FIX.md
+THINGS3_DATABASE_ANALYSIS.md
+compare_machine_databases.sh
+diagnose_things3_database.sh
