@@ -28,7 +28,7 @@ async fn create_test_schema(db: &ThingsDatabase) -> Result<(), Box<dyn std::erro
             userModificationDate REAL NOT NULL,
             project TEXT,
             area TEXT,
-            parent TEXT,
+            heading TEXT,
             trashed INTEGER NOT NULL DEFAULT 0,
             tags TEXT DEFAULT '[]',
             cachedTags BLOB

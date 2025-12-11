@@ -15,32 +15,57 @@ use tracing::{error, info};
 async fn main() -> Result<()> {
     let cli = Cli::parse();
 
-    // Initialize observability
-    let obs_config = ObservabilityConfig {
-        log_level: if cli.verbose {
-            "debug".to_string()
-        } else {
-            "info".to_string()
-        },
-        json_logs: std::env::var("THINGS3_JSON_LOGS").unwrap_or_default() == "true",
-        enable_tracing: true,
-        jaeger_endpoint: std::env::var("JAEGER_ENDPOINT").ok(),
-        otlp_endpoint: std::env::var("OTLP_ENDPOINT").ok(),
-        enable_metrics: true,
-        metrics_port: 9090,
-        health_port: 8080,
-        service_name: "things3-cli".to_string(),
-        service_version: env!("CARGO_PKG_VERSION").to_string(),
+    // Check if we're in MCP mode - if so, suppress logging to avoid interfering with JSON-RPC protocol
+    let is_mcp_mode = matches!(cli.command, Commands::Mcp);
+
+    // Initialize observability (suppressed for MCP mode to avoid stderr interference)
+    let observability = if is_mcp_mode {
+        // In MCP mode, use minimal logging (ERROR level only) to avoid interfering with JSON-RPC
+        // MCP protocol requires only JSON-RPC messages on stdout, with stderr reserved for errors
+        let obs_config = ObservabilityConfig {
+            log_level: "error".to_string(), // Only ERROR level to minimize stderr output
+            json_logs: false,
+            enable_tracing: false, // Disable tracing in MCP mode
+            jaeger_endpoint: None,
+            otlp_endpoint: None,
+            enable_metrics: false, // Disable metrics in MCP mode
+            metrics_port: 9090,
+            health_port: 8080,
+            service_name: "things3-cli".to_string(),
+            service_version: env!("CARGO_PKG_VERSION").to_string(),
+        };
+
+        let mut obs = ObservabilityManager::new(obs_config)
+            .map_err(|e| things3_core::ThingsError::unknown(e.to_string()))?;
+        obs.initialize()
+            .map_err(|e| things3_core::ThingsError::unknown(e.to_string()))?;
+        Arc::new(obs)
+    } else {
+        // Normal verbose logging for CLI mode
+        let obs_config = ObservabilityConfig {
+            log_level: if cli.verbose {
+                "debug".to_string()
+            } else {
+                "info".to_string()
+            },
+            json_logs: std::env::var("THINGS3_JSON_LOGS").unwrap_or_default() == "true",
+            enable_tracing: true,
+            jaeger_endpoint: std::env::var("JAEGER_ENDPOINT").ok(),
+            otlp_endpoint: std::env::var("OTLP_ENDPOINT").ok(),
+            enable_metrics: true,
+            metrics_port: 9090,
+            health_port: 8080,
+            service_name: "things3-cli".to_string(),
+            service_version: env!("CARGO_PKG_VERSION").to_string(),
+        };
+
+        let mut obs = ObservabilityManager::new(obs_config)
+            .map_err(|e| things3_core::ThingsError::unknown(e.to_string()))?;
+        obs.initialize()
+            .map_err(|e| things3_core::ThingsError::unknown(e.to_string()))?;
+        info!("Things 3 CLI starting up");
+        Arc::new(obs)
     };
-
-    let mut observability = ObservabilityManager::new(obs_config)
-        .map_err(|e| things3_core::ThingsError::unknown(e.to_string()))?;
-    observability
-        .initialize()
-        .map_err(|e| things3_core::ThingsError::unknown(e.to_string()))?;
-    let observability = Arc::new(observability);
-
-    info!("Things 3 CLI starting up");
 
     // Create configuration
     let config = if let Some(db_path) = cli.database {
