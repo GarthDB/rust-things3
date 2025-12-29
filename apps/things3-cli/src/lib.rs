@@ -302,7 +302,6 @@ pub fn watch_updates(url: &str) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::mcp::start_mcp_server;
     use things3_core::test_utils::create_test_database;
     use tokio::runtime::Runtime;
 
