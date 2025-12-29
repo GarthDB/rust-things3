@@ -9,7 +9,6 @@ use things3_core::{
 };
 use thiserror::Error;
 use tokio::sync::Mutex;
-use tracing::info;
 
 pub mod middleware;
 // pub mod performance_tests; // Temporarily disabled due to API changes
@@ -523,10 +522,72 @@ pub struct ThingsMcpServer {
 ///
 /// # Errors
 /// Returns an error if the server fails to start
-pub fn start_mcp_server(db: Arc<ThingsDatabase>, config: ThingsConfig) -> things3_core::Result<()> {
-    let _server = ThingsMcpServer::new(db, config);
-    info!("MCP server started successfully");
-    // For now, just return success - in a real implementation, this would start the server
+pub async fn start_mcp_server(
+    db: Arc<ThingsDatabase>,
+    config: ThingsConfig,
+) -> things3_core::Result<()> {
+    use tokio::io::{stdin, stdout};
+    use tokio::io::{AsyncBufReadExt, AsyncWriteExt};
+
+    let server = Arc::new(tokio::sync::Mutex::new(ThingsMcpServer::new(db, config)));
+
+    // Use async stdin/stdout
+    let mut stdin_handle = stdin();
+    let mut stdout_handle = stdout();
+    let mut reader = tokio::io::BufReader::new(&mut stdin_handle);
+    let mut line = String::new();
+
+    // Read JSON-RPC requests line by line
+    loop {
+        line.clear();
+        let bytes_read = reader.read_line(&mut line).await.map_err(|e| {
+            things3_core::ThingsError::unknown(format!("Failed to read from stdin: {}", e))
+        })?;
+
+        // EOF reached
+        if bytes_read == 0 {
+            break;
+        }
+
+        let trimmed = line.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+
+        // Parse JSON-RPC request
+        let request: serde_json::Value = serde_json::from_str(trimmed).map_err(|e| {
+            things3_core::ThingsError::unknown(format!("Failed to parse JSON-RPC request: {}", e))
+        })?;
+
+        // Handle the request
+        let server_clone = Arc::clone(&server);
+        let response_opt = {
+            let server = server_clone.lock().await;
+            server.handle_jsonrpc_request(request).await
+        }?;
+
+        // Only write response if this is a request (not a notification)
+        if let Some(response) = response_opt {
+            let response_str = serde_json::to_string(&response).map_err(|e| {
+                things3_core::ThingsError::unknown(format!("Failed to serialize response: {}", e))
+            })?;
+
+            stdout_handle
+                .write_all(response_str.as_bytes())
+                .await
+                .map_err(|e| {
+                    things3_core::ThingsError::unknown(format!("Failed to write to stdout: {}", e))
+                })?;
+            stdout_handle.write_all(b"\n").await.map_err(|e| {
+                things3_core::ThingsError::unknown(format!("Failed to write newline: {}", e))
+            })?;
+            stdout_handle.flush().await.map_err(|e| {
+                things3_core::ThingsError::unknown(format!("Failed to flush stdout: {}", e))
+            })?;
+        }
+        // Notifications don't require a response, so we silently continue
+    }
+
     Ok(())
 }
 
@@ -538,19 +599,80 @@ pub fn start_mcp_server(db: Arc<ThingsDatabase>, config: ThingsConfig) -> things
 ///
 /// # Errors
 /// Returns an error if the server fails to start
-pub fn start_mcp_server_with_config(
+pub async fn start_mcp_server_with_config(
     db: Arc<ThingsDatabase>,
     mcp_config: McpServerConfig,
 ) -> things3_core::Result<()> {
+    use tokio::io::{stdin, stdout};
+    use tokio::io::{AsyncBufReadExt, AsyncWriteExt};
+
     // Convert McpServerConfig to ThingsConfig for backward compatibility
     let things_config = ThingsConfig::new(
         mcp_config.database.path.clone(),
         mcp_config.database.fallback_to_default,
     );
 
-    let _server = ThingsMcpServer::new_with_mcp_config(db, things_config, mcp_config);
-    info!("MCP server started successfully with comprehensive configuration");
-    // For now, just return success - in a real implementation, this would start the server
+    let server = Arc::new(tokio::sync::Mutex::new(
+        ThingsMcpServer::new_with_mcp_config(db, things_config, mcp_config),
+    ));
+
+    // Use async stdin/stdout
+    let mut stdin_handle = stdin();
+    let mut stdout_handle = stdout();
+    let mut reader = tokio::io::BufReader::new(&mut stdin_handle);
+    let mut line = String::new();
+
+    // Read JSON-RPC requests line by line
+    loop {
+        line.clear();
+        let bytes_read = reader.read_line(&mut line).await.map_err(|e| {
+            things3_core::ThingsError::unknown(format!("Failed to read from stdin: {}", e))
+        })?;
+
+        // EOF reached
+        if bytes_read == 0 {
+            break;
+        }
+
+        let trimmed = line.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+
+        // Parse JSON-RPC request
+        let request: serde_json::Value = serde_json::from_str(trimmed).map_err(|e| {
+            things3_core::ThingsError::unknown(format!("Failed to parse JSON-RPC request: {}", e))
+        })?;
+
+        // Handle the request
+        let server_clone = Arc::clone(&server);
+        let response_opt = {
+            let server = server_clone.lock().await;
+            server.handle_jsonrpc_request(request).await
+        }?;
+
+        // Only write response if this is a request (not a notification)
+        if let Some(response) = response_opt {
+            let response_str = serde_json::to_string(&response).map_err(|e| {
+                things3_core::ThingsError::unknown(format!("Failed to serialize response: {}", e))
+            })?;
+
+            stdout_handle
+                .write_all(response_str.as_bytes())
+                .await
+                .map_err(|e| {
+                    things3_core::ThingsError::unknown(format!("Failed to write to stdout: {}", e))
+                })?;
+            stdout_handle.write_all(b"\n").await.map_err(|e| {
+                things3_core::ThingsError::unknown(format!("Failed to write newline: {}", e))
+            })?;
+            stdout_handle.flush().await.map_err(|e| {
+                things3_core::ThingsError::unknown(format!("Failed to flush stdout: {}", e))
+            })?;
+        }
+        // Notifications don't require a response, so we silently continue
+    }
+
     Ok(())
 }
 
@@ -561,7 +683,10 @@ impl ThingsMcpServer {
         let performance_monitor = PerformanceMonitor::new_default();
         let exporter = DataExporter::new_default();
         let backup_manager = BackupManager::new(config);
-        let middleware_chain = MiddlewareConfig::default().build_chain();
+        // Use silent middleware config for MCP mode (no logging to stdout)
+        let mut middleware_config = MiddlewareConfig::default();
+        middleware_config.logging.enabled = false; // Disable logging to prevent stdout interference
+        let middleware_chain = middleware_config.build_chain();
 
         Self {
             db,
@@ -609,9 +734,10 @@ impl ThingsMcpServer {
         let backup_manager = BackupManager::new(config);
 
         // Convert McpServerConfig to MiddlewareConfig
+        // Always disable logging in MCP mode to prevent stdout interference with JSON-RPC
         let middleware_config = MiddlewareConfig {
             logging: middleware::LoggingConfig {
-                enabled: mcp_config.logging.console_logs,
+                enabled: false, // Always disabled in MCP mode for JSON-RPC compatibility
                 level: mcp_config.logging.level.clone(),
             },
             validation: middleware::ValidationConfig {
@@ -1132,11 +1258,13 @@ impl ThingsMcpServer {
             .and_then(serde_json::Value::as_u64)
             .map(|v| usize::try_from(v).unwrap_or(usize::MAX));
 
-        let tasks = self
-            .db
-            .get_today(limit)
-            .await
-            .map_err(|e| McpError::database_operation_failed("get_today", e))?;
+        let tasks = self.db.get_today(limit).await.map_err(|e| {
+            // Include the actual error message for debugging
+            McpError::database_operation_failed(
+                "get_today",
+                things3_core::ThingsError::unknown(format!("get_today failed: {}", e)),
+            )
+        })?;
 
         let json = serde_json::to_string_pretty(&tasks)
             .map_err(|e| McpError::serialization_failed("get_today serialization", e))?;
@@ -2152,5 +2280,155 @@ impl ThingsMcpServer {
         Ok(ReadResourceResult {
             contents: vec![Content::Text { text: data }],
         })
+    }
+
+    /// Handle a JSON-RPC request and return a JSON-RPC response
+    ///
+    /// Returns `None` for notifications (messages without `id` field) - these don't require a response
+    ///
+    /// # Errors
+    /// Returns an error if request parsing or handling fails
+    pub async fn handle_jsonrpc_request(
+        &self,
+        request: serde_json::Value,
+    ) -> things3_core::Result<Option<serde_json::Value>> {
+        use serde_json::json;
+
+        let method = request["method"].as_str().ok_or_else(|| {
+            things3_core::ThingsError::unknown("Missing method in JSON-RPC request".to_string())
+        })?;
+        let params = request["params"].clone();
+
+        // Check if this is a notification (no `id` field present)
+        // In JSON-RPC, notifications don't have an `id` field, so get("id") returns None
+        let is_notification = request.get("id").is_none();
+
+        // Handle notifications silently (they don't require a response)
+        if is_notification {
+            match method {
+                "notifications/initialized" => {
+                    // Silently acknowledge the initialized notification
+                    return Ok(None);
+                }
+                _ => {
+                    // Unknown notification - silently ignore
+                    return Ok(None);
+                }
+            }
+        }
+
+        // For requests (with `id` field), we need the id for the response
+        let id = request["id"].clone();
+
+        let result = match method {
+            "initialize" => {
+                // Handle initialize request
+                json!({
+                    "protocolVersion": "2024-11-05",
+                    "capabilities": {
+                        "tools": { "listChanged": false },
+                        "resources": { "subscribe": false, "listChanged": false },
+                        "prompts": { "listChanged": false }
+                    },
+                    "serverInfo": {
+                        "name": "things3-mcp",
+                        "version": env!("CARGO_PKG_VERSION")
+                    }
+                })
+            }
+            "tools/list" => {
+                let tools_result = self.list_tools().map_err(|e| {
+                    things3_core::ThingsError::unknown(format!("Failed to list tools: {}", e))
+                })?;
+                json!(tools_result.tools)
+            }
+            "tools/call" => {
+                let tool_name = params["name"]
+                    .as_str()
+                    .ok_or_else(|| {
+                        things3_core::ThingsError::unknown(
+                            "Missing tool name in params".to_string(),
+                        )
+                    })?
+                    .to_string();
+                let arguments = params["arguments"].clone();
+
+                let call_request = CallToolRequest {
+                    name: tool_name,
+                    arguments: Some(arguments),
+                };
+
+                let call_result = self.call_tool(call_request).await.map_err(|e| {
+                    things3_core::ThingsError::unknown(format!("Tool call failed: {}", e))
+                })?;
+
+                json!(call_result)
+            }
+            "resources/list" => {
+                let resources_result = self.list_resources().map_err(|e| {
+                    things3_core::ThingsError::unknown(format!("Failed to list resources: {}", e))
+                })?;
+                json!(resources_result.resources)
+            }
+            "resources/read" => {
+                let uri = params["uri"]
+                    .as_str()
+                    .ok_or_else(|| {
+                        things3_core::ThingsError::unknown("Missing URI in params".to_string())
+                    })?
+                    .to_string();
+
+                let read_request = ReadResourceRequest { uri };
+                let read_result = self.read_resource(read_request).await.map_err(|e| {
+                    things3_core::ThingsError::unknown(format!("Resource read failed: {}", e))
+                })?;
+
+                json!(read_result)
+            }
+            "prompts/list" => {
+                let prompts_result = self.list_prompts().map_err(|e| {
+                    things3_core::ThingsError::unknown(format!("Failed to list prompts: {}", e))
+                })?;
+                json!(prompts_result.prompts)
+            }
+            "prompts/get" => {
+                let prompt_name = params["name"]
+                    .as_str()
+                    .ok_or_else(|| {
+                        things3_core::ThingsError::unknown(
+                            "Missing prompt name in params".to_string(),
+                        )
+                    })?
+                    .to_string();
+                let arguments = params.get("arguments").cloned();
+
+                let get_request = GetPromptRequest {
+                    name: prompt_name,
+                    arguments,
+                };
+
+                let get_result = self.get_prompt(get_request).await.map_err(|e| {
+                    things3_core::ThingsError::unknown(format!("Prompt get failed: {}", e))
+                })?;
+
+                json!(get_result)
+            }
+            _ => {
+                return Ok(Some(json!({
+                    "jsonrpc": "2.0",
+                    "id": id,
+                    "error": {
+                        "code": -32601,
+                        "message": format!("Method not found: {}", method)
+                    }
+                })));
+            }
+        };
+
+        Ok(Some(json!({
+            "jsonrpc": "2.0",
+            "id": id,
+            "result": result
+        })))
     }
 }

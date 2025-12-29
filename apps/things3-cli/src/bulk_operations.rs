@@ -223,10 +223,9 @@ macro_rules! with_progress {
         let tracker = create_operation_tracker($name, $total, $progress_manager);
         let result = $operation;
 
-        if result.is_ok() {
-            tracker.complete();
-        } else {
-            tracker.fail(format!("{:?}", result.as_ref().unwrap_err()));
+        match &result {
+            Ok(_) => tracker.complete(),
+            Err(e) => tracker.fail(format!("{:?}", e)),
         }
 
         result

@@ -15,32 +15,39 @@ use tracing::{error, info};
 async fn main() -> Result<()> {
     let cli = Cli::parse();
 
-    // Initialize observability
-    let obs_config = ObservabilityConfig {
-        log_level: if cli.verbose {
-            "debug".to_string()
-        } else {
-            "info".to_string()
-        },
-        json_logs: std::env::var("THINGS3_JSON_LOGS").unwrap_or_default() == "true",
-        enable_tracing: true,
-        jaeger_endpoint: std::env::var("JAEGER_ENDPOINT").ok(),
-        otlp_endpoint: std::env::var("OTLP_ENDPOINT").ok(),
-        enable_metrics: true,
-        metrics_port: 9090,
-        health_port: 8080,
-        service_name: "things3-cli".to_string(),
-        service_version: env!("CARGO_PKG_VERSION").to_string(),
+    // Check if we're in MCP mode - if so, skip observability entirely to ensure zero stderr output
+    let is_mcp_mode = matches!(cli.command, Commands::Mcp);
+
+    // Initialize observability (skip entirely for MCP mode to ensure zero stderr output)
+    let observability: Option<Arc<ObservabilityManager>> = if is_mcp_mode {
+        // MCP mode: Skip observability entirely to ensure zero stderr output
+        None
+    } else {
+        // CLI mode: Full observability with verbose logging
+        let obs_config = ObservabilityConfig {
+            log_level: if cli.verbose {
+                "debug".to_string()
+            } else {
+                "info".to_string()
+            },
+            json_logs: std::env::var("THINGS3_JSON_LOGS").unwrap_or_default() == "true",
+            enable_tracing: true,
+            jaeger_endpoint: std::env::var("JAEGER_ENDPOINT").ok(),
+            otlp_endpoint: std::env::var("OTLP_ENDPOINT").ok(),
+            enable_metrics: true,
+            metrics_port: 9090,
+            health_port: 8080,
+            service_name: "things3-cli".to_string(),
+            service_version: env!("CARGO_PKG_VERSION").to_string(),
+        };
+
+        let mut obs = ObservabilityManager::new(obs_config)
+            .map_err(|e| things3_core::ThingsError::unknown(e.to_string()))?;
+        obs.initialize()
+            .map_err(|e| things3_core::ThingsError::unknown(e.to_string()))?;
+        info!("Things 3 CLI starting up");
+        Some(Arc::new(obs))
     };
-
-    let mut observability = ObservabilityManager::new(obs_config)
-        .map_err(|e| things3_core::ThingsError::unknown(e.to_string()))?;
-    observability
-        .initialize()
-        .map_err(|e| things3_core::ThingsError::unknown(e.to_string()))?;
-    let observability = Arc::new(observability);
-
-    info!("Things 3 CLI starting up");
 
     // Create configuration
     let config = if let Some(db_path) = cli.database {
@@ -90,35 +97,37 @@ async fn main() -> Result<()> {
             println!("{}", serde_json::to_string_pretty(&limited_tasks)?);
         }
         Commands::Mcp => {
-            info!("Starting MCP server...");
-
+            // MCP mode: No logging to avoid interfering with JSON-RPC protocol
             // Try to load comprehensive configuration first
             match load_config() {
                 Ok(mcp_config) => {
-                    info!("Loaded comprehensive MCP configuration");
-                    start_mcp_server_with_config(Arc::clone(&db), mcp_config)?;
+                    start_mcp_server_with_config(Arc::clone(&db), mcp_config).await?;
                 }
-                Err(e) => {
-                    info!("Failed to load comprehensive configuration, falling back to basic config: {}", e);
-                    start_mcp_server(Arc::clone(&db), config)?;
+                Err(_e) => {
+                    // Silently fall back to basic config - no logging in MCP mode
+                    start_mcp_server(Arc::clone(&db), config).await?;
                 }
             }
-
-            info!("MCP server started successfully");
         }
         Commands::Health => {
             info!("Performing health check");
             health_check(&db).await?;
         }
         Commands::HealthServer { port } => {
+            let obs = observability.ok_or_else(|| {
+                things3_core::ThingsError::unknown("Observability not initialized".to_string())
+            })?;
             info!("Starting health check server on port {}", port);
-            things3_cli::health::start_health_server(port, observability, Arc::clone(&db))
+            things3_cli::health::start_health_server(port, obs, Arc::clone(&db))
                 .await
                 .map_err(|e| things3_core::ThingsError::unknown(e.to_string()))?;
         }
         Commands::Dashboard { port } => {
+            let obs = observability.ok_or_else(|| {
+                things3_core::ThingsError::unknown("Observability not initialized".to_string())
+            })?;
             info!("Starting monitoring dashboard on port {}", port);
-            things3_cli::dashboard::start_dashboard_server(port, observability, Arc::clone(&db))
+            things3_cli::dashboard::start_dashboard_server(port, obs, Arc::clone(&db))
                 .await
                 .map_err(|e| things3_core::ThingsError::unknown(e.to_string()))?;
         }
@@ -316,7 +325,10 @@ mod tests {
         let cli = Cli::try_parse_from(["things-cli", "mcp"]).unwrap();
         match cli.command {
             Commands::Mcp => {
-                start_mcp_server(db.into(), config).unwrap();
+                // Note: This test doesn't actually run the server loop since stdin would block
+                // In a real test, you'd need to provide mock stdin/stdout or test the handler directly
+                let _server = things3_cli::mcp::ThingsMcpServer::new(db.into(), config);
+                // Server created successfully
             }
             _ => panic!("Expected MCP command"),
         }

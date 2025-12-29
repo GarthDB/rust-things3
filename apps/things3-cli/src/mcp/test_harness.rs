@@ -352,7 +352,8 @@ impl McpTestHarness {
                 heading TEXT,
                 trashed INTEGER NOT NULL DEFAULT 0,
                 tags TEXT DEFAULT '[]',
-                cachedTags BLOB
+                cachedTags BLOB,
+                todayIndex INTEGER
             )
             ",
         )

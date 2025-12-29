@@ -43,7 +43,8 @@ async fn create_test_schema(db: &ThingsDatabase) -> Result<(), Box<dyn std::erro
             heading TEXT,
             trashed INTEGER NOT NULL DEFAULT 0,
             tags TEXT DEFAULT '[]',
-            cachedTags BLOB
+            cachedTags BLOB,
+            todayIndex INTEGER
         )
         ",
     )

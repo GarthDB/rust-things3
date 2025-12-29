@@ -31,7 +31,8 @@ async fn create_test_schema(db: &ThingsDatabase) -> Result<(), Box<dyn std::erro
             heading TEXT,
             trashed INTEGER NOT NULL DEFAULT 0,
             tags TEXT DEFAULT '[]',
-            cachedTags BLOB
+            cachedTags BLOB,
+            todayIndex INTEGER
         )
         ",
     )
@@ -92,9 +93,13 @@ async fn create_test_schema(db: &ThingsDatabase) -> Result<(), Box<dyn std::erro
     .execute(pool).await?;
 
     // Insert inbox task (no project) with today's date
-    let today_timestamp = Utc::now().timestamp();
+    // Convert Unix timestamp to Things 3 format (seconds since 2001-01-01)
+    let base_2001 = chrono::DateTime::parse_from_rfc3339("2001-01-01T00:00:00Z")
+        .unwrap()
+        .timestamp();
+    let today_things3 = Utc::now().timestamp() - base_2001;
     sqlx::query(
-        "INSERT INTO TMTask (uuid, title, type, status, project, area, creationDate, userModificationDate, startDate, trashed) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+        "INSERT INTO TMTask (uuid, title, type, status, project, area, creationDate, userModificationDate, startDate, trashed, todayIndex) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
     )
     .bind(&inbox_task_uuid)
     .bind("Inbox Task")
@@ -104,13 +109,14 @@ async fn create_test_schema(db: &ThingsDatabase) -> Result<(), Box<dyn std::erro
     .bind(&area_uuid) // Has area
     .bind(now_timestamp)
     .bind(now_timestamp)
-    .bind(today_timestamp)
+    .bind(today_things3)
     .bind(0) // Not trashed
+    .bind(1) // todayIndex = 1 (appears in Today)
     .execute(pool).await?;
 
     // Insert project task with today's date
     sqlx::query(
-        "INSERT INTO TMTask (uuid, title, type, status, project, area, creationDate, userModificationDate, startDate, trashed) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+        "INSERT INTO TMTask (uuid, title, type, status, project, area, creationDate, userModificationDate, startDate, trashed, todayIndex) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
     )
     .bind(&project_task_uuid)
     .bind("Research competitors")
@@ -120,8 +126,9 @@ async fn create_test_schema(db: &ThingsDatabase) -> Result<(), Box<dyn std::erro
     .bind(&area_uuid) // Has area
     .bind(now_timestamp)
     .bind(now_timestamp)
-    .bind(today_timestamp)
+    .bind(today_things3)
     .bind(0) // Not trashed
+    .bind(2) // todayIndex = 2 (appears in Today)
     .execute(pool).await?;
 
     Ok(())
