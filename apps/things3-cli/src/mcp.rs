@@ -9,7 +9,6 @@ use things3_core::{
 };
 use thiserror::Error;
 use tokio::sync::Mutex;
-use tracing::info;
 
 pub mod middleware;
 // pub mod performance_tests; // Temporarily disabled due to API changes
@@ -525,7 +524,7 @@ pub struct ThingsMcpServer {
 /// Returns an error if the server fails to start
 pub fn start_mcp_server(db: Arc<ThingsDatabase>, config: ThingsConfig) -> things3_core::Result<()> {
     let _server = ThingsMcpServer::new(db, config);
-    info!("MCP server started successfully");
+    // No logging in MCP mode to avoid interfering with JSON-RPC protocol
     // For now, just return success - in a real implementation, this would start the server
     Ok(())
 }
@@ -549,7 +548,7 @@ pub fn start_mcp_server_with_config(
     );
 
     let _server = ThingsMcpServer::new_with_mcp_config(db, things_config, mcp_config);
-    info!("MCP server started successfully with comprehensive configuration");
+    // No logging in MCP mode to avoid interfering with JSON-RPC protocol
     // For now, just return success - in a real implementation, this would start the server
     Ok(())
 }

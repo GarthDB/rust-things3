@@ -15,15 +15,16 @@ use tracing::{error, info};
 async fn main() -> Result<()> {
     let cli = Cli::parse();
 
-    // Check if we're in MCP mode - if so, suppress logging to avoid interfering with JSON-RPC protocol
+    // Check if we're in MCP mode - if so, skip observability entirely to ensure zero stderr output
     let is_mcp_mode = matches!(cli.command, Commands::Mcp);
 
-    // Initialize observability (suppressed for MCP mode to avoid stderr interference)
+    // Initialize observability (skip entirely for MCP mode to ensure zero stderr output)
     let observability = if is_mcp_mode {
-        // In MCP mode, use minimal logging (ERROR level only) to avoid interfering with JSON-RPC
+        // MCP mode: Skip observability entirely to ensure zero stderr output
         // MCP protocol requires only JSON-RPC messages on stdout, with stderr reserved for errors
+        // We create a minimal observability manager but don't initialize it
         let obs_config = ObservabilityConfig {
-            log_level: "error".to_string(), // Only ERROR level to minimize stderr output
+            log_level: "error".to_string(),
             json_logs: false,
             enable_tracing: false, // Disable tracing in MCP mode
             jaeger_endpoint: None,
@@ -35,13 +36,12 @@ async fn main() -> Result<()> {
             service_version: env!("CARGO_PKG_VERSION").to_string(),
         };
 
-        let mut obs = ObservabilityManager::new(obs_config)
-            .map_err(|e| things3_core::ThingsError::unknown(e.to_string()))?;
-        obs.initialize()
+        // Create but don't initialize - this ensures zero stderr output
+        let obs = ObservabilityManager::new(obs_config)
             .map_err(|e| things3_core::ThingsError::unknown(e.to_string()))?;
         Arc::new(obs)
     } else {
-        // Normal verbose logging for CLI mode
+        // CLI mode: Full observability with verbose logging
         let obs_config = ObservabilityConfig {
             log_level: if cli.verbose {
                 "debug".to_string()
@@ -115,21 +115,17 @@ async fn main() -> Result<()> {
             println!("{}", serde_json::to_string_pretty(&limited_tasks)?);
         }
         Commands::Mcp => {
-            info!("Starting MCP server...");
-
+            // MCP mode: No logging to avoid interfering with JSON-RPC protocol
             // Try to load comprehensive configuration first
             match load_config() {
                 Ok(mcp_config) => {
-                    info!("Loaded comprehensive MCP configuration");
                     start_mcp_server_with_config(Arc::clone(&db), mcp_config)?;
                 }
-                Err(e) => {
-                    info!("Failed to load comprehensive configuration, falling back to basic config: {}", e);
+                Err(_e) => {
+                    // Silently fall back to basic config - no logging in MCP mode
                     start_mcp_server(Arc::clone(&db), config)?;
                 }
             }
-
-            info!("MCP server started successfully");
         }
         Commands::Health => {
             info!("Performing health check");

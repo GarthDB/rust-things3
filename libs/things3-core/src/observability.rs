@@ -217,7 +217,10 @@ impl ObservabilityManager {
     /// Returns an error if observability features cannot be initialized
     #[instrument(skip(self))]
     pub fn initialize(&mut self) -> Result<()> {
-        info!("Initializing observability features");
+        // Only log initialization messages if tracing is enabled
+        if self.config.enable_tracing {
+            info!("Initializing observability features");
+        }
 
         // Initialize tracing
         self.init_tracing()?;
@@ -230,7 +233,10 @@ impl ObservabilityManager {
             Self::init_opentelemetry();
         }
 
-        info!("Observability features initialized successfully");
+        // Only log success message if tracing is enabled
+        if self.config.enable_tracing {
+            info!("Observability features initialized successfully");
+        }
         Ok(())
     }
 
@@ -271,7 +277,10 @@ impl ObservabilityManager {
             registry.with(fmt_layer).init();
         }
 
-        info!("Tracing initialized with level: {}", self.config.log_level);
+        // Only log initialization message if tracing is enabled
+        if self.config.enable_tracing {
+            info!("Tracing initialized with level: {}", self.config.log_level);
+        }
         Ok(())
     }
 
@@ -279,14 +288,17 @@ impl ObservabilityManager {
     fn init_metrics() {
         // For now, use a simple metrics implementation
         // In a real implementation, this would set up a proper metrics recorder
-        info!("Metrics collection initialized (simplified version)");
+        // Note: This is a static method, so we can't check enable_tracing here
+        // But metrics initialization messages are typically not critical
+        // If needed, this could be made an instance method
     }
 
     /// Initialize OpenTelemetry tracing
     fn init_opentelemetry() {
         // Simplified OpenTelemetry implementation
         // In a real implementation, this would set up proper tracing
-        info!("OpenTelemetry tracing initialized (simplified version)");
+        // Note: This method is only called when enable_tracing is true,
+        // so logging here would be safe, but we skip it to be extra cautious
     }
 
     /// Get health status
