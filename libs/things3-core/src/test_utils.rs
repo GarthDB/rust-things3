@@ -36,7 +36,8 @@ pub async fn create_test_database<P: AsRef<Path>>(db_path: P) -> crate::Result<(
             heading TEXT,
             trashed INTEGER NOT NULL DEFAULT 0,
             tags TEXT DEFAULT '[]',
-            cachedTags BLOB
+            cachedTags BLOB,
+            todayIndex INTEGER
         )
         ",
     )
@@ -502,7 +503,8 @@ mod tests {
                 heading TEXT,
                 trashed INTEGER NOT NULL DEFAULT 0,
                 tags TEXT DEFAULT '[]',
-                cachedTags BLOB
+                cachedTags BLOB,
+                todayIndex INTEGER
             )
             ",
         )
