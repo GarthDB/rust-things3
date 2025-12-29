@@ -19,27 +19,9 @@ async fn main() -> Result<()> {
     let is_mcp_mode = matches!(cli.command, Commands::Mcp);
 
     // Initialize observability (skip entirely for MCP mode to ensure zero stderr output)
-    let observability = if is_mcp_mode {
+    let observability: Option<Arc<ObservabilityManager>> = if is_mcp_mode {
         // MCP mode: Skip observability entirely to ensure zero stderr output
-        // MCP protocol requires only JSON-RPC messages on stdout, with stderr reserved for errors
-        // We create a minimal observability manager but don't initialize it
-        let obs_config = ObservabilityConfig {
-            log_level: "error".to_string(),
-            json_logs: false,
-            enable_tracing: false, // Disable tracing in MCP mode
-            jaeger_endpoint: None,
-            otlp_endpoint: None,
-            enable_metrics: false, // Disable metrics in MCP mode
-            metrics_port: 9090,
-            health_port: 8080,
-            service_name: "things3-cli".to_string(),
-            service_version: env!("CARGO_PKG_VERSION").to_string(),
-        };
-
-        // Create but don't initialize - this ensures zero stderr output
-        let obs = ObservabilityManager::new(obs_config)
-            .map_err(|e| things3_core::ThingsError::unknown(e.to_string()))?;
-        Arc::new(obs)
+        None
     } else {
         // CLI mode: Full observability with verbose logging
         let obs_config = ObservabilityConfig {
@@ -64,7 +46,7 @@ async fn main() -> Result<()> {
         obs.initialize()
             .map_err(|e| things3_core::ThingsError::unknown(e.to_string()))?;
         info!("Things 3 CLI starting up");
-        Arc::new(obs)
+        Some(Arc::new(obs))
     };
 
     // Create configuration
@@ -132,14 +114,20 @@ async fn main() -> Result<()> {
             health_check(&db).await?;
         }
         Commands::HealthServer { port } => {
+            let obs = observability.ok_or_else(|| {
+                things3_core::ThingsError::unknown("Observability not initialized".to_string())
+            })?;
             info!("Starting health check server on port {}", port);
-            things3_cli::health::start_health_server(port, observability, Arc::clone(&db))
+            things3_cli::health::start_health_server(port, obs, Arc::clone(&db))
                 .await
                 .map_err(|e| things3_core::ThingsError::unknown(e.to_string()))?;
         }
         Commands::Dashboard { port } => {
+            let obs = observability.ok_or_else(|| {
+                things3_core::ThingsError::unknown("Observability not initialized".to_string())
+            })?;
             info!("Starting monitoring dashboard on port {}", port);
-            things3_cli::dashboard::start_dashboard_server(port, observability, Arc::clone(&db))
+            things3_cli::dashboard::start_dashboard_server(port, obs, Arc::clone(&db))
                 .await
                 .map_err(|e| things3_core::ThingsError::unknown(e.to_string()))?;
         }

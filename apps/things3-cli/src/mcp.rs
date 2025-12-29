@@ -683,7 +683,10 @@ impl ThingsMcpServer {
         let performance_monitor = PerformanceMonitor::new_default();
         let exporter = DataExporter::new_default();
         let backup_manager = BackupManager::new(config);
-        let middleware_chain = MiddlewareConfig::default().build_chain();
+        // Use silent middleware config for MCP mode (no logging to stdout)
+        let mut middleware_config = MiddlewareConfig::default();
+        middleware_config.logging.enabled = false; // Disable logging to prevent stdout interference
+        let middleware_chain = middleware_config.build_chain();
 
         Self {
             db,
@@ -731,9 +734,10 @@ impl ThingsMcpServer {
         let backup_manager = BackupManager::new(config);
 
         // Convert McpServerConfig to MiddlewareConfig
+        // Always disable logging in MCP mode to prevent stdout interference with JSON-RPC
         let middleware_config = MiddlewareConfig {
             logging: middleware::LoggingConfig {
-                enabled: mcp_config.logging.console_logs,
+                enabled: false, // Always disabled in MCP mode for JSON-RPC compatibility
                 level: mcp_config.logging.level.clone(),
             },
             validation: middleware::ValidationConfig {
@@ -1254,11 +1258,13 @@ impl ThingsMcpServer {
             .and_then(serde_json::Value::as_u64)
             .map(|v| usize::try_from(v).unwrap_or(usize::MAX));
 
-        let tasks = self
-            .db
-            .get_today(limit)
-            .await
-            .map_err(|e| McpError::database_operation_failed("get_today", e))?;
+        let tasks = self.db.get_today(limit).await.map_err(|e| {
+            // Include the actual error message for debugging
+            McpError::database_operation_failed(
+                "get_today",
+                things3_core::ThingsError::unknown(format!("get_today failed: {}", e)),
+            )
+        })?;
 
         let json = serde_json::to_string_pretty(&tasks)
             .map_err(|e| McpError::serialization_failed("get_today serialization", e))?;

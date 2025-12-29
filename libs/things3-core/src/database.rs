@@ -28,6 +28,23 @@ fn safe_timestamp_convert(ts_f64: f64) -> i64 {
     }
 }
 
+/// Convert Things 3 date value (seconds since 2001-01-01) to NaiveDate
+fn things_date_to_naive_date(seconds_since_2001: i64) -> Option<chrono::NaiveDate> {
+    use chrono::{TimeZone, Utc};
+
+    if seconds_since_2001 <= 0 {
+        return None;
+    }
+
+    // Base date: 2001-01-01 00:00:00 UTC
+    let base_date = Utc.with_ymd_and_hms(2001, 1, 1, 0, 0, 0).single().unwrap();
+
+    // Add seconds to get the actual date
+    let date_time = base_date + chrono::Duration::seconds(seconds_since_2001);
+
+    Some(date_time.date_naive())
+}
+
 /// Convert Things 3 UUID format to standard UUID
 /// Things 3 uses base64-like strings, we'll generate a UUID from the hash
 fn things_uuid_to_uuid(things_uuid: &str) -> Uuid {
@@ -648,12 +665,12 @@ impl ThingsDatabase {
     /// Returns an error if the database query fails or if area data is invalid
     #[instrument]
     pub async fn get_all_areas(&self) -> ThingsResult<Vec<Area>> {
+        // Get all areas, not just visible ones (MCP clients may want to see all)
         let rows = sqlx::query(
             r"
             SELECT 
                 uuid, title, visible, `index`
              FROM TMArea 
-             WHERE visible = 1
             ORDER BY `index` ASC
             ",
         )
@@ -827,9 +844,9 @@ impl ThingsDatabase {
     #[instrument(skip(self))]
     pub async fn get_inbox(&self, limit: Option<usize>) -> ThingsResult<Vec<Task>> {
         let query = if let Some(limit) = limit {
-            format!("SELECT uuid, title, type, status, notes, startDate, deadline, creationDate, userModificationDate, project, area, heading, tags FROM TMTask WHERE type = 0 AND status = 0 AND project IS NULL AND trashed = 0 ORDER BY creationDate DESC LIMIT {limit}")
+            format!("SELECT uuid, title, type, status, notes, startDate, deadline, creationDate, userModificationDate, project, area, heading, cachedTags FROM TMTask WHERE type = 0 AND status = 0 AND project IS NULL AND trashed = 0 ORDER BY creationDate DESC LIMIT {limit}")
         } else {
-            "SELECT uuid, title, type, status, notes, startDate, deadline, creationDate, userModificationDate, project, area, heading, tags FROM TMTask WHERE type = 0 AND status = 0 AND project IS NULL AND trashed = 0 ORDER BY creationDate DESC"
+            "SELECT uuid, title, type, status, notes, startDate, deadline, creationDate, userModificationDate, project, area, heading, cachedTags FROM TMTask WHERE type = 0 AND status = 0 AND project IS NULL AND trashed = 0 ORDER BY creationDate DESC"
                 .to_string()
         };
 
@@ -850,12 +867,10 @@ impl ThingsDatabase {
                     notes: row.get("notes"),
                     start_date: row
                         .get::<Option<i64>, _>("startDate")
-                        .and_then(|ts| DateTime::from_timestamp(ts, 0))
-                        .map(|dt| dt.date_naive()),
+                        .and_then(things_date_to_naive_date),
                     deadline: row
                         .get::<Option<i64>, _>("deadline")
-                        .and_then(|ts| DateTime::from_timestamp(ts, 0))
-                        .map(|dt| dt.date_naive()),
+                        .and_then(things_date_to_naive_date),
                     created: {
                         let ts_f64 = row.get::<f64, _>("creationDate");
                         let ts = safe_timestamp_convert(ts_f64);
@@ -876,8 +891,8 @@ impl ThingsDatabase {
                         .get::<Option<String>, _>("heading")
                         .map(|s| things_uuid_to_uuid(&s)),
                     tags: row
-                        .get::<Option<String>, _>("tags")
-                        .map(|s| s.split(',').map(|s| s.trim().to_string()).collect())
+                        .get::<Option<Vec<u8>>, _>("cachedTags")
+                        .map(|_| Vec::new()) // TODO: Parse binary tag data
                         .unwrap_or_default(),
                     children: Vec::new(),
                 })
@@ -898,23 +913,17 @@ impl ThingsDatabase {
     /// Panics if the current date cannot be converted to a valid time with hours, minutes, and seconds
     #[instrument(skip(self))]
     pub async fn get_today(&self, limit: Option<usize>) -> ThingsResult<Vec<Task>> {
-        let today = chrono::Utc::now().date_naive();
-        let start_of_day = today.and_hms_opt(0, 0, 0).unwrap().and_utc().timestamp();
-        let end_of_day = today.and_hms_opt(23, 59, 59).unwrap().and_utc().timestamp();
-
+        // Things 3 uses the `todayIndex` column to mark tasks that appear in "Today"
+        // A task is in "Today" if todayIndex IS NOT NULL AND todayIndex != 0
         let query = if let Some(limit) = limit {
             format!(
-                "SELECT uuid, title, type, status, notes, startDate, deadline, creationDate, userModificationDate, project, area, heading, tags FROM TMTask WHERE status = 0 AND ((deadline >= ? AND deadline <= ?) OR (startDate >= ? AND startDate <= ?)) AND trashed = 0 ORDER BY creationDate DESC LIMIT {limit}"
+                "SELECT uuid, title, type, status, notes, startDate, deadline, creationDate, userModificationDate, project, area, heading, cachedTags FROM TMTask WHERE status = 0 AND todayIndex IS NOT NULL AND todayIndex != 0 AND trashed = 0 ORDER BY todayIndex ASC LIMIT {limit}"
             )
         } else {
-            "SELECT uuid, title, type, status, notes, startDate, deadline, creationDate, userModificationDate, project, area, heading, tags FROM TMTask WHERE status = 0 AND ((deadline >= ? AND deadline <= ?) OR (startDate >= ? AND startDate <= ?)) AND trashed = 0 ORDER BY creationDate DESC".to_string()
+            "SELECT uuid, title, type, status, notes, startDate, deadline, creationDate, userModificationDate, project, area, heading, cachedTags FROM TMTask WHERE status = 0 AND todayIndex IS NOT NULL AND todayIndex != 0 AND trashed = 0 ORDER BY todayIndex ASC".to_string()
         };
 
         let rows = sqlx::query(&query)
-            .bind(start_of_day)
-            .bind(end_of_day)
-            .bind(start_of_day)
-            .bind(end_of_day)
             .fetch_all(&self.pool)
             .await
             .map_err(|e| ThingsError::unknown(format!("Failed to fetch today's tasks: {e}")))?;
@@ -931,12 +940,10 @@ impl ThingsDatabase {
                     notes: row.get("notes"),
                     start_date: row
                         .get::<Option<i64>, _>("startDate")
-                        .and_then(|ts| DateTime::from_timestamp(ts, 0))
-                        .map(|dt| dt.date_naive()),
+                        .and_then(things_date_to_naive_date),
                     deadline: row
                         .get::<Option<i64>, _>("deadline")
-                        .and_then(|ts| DateTime::from_timestamp(ts, 0))
-                        .map(|dt| dt.date_naive()),
+                        .and_then(things_date_to_naive_date),
                     created: {
                         let ts_f64 = row.get::<f64, _>("creationDate");
                         let ts = safe_timestamp_convert(ts_f64);
@@ -957,8 +964,8 @@ impl ThingsDatabase {
                         .get::<Option<String>, _>("heading")
                         .map(|s| things_uuid_to_uuid(&s)),
                     tags: row
-                        .get::<Option<String>, _>("tags")
-                        .map(|s| s.split(',').map(|s| s.trim().to_string()).collect())
+                        .get::<Option<Vec<u8>>, _>("cachedTags")
+                        .map(|_| Vec::new()) // TODO: Parse binary tag data
                         .unwrap_or_default(),
                     children: Vec::new(),
                 })
