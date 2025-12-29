@@ -561,28 +561,31 @@ pub async fn start_mcp_server(
 
         // Handle the request
         let server_clone = Arc::clone(&server);
-        let response = {
+        let response_opt = {
             let server = server_clone.lock().await;
             server.handle_jsonrpc_request(request).await
         }?;
 
-        // Write JSON-RPC response
-        let response_str = serde_json::to_string(&response).map_err(|e| {
-            things3_core::ThingsError::unknown(format!("Failed to serialize response: {}", e))
-        })?;
-
-        stdout_handle
-            .write_all(response_str.as_bytes())
-            .await
-            .map_err(|e| {
-                things3_core::ThingsError::unknown(format!("Failed to write to stdout: {}", e))
+        // Only write response if this is a request (not a notification)
+        if let Some(response) = response_opt {
+            let response_str = serde_json::to_string(&response).map_err(|e| {
+                things3_core::ThingsError::unknown(format!("Failed to serialize response: {}", e))
             })?;
-        stdout_handle.write_all(b"\n").await.map_err(|e| {
-            things3_core::ThingsError::unknown(format!("Failed to write newline: {}", e))
-        })?;
-        stdout_handle.flush().await.map_err(|e| {
-            things3_core::ThingsError::unknown(format!("Failed to flush stdout: {}", e))
-        })?;
+
+            stdout_handle
+                .write_all(response_str.as_bytes())
+                .await
+                .map_err(|e| {
+                    things3_core::ThingsError::unknown(format!("Failed to write to stdout: {}", e))
+                })?;
+            stdout_handle.write_all(b"\n").await.map_err(|e| {
+                things3_core::ThingsError::unknown(format!("Failed to write newline: {}", e))
+            })?;
+            stdout_handle.flush().await.map_err(|e| {
+                things3_core::ThingsError::unknown(format!("Failed to flush stdout: {}", e))
+            })?;
+        }
+        // Notifications don't require a response, so we silently continue
     }
 
     Ok(())
@@ -643,28 +646,31 @@ pub async fn start_mcp_server_with_config(
 
         // Handle the request
         let server_clone = Arc::clone(&server);
-        let response = {
+        let response_opt = {
             let server = server_clone.lock().await;
             server.handle_jsonrpc_request(request).await
         }?;
 
-        // Write JSON-RPC response
-        let response_str = serde_json::to_string(&response).map_err(|e| {
-            things3_core::ThingsError::unknown(format!("Failed to serialize response: {}", e))
-        })?;
-
-        stdout_handle
-            .write_all(response_str.as_bytes())
-            .await
-            .map_err(|e| {
-                things3_core::ThingsError::unknown(format!("Failed to write to stdout: {}", e))
+        // Only write response if this is a request (not a notification)
+        if let Some(response) = response_opt {
+            let response_str = serde_json::to_string(&response).map_err(|e| {
+                things3_core::ThingsError::unknown(format!("Failed to serialize response: {}", e))
             })?;
-        stdout_handle.write_all(b"\n").await.map_err(|e| {
-            things3_core::ThingsError::unknown(format!("Failed to write newline: {}", e))
-        })?;
-        stdout_handle.flush().await.map_err(|e| {
-            things3_core::ThingsError::unknown(format!("Failed to flush stdout: {}", e))
-        })?;
+
+            stdout_handle
+                .write_all(response_str.as_bytes())
+                .await
+                .map_err(|e| {
+                    things3_core::ThingsError::unknown(format!("Failed to write to stdout: {}", e))
+                })?;
+            stdout_handle.write_all(b"\n").await.map_err(|e| {
+                things3_core::ThingsError::unknown(format!("Failed to write newline: {}", e))
+            })?;
+            stdout_handle.flush().await.map_err(|e| {
+                things3_core::ThingsError::unknown(format!("Failed to flush stdout: {}", e))
+            })?;
+        }
+        // Notifications don't require a response, so we silently continue
     }
 
     Ok(())
@@ -2272,19 +2278,41 @@ impl ThingsMcpServer {
 
     /// Handle a JSON-RPC request and return a JSON-RPC response
     ///
+    /// Returns `None` for notifications (messages without `id` field) - these don't require a response
+    ///
     /// # Errors
     /// Returns an error if request parsing or handling fails
     pub async fn handle_jsonrpc_request(
         &self,
         request: serde_json::Value,
-    ) -> things3_core::Result<serde_json::Value> {
+    ) -> things3_core::Result<Option<serde_json::Value>> {
         use serde_json::json;
 
         let method = request["method"].as_str().ok_or_else(|| {
             things3_core::ThingsError::unknown("Missing method in JSON-RPC request".to_string())
         })?;
-        let id = request["id"].clone();
         let params = request["params"].clone();
+
+        // Check if this is a notification (no `id` field present)
+        // In JSON-RPC, notifications don't have an `id` field, so get("id") returns None
+        let is_notification = request.get("id").is_none();
+
+        // Handle notifications silently (they don't require a response)
+        if is_notification {
+            match method {
+                "notifications/initialized" => {
+                    // Silently acknowledge the initialized notification
+                    return Ok(None);
+                }
+                _ => {
+                    // Unknown notification - silently ignore
+                    return Ok(None);
+                }
+            }
+        }
+
+        // For requests (with `id` field), we need the id for the response
+        let id = request["id"].clone();
 
         let result = match method {
             "initialize" => {
@@ -2380,21 +2408,21 @@ impl ThingsMcpServer {
                 json!(get_result)
             }
             _ => {
-                return Ok(json!({
+                return Ok(Some(json!({
                     "jsonrpc": "2.0",
                     "id": id,
                     "error": {
                         "code": -32601,
                         "message": format!("Method not found: {}", method)
                     }
-                }));
+                })));
             }
         };
 
-        Ok(json!({
+        Ok(Some(json!({
             "jsonrpc": "2.0",
             "id": id,
             "result": result
-        }))
+        })))
     }
 }
