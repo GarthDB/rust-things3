@@ -325,7 +325,7 @@ mod tests {
         rt.block_on(async { create_test_database(db_path).await.unwrap() });
         let db = rt.block_on(async { ThingsDatabase::new(db_path).await.unwrap() });
         let config = things3_core::ThingsConfig::default();
-        let result = rt.block_on(async { start_mcp_server(db.into(), config) });
+        let result = rt.block_on(async { start_mcp_server(db.into(), config).await });
         assert!(result.is_ok());
     }
 
