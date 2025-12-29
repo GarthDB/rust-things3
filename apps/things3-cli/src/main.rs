@@ -119,11 +119,11 @@ async fn main() -> Result<()> {
             // Try to load comprehensive configuration first
             match load_config() {
                 Ok(mcp_config) => {
-                    start_mcp_server_with_config(Arc::clone(&db), mcp_config)?;
+                    start_mcp_server_with_config(Arc::clone(&db), mcp_config).await?;
                 }
                 Err(_e) => {
                     // Silently fall back to basic config - no logging in MCP mode
-                    start_mcp_server(Arc::clone(&db), config)?;
+                    start_mcp_server(Arc::clone(&db), config).await?;
                 }
             }
         }
@@ -337,7 +337,10 @@ mod tests {
         let cli = Cli::try_parse_from(["things-cli", "mcp"]).unwrap();
         match cli.command {
             Commands::Mcp => {
-                start_mcp_server(db.into(), config).unwrap();
+                // Note: This test doesn't actually run the server loop since stdin would block
+                // In a real test, you'd need to provide mock stdin/stdout or test the handler directly
+                let _server = things3_cli::mcp::ThingsMcpServer::new(db.into(), config);
+                // Server created successfully
             }
             _ => panic!("Expected MCP command"),
         }
