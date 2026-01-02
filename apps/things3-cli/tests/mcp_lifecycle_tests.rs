@@ -236,7 +236,11 @@ async fn test_delete_task_tool_cascade_mode() {
 
     // Parent should not be found
     assert!(
-        search_results["tasks"].as_array().unwrap().is_empty(),
+        search_results["tasks"]
+            .as_array()
+            .map(|a| a.as_slice())
+            .unwrap_or(&[])
+            .is_empty(),
         "Parent should be deleted"
     );
 
@@ -251,7 +255,11 @@ async fn test_delete_task_tool_cascade_mode() {
     let child_search = parse_tool_result(&child_search_result);
 
     assert!(
-        child_search["tasks"].as_array().unwrap().is_empty(),
+        child_search["tasks"]
+            .as_array()
+            .map(|a| a.as_slice())
+            .unwrap_or(&[])
+            .is_empty(),
         "Child should be deleted in cascade mode"
     );
 }
@@ -313,7 +321,10 @@ async fn test_delete_task_tool_orphan_mode() {
         .await;
     let child_search = parse_tool_result(&child_search_result);
 
-    let tasks = child_search["tasks"].as_array().unwrap();
+    let tasks = child_search["tasks"]
+        .as_array()
+        .map(|a| a.as_slice())
+        .unwrap_or(&[]);
     assert!(!tasks.is_empty(), "Child should still exist in orphan mode");
 }
 
@@ -451,7 +462,11 @@ async fn test_lifecycle_e2e_flow() {
         )
         .await;
     let search_response = parse_tool_result(&search_result);
-    assert!(search_response["tasks"].as_array().unwrap().is_empty());
+    assert!(search_response["tasks"]
+        .as_array()
+        .map(|a| a.as_slice())
+        .unwrap_or(&[])
+        .is_empty());
 }
 
 #[tokio::test]
@@ -464,7 +479,10 @@ async fn test_task_not_in_inbox_after_completion() {
     // Get inbox before completion
     let inbox_before_result = harness.call_tool("get_inbox", None).await;
     let inbox_before = parse_tool_result(&inbox_before_result);
-    let tasks_before: Vec<Value> = inbox_before["tasks"].as_array().unwrap().clone();
+    let tasks_before: Vec<Value> = inbox_before["tasks"]
+        .as_array()
+        .unwrap_or(&Vec::new())
+        .clone();
 
     // Complete the task
     harness
@@ -479,7 +497,10 @@ async fn test_task_not_in_inbox_after_completion() {
     // Get inbox after completion
     let inbox_after_result = harness.call_tool("get_inbox", None).await;
     let inbox_after = parse_tool_result(&inbox_after_result);
-    let tasks_after: Vec<Value> = inbox_after["tasks"].as_array().unwrap().clone();
+    let tasks_after: Vec<Value> = inbox_after["tasks"]
+        .as_array()
+        .unwrap_or(&Vec::new())
+        .clone();
 
     // Completed task should not be in inbox (inbox shows incomplete tasks)
     assert!(
@@ -521,7 +542,11 @@ async fn test_task_not_in_queries_after_deletion() {
         )
         .await;
     let search_before = parse_tool_result(&search_before_result);
-    assert!(!search_before["tasks"].as_array().unwrap().is_empty());
+    assert!(!search_before["tasks"]
+        .as_array()
+        .map(|a| a.as_slice())
+        .unwrap_or(&[])
+        .is_empty());
 
     // Delete the task
     harness
@@ -544,7 +569,11 @@ async fn test_task_not_in_queries_after_deletion() {
         .await;
     let search_after = parse_tool_result(&search_after_result);
     assert!(
-        search_after["tasks"].as_array().unwrap().is_empty(),
+        search_after["tasks"]
+            .as_array()
+            .map(|a| a.as_slice())
+            .unwrap_or(&[])
+            .is_empty(),
         "Deleted task should not appear in search results"
     );
 
@@ -676,7 +705,10 @@ async fn test_complete_task_appears_in_logbook() {
         .await;
     let search_response = parse_tool_result(&search_result);
 
-    let tasks = search_response["tasks"].as_array().unwrap();
+    let tasks = search_response["tasks"]
+        .as_array()
+        .map(|a| a.as_slice())
+        .unwrap_or(&[]);
     if !tasks.is_empty() {
         // If found, verify it's completed
         assert_eq!(
@@ -740,7 +772,10 @@ async fn test_update_then_complete() {
         .await;
     let search_response = parse_tool_result(&search_result);
 
-    let tasks = search_response["tasks"].as_array().unwrap();
+    let tasks = search_response["tasks"]
+        .as_array()
+        .map(|a| a.as_slice())
+        .unwrap_or(&[]);
     if !tasks.is_empty() {
         let task = &tasks[0];
         assert_eq!(task["status"], "completed");
@@ -782,7 +817,11 @@ async fn test_search_excludes_deleted_tasks() {
         )
         .await;
     let search_before = parse_tool_result(&search_before_result);
-    let count_before = search_before["tasks"].as_array().unwrap().len();
+    let count_before = search_before["tasks"]
+        .as_array()
+        .map(|a| a.as_slice())
+        .unwrap_or(&[])
+        .len();
     assert_eq!(count_before, 3, "Should find all 3 tasks initially");
 
     // Delete one task
@@ -805,7 +844,11 @@ async fn test_search_excludes_deleted_tasks() {
         )
         .await;
     let search_after = parse_tool_result(&search_after_result);
-    let count_after = search_after["tasks"].as_array().unwrap().len();
+    let count_after = search_after["tasks"]
+        .as_array()
+        .map(|a| a.as_slice())
+        .unwrap_or(&[])
+        .len();
     assert_eq!(count_after, 2, "Should find only 2 tasks after deletion");
 
     // Verify the deleted task is not in results
