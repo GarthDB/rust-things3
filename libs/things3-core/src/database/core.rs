@@ -2685,13 +2685,12 @@ impl ThingsDatabase {
             .get("title");
 
         // Get all tasks using this tag
+        // Note: We query cachedTags BLOB which should contain JSON, but handle gracefully if malformed
         let task_rows = sqlx::query(
-            "SELECT uuid FROM TMTask 
+            "SELECT uuid, cachedTags FROM TMTask 
              WHERE cachedTags IS NOT NULL 
-             AND json_extract(cachedTags, '$') LIKE ?
              AND trashed = 0",
         )
-        .bind(format!("%\"{}\"%", title))
         .fetch_all(&self.pool)
         .await
         .map_err(|e| ThingsError::unknown(format!("Failed to query tasks with tag: {e}")))?;
@@ -2699,9 +2698,18 @@ impl ThingsDatabase {
         let mut task_uuids = Vec::new();
         for row in task_rows {
             let uuid_str: String = row.get("uuid");
-            let task_uuid =
-                Uuid::parse_str(&uuid_str).unwrap_or_else(|_| things_uuid_to_uuid(&uuid_str));
-            task_uuids.push(task_uuid);
+            let cached_tags_blob: Option<Vec<u8>> = row.get("cachedTags");
+
+            // Check if this task actually has the tag
+            if let Some(blob) = cached_tags_blob {
+                if let Ok(tags) = deserialize_tags_from_blob(&blob) {
+                    if tags.iter().any(|t| t.eq_ignore_ascii_case(&title)) {
+                        let task_uuid = Uuid::parse_str(&uuid_str)
+                            .unwrap_or_else(|_| things_uuid_to_uuid(&uuid_str));
+                        task_uuids.push(task_uuid);
+                    }
+                }
+            }
         }
 
         let usage_count = task_uuids.len() as u32;
