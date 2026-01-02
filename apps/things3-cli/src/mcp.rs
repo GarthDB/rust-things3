@@ -1372,7 +1372,7 @@ impl ThingsMcpServer {
             // Include the actual error message for debugging
             McpError::database_operation_failed(
                 "get_today",
-                things3_core::ThingsError::unknown(format!("get_today failed: {}", e)),
+                things3_core::ThingsError::unknown(format!("Failed to get today's tasks: {}", e)),
             )
         })?;
 
@@ -2580,7 +2580,7 @@ impl ThingsMcpServer {
                 };
 
                 let call_result = self.call_tool(call_request).await.map_err(|e| {
-                    things3_core::ThingsError::unknown(format!("Tool call failed: {}", e))
+                    things3_core::ThingsError::unknown(format!("Failed to call tool: {}", e))
                 })?;
 
                 json!(call_result)
@@ -2601,7 +2601,7 @@ impl ThingsMcpServer {
 
                 let read_request = ReadResourceRequest { uri };
                 let read_result = self.read_resource(read_request).await.map_err(|e| {
-                    things3_core::ThingsError::unknown(format!("Resource read failed: {}", e))
+                    things3_core::ThingsError::unknown(format!("Failed to read resource: {}", e))
                 })?;
 
                 json!(read_result)
@@ -2629,7 +2629,7 @@ impl ThingsMcpServer {
                 };
 
                 let get_result = self.get_prompt(get_request).await.map_err(|e| {
-                    things3_core::ThingsError::unknown(format!("Prompt get failed: {}", e))
+                    things3_core::ThingsError::unknown(format!("Failed to get prompt: {}", e))
                 })?;
 
                 json!(get_result)
