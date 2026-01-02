@@ -1,10 +1,7 @@
 //! MCP lifecycle operation integration tests
 
 use serde_json::{json, Value};
-use std::sync::Arc;
-use tempfile::NamedTempFile;
 use things3_cli::mcp::test_harness::McpTestHarness;
-use things3_core::{test_utils::create_test_database, CreateTaskRequest, ThingsDatabase};
 use uuid::Uuid;
 
 // Helper to create harness (non-async)
@@ -264,7 +261,7 @@ async fn test_delete_task_tool_orphan_mode() {
     let harness = create_harness();
 
     // Create a parent task
-    let parent_response = harness
+    let parent_result = harness
         .call_tool(
             "create_task",
             Some(json!({
@@ -272,10 +269,11 @@ async fn test_delete_task_tool_orphan_mode() {
             })),
         )
         .await;
+    let parent_response = parse_tool_result(&parent_result);
     let parent_uuid = parent_response["uuid"].as_str().unwrap();
 
     // Create a child task
-    let child_response = harness
+    let child_result = harness
         .call_tool(
             "create_task",
             Some(json!({
@@ -284,10 +282,11 @@ async fn test_delete_task_tool_orphan_mode() {
             })),
         )
         .await;
+    let child_response = parse_tool_result(&child_result);
     let child_uuid = child_response["uuid"].as_str().unwrap();
 
     // Delete parent with orphan mode
-    let delete_response = harness
+    let delete_result = harness
         .call_tool(
             "delete_task",
             Some(json!({
@@ -296,6 +295,7 @@ async fn test_delete_task_tool_orphan_mode() {
             })),
         )
         .await;
+    let delete_response = parse_tool_result(&delete_result);
 
     assert_eq!(
         delete_response["message"], "Task deleted successfully",
@@ -303,7 +303,7 @@ async fn test_delete_task_tool_orphan_mode() {
     );
 
     // Child should still exist
-    let child_search = harness
+    let child_search_result = harness
         .call_tool(
             "search_tasks",
             Some(json!({
@@ -311,6 +311,7 @@ async fn test_delete_task_tool_orphan_mode() {
             })),
         )
         .await;
+    let child_search = parse_tool_result(&child_search_result);
 
     let tasks = child_search["tasks"].as_array().unwrap();
     assert!(!tasks.is_empty(), "Child should still exist in orphan mode");
