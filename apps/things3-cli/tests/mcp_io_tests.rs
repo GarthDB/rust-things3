@@ -676,3 +676,207 @@ async fn test_io_error_handling() {
     assert!(result.is_ok(), "Server should handle EOF gracefully");
     assert!(result.unwrap().is_ok(), "Server should not error on EOF");
 }
+
+// ============================================================================
+// Additional Coverage Tests
+// ============================================================================
+
+#[tokio::test]
+async fn test_json_serialization_coverage() {
+    let (_temp, db) = create_test_db().await;
+    let config = ThingsConfig::default();
+
+    let (server_io, mut client_io) = MockIo::create_pair(4096);
+
+    tokio::spawn(async move { start_mcp_server_generic(db, config, server_io).await });
+
+    // Test various request types to cover more code paths
+    let requests = vec![
+        json!({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}}),
+        json!({"jsonrpc": "2.0", "id": 2, "method": "tools/list"}),
+        json!({"jsonrpc": "2.0", "id": 3, "method": "resources/list"}),
+        json!({"jsonrpc": "2.0", "id": 4, "method": "prompts/list"}),
+    ];
+
+    for request in requests {
+        let response = send_request_read_response(&mut client_io, request).await;
+        assert_eq!(response["jsonrpc"], "2.0");
+    }
+}
+
+#[tokio::test]
+async fn test_mixed_requests_and_notifications() {
+    let (_temp, db) = create_test_db().await;
+    let config = ThingsConfig::default();
+
+    let (server_io, mut client_io) = MockIo::create_pair(4096);
+
+    tokio::spawn(async move { start_mcp_server_generic(db, config, server_io).await });
+
+    // Send a mix of requests and notifications
+    let notification = json!({
+        "jsonrpc": "2.0",
+        "method": "notifications/custom"
+    });
+
+    let notification_str = serde_json::to_string(&notification).unwrap();
+    client_io.write_line(&notification_str).await.unwrap();
+    client_io.flush().await.unwrap();
+
+    // Send a request to verify server is still responsive
+    let request = json!({
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "tools/list"
+    });
+
+    let response = send_request_read_response(&mut client_io, request).await;
+    assert_eq!(response["jsonrpc"], "2.0");
+    assert_eq!(response["id"], 1);
+}
+
+#[tokio::test]
+async fn test_all_available_tools() {
+    let (_temp, db) = create_test_db().await;
+    let config = ThingsConfig::default();
+
+    let (server_io, mut client_io) = MockIo::create_pair(8192);
+
+    tokio::spawn(async move { start_mcp_server_generic(db, config, server_io).await });
+
+    // Get list of tools
+    let tools_list_request = json!({
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "tools/list"
+    });
+
+    let response = send_request_read_response(&mut client_io, tools_list_request).await;
+    let tools = response["result"].as_array().unwrap();
+
+    assert!(!tools.is_empty(), "Should have at least one tool");
+
+    // Test calling get_today and get_inbox (most common tools)
+    let tool_tests = vec!["get_today", "get_inbox"];
+
+    for (idx, tool_name) in tool_tests.iter().enumerate() {
+        let tools_call_request = json!({
+            "jsonrpc": "2.0",
+            "id": idx + 2,
+            "method": "tools/call",
+            "params": {
+                "name": tool_name,
+                "arguments": {}
+            }
+        });
+
+        let response = send_request_read_response(&mut client_io, tools_call_request).await;
+        assert_eq!(response["jsonrpc"], "2.0");
+        assert!(response["result"].is_object());
+    }
+}
+
+#[tokio::test]
+async fn test_large_response_handling() {
+    let (_temp, db) = create_test_db().await;
+    let config = ThingsConfig::default();
+
+    let (server_io, mut client_io) = MockIo::create_pair(65536); // Large buffer
+
+    tokio::spawn(async move { start_mcp_server_generic(db, config, server_io).await });
+
+    // Request that might return large data
+    let request = json!({
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "tools/call",
+        "params": {
+            "name": "get_projects",
+            "arguments": {}
+        }
+    });
+
+    let response = send_request_read_response(&mut client_io, request).await;
+    assert_eq!(response["jsonrpc"], "2.0");
+    assert_eq!(response["id"], 1);
+}
+
+#[tokio::test]
+async fn test_sequential_initialize_calls() {
+    let (_temp, db) = create_test_db().await;
+    let config = ThingsConfig::default();
+
+    let (server_io, mut client_io) = MockIo::create_pair(4096);
+
+    tokio::spawn(async move { start_mcp_server_generic(db, config, server_io).await });
+
+    // Call initialize multiple times (should handle gracefully)
+    for i in 1..=3 {
+        let initialize_request = json!({
+            "jsonrpc": "2.0",
+            "id": i,
+            "method": "initialize",
+            "params": {}
+        });
+
+        let response = send_request_read_response(&mut client_io, initialize_request).await;
+        assert_eq!(response["jsonrpc"], "2.0");
+        assert_eq!(response["id"], i);
+        assert_eq!(response["result"]["protocolVersion"], "2024-11-05");
+    }
+}
+
+#[tokio::test]
+async fn test_config_with_empty_lines() {
+    use things3_cli::mcp::start_mcp_server_with_config_generic;
+    use things3_core::McpServerConfig;
+
+    let (_temp, db) = create_test_db().await;
+    let mcp_config = McpServerConfig::default();
+
+    let (server_io, mut client_io) = MockIo::create_pair(4096);
+
+    tokio::spawn(
+        async move { start_mcp_server_with_config_generic(db, mcp_config, server_io).await },
+    );
+
+    // Send empty lines (should be skipped)
+    client_io.write_line("").await.unwrap();
+    client_io.write_line("").await.unwrap();
+    client_io.flush().await.unwrap();
+
+    // Send valid request
+    let request = json!({
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "initialize",
+        "params": {}
+    });
+
+    let response = send_request_read_response(&mut client_io, request).await;
+    assert_eq!(response["jsonrpc"], "2.0");
+    assert_eq!(response["id"], 1);
+}
+
+#[tokio::test]
+async fn test_rapid_requests() {
+    let (_temp, db) = create_test_db().await;
+    let config = ThingsConfig::default();
+
+    let (server_io, mut client_io) = MockIo::create_pair(32768); // Extra large buffer
+
+    tokio::spawn(async move { start_mcp_server_generic(db, config, server_io).await });
+
+    // Send many requests rapidly
+    for i in 1..=20 {
+        let request = json!({
+            "jsonrpc": "2.0",
+            "id": i,
+            "method": "tools/list"
+        });
+
+        let response = send_request_read_response(&mut client_io, request).await;
+        assert_eq!(response["jsonrpc"], "2.0");
+        assert_eq!(response["id"], i);
+    }
+}

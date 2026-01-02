@@ -205,4 +205,107 @@ mod tests {
         let line = server_io.read_line().await.unwrap();
         assert_eq!(line, None);
     }
+
+    // ============================================================================
+    // StdIo Tests (construction only - actual I/O requires stdin/stdout)
+    // ============================================================================
+
+    #[test]
+    fn test_stdio_new() {
+        // Test that StdIo can be constructed
+        let _stdio = StdIo::new();
+        // We can't test actual I/O without mocking stdin/stdout, but we can
+        // ensure the constructor works
+    }
+
+    #[test]
+    fn test_stdio_default() {
+        // Test that StdIo implements Default
+        let _stdio = StdIo::default();
+    }
+
+    #[test]
+    fn test_stdio_clone_safety() {
+        // Verify StdIo fields are properly initialized
+        let stdio = StdIo::new();
+        assert_eq!(stdio.buffer.len(), 0);
+    }
+
+    // ============================================================================
+    // MockIo Additional Edge Cases
+    // ============================================================================
+
+    #[tokio::test]
+    async fn test_mock_io_whitespace_handling() {
+        let (mut server_io, mut client_io) = MockIo::create_pair(1024);
+
+        // Write lines with various whitespace
+        client_io.write_line("  leading spaces").await.unwrap();
+        client_io.write_line("trailing spaces  ").await.unwrap();
+        client_io.write_line("\ttabs\t").await.unwrap();
+        client_io.flush().await.unwrap();
+
+        // All should be trimmed
+        assert_eq!(
+            server_io.read_line().await.unwrap(),
+            Some("leading spaces".to_string())
+        );
+        assert_eq!(
+            server_io.read_line().await.unwrap(),
+            Some("trailing spaces".to_string())
+        );
+        assert_eq!(
+            server_io.read_line().await.unwrap(),
+            Some("tabs".to_string())
+        );
+    }
+
+    #[tokio::test]
+    async fn test_mock_io_large_messages() {
+        let (mut server_io, mut client_io) = MockIo::create_pair(8192);
+
+        // Write a large message
+        let large_msg = "x".repeat(4096);
+        client_io.write_line(&large_msg).await.unwrap();
+        client_io.flush().await.unwrap();
+
+        let received = server_io.read_line().await.unwrap();
+        assert_eq!(received, Some(large_msg));
+    }
+
+    #[tokio::test]
+    async fn test_mock_io_buffer_reuse() {
+        let (mut server_io, mut client_io) = MockIo::create_pair(1024);
+
+        // Write and read multiple times to ensure buffer is cleared between reads
+        for i in 0..5 {
+            let msg = format!("message{}", i);
+            client_io.write_line(&msg).await.unwrap();
+            client_io.flush().await.unwrap();
+
+            let received = server_io.read_line().await.unwrap();
+            assert_eq!(received, Some(msg));
+        }
+    }
+
+    #[tokio::test]
+    async fn test_mock_io_concurrent_operations() {
+        let (mut server_io, mut client_io) = MockIo::create_pair(4096);
+
+        // Spawn client task
+        let client_handle = tokio::spawn(async move {
+            for i in 0..10 {
+                client_io.write_line(&format!("msg{}", i)).await.unwrap();
+                client_io.flush().await.unwrap();
+            }
+        });
+
+        // Read messages
+        for i in 0..10 {
+            let received = server_io.read_line().await.unwrap();
+            assert_eq!(received, Some(format!("msg{}", i)));
+        }
+
+        client_handle.await.unwrap();
+    }
 }
