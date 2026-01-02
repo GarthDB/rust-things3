@@ -9,8 +9,10 @@ use things3_core::{CacheConfig, CacheStats, ThingsCache};
 /// Test cache with zero capacity
 #[tokio::test]
 async fn test_cache_zero_capacity() {
-    let mut config = CacheConfig::default();
-    config.max_capacity = 0;
+    let config = CacheConfig {
+        max_capacity: 0,
+        ..Default::default()
+    };
 
     // Should create cache even with zero capacity
     let _cache = ThingsCache::new(&config);
@@ -19,8 +21,10 @@ async fn test_cache_zero_capacity() {
 /// Test cache with very large capacity
 #[tokio::test]
 async fn test_cache_very_large_capacity() {
-    let mut config = CacheConfig::default();
-    config.max_capacity = 1_000_000; // Large but reasonable
+    let config = CacheConfig {
+        max_capacity: 1_000_000, // Large but reasonable
+        ..Default::default()
+    };
 
     let _cache = ThingsCache::new(&config);
 }
@@ -28,8 +32,10 @@ async fn test_cache_very_large_capacity() {
 /// Test cache with very short TTL
 #[tokio::test]
 async fn test_cache_very_short_ttl() {
-    let mut config = CacheConfig::default();
-    config.ttl = Duration::from_secs(1);
+    let config = CacheConfig {
+        ttl: Duration::from_secs(1),
+        ..Default::default()
+    };
 
     let _cache = ThingsCache::new(&config);
 }
@@ -37,8 +43,10 @@ async fn test_cache_very_short_ttl() {
 /// Test cache with very long TTL
 #[tokio::test]
 async fn test_cache_very_long_ttl() {
-    let mut config = CacheConfig::default();
-    config.ttl = Duration::from_secs(86400 * 30); // 30 days
+    let config = CacheConfig {
+        ttl: Duration::from_secs(86400 * 30), // 30 days
+        ..Default::default()
+    };
 
     let _cache = ThingsCache::new(&config);
 }
@@ -115,8 +123,10 @@ async fn test_various_cache_configurations() {
     let ttls = vec![1, 60, 3600, 86400];
 
     for ttl in ttls {
-        let mut config = CacheConfig::default();
-        config.ttl = Duration::from_secs(ttl);
+        let config = CacheConfig {
+            ttl: Duration::from_secs(ttl),
+            ..Default::default()
+        };
 
         let _cache = ThingsCache::new(&config);
     }
@@ -125,10 +135,12 @@ async fn test_various_cache_configurations() {
 /// Test cache with warming enabled
 #[tokio::test]
 async fn test_cache_with_warming_enabled() {
-    let mut config = CacheConfig::default();
-    config.enable_cache_warming = true;
-    config.warming_interval = Duration::from_secs(1);
-    config.max_warming_entries = 10;
+    let config = CacheConfig {
+        enable_cache_warming: true,
+        warming_interval: Duration::from_secs(1),
+        max_warming_entries: 10,
+        ..Default::default()
+    };
 
     let _cache = ThingsCache::new(&config);
     // Cache warming task should be started
@@ -137,9 +149,11 @@ async fn test_cache_with_warming_enabled() {
 /// Test cache with zero warming entries
 #[tokio::test]
 async fn test_cache_zero_warming_entries() {
-    let mut config = CacheConfig::default();
-    config.enable_cache_warming = true;
-    config.max_warming_entries = 0;
+    let config = CacheConfig {
+        enable_cache_warming: true,
+        max_warming_entries: 0,
+        ..Default::default()
+    };
 
     let _cache = ThingsCache::new(&config);
 }
@@ -179,9 +193,11 @@ fn test_cache_stats_default() {
 /// Test cache with TTL greater than TTI
 #[tokio::test]
 async fn test_cache_ttl_greater_than_tti() {
-    let mut config = CacheConfig::default();
-    config.ttl = Duration::from_secs(3600);
-    config.tti = Duration::from_secs(300);
+    let config = CacheConfig {
+        ttl: Duration::from_secs(3600),
+        tti: Duration::from_secs(300),
+        ..Default::default()
+    };
 
     let _cache = ThingsCache::new(&config);
 }
@@ -189,9 +205,11 @@ async fn test_cache_ttl_greater_than_tti() {
 /// Test cache with TTI greater than TTL
 #[tokio::test]
 async fn test_cache_tti_greater_than_ttl() {
-    let mut config = CacheConfig::default();
-    config.ttl = Duration::from_secs(300);
-    config.tti = Duration::from_secs(3600);
+    let config = CacheConfig {
+        ttl: Duration::from_secs(300),
+        tti: Duration::from_secs(3600),
+        ..Default::default()
+    };
 
     let _cache = ThingsCache::new(&config);
 }

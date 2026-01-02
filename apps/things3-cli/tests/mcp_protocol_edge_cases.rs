@@ -4,7 +4,7 @@
 //! to ensure robust error handling and clear error messages.
 
 use serde_json::json;
-use things3_cli::mcp::test_harness::{McpTestHarness, McpTestUtils};
+use things3_cli::mcp::test_harness::McpTestHarness;
 
 /// Test that calling tools with missing arguments is handled gracefully
 #[tokio::test]
@@ -15,15 +15,13 @@ async fn test_tool_call_missing_arguments() {
     let result = harness.call_tool("get_inbox", None).await;
 
     // Should either succeed with defaults or return a clear error
+    let has_content = result
+        .content
+        .iter()
+        .any(|c| matches!(c, things3_cli::mcp::Content::Text { text } if !text.is_empty()));
+
     assert!(
-        !result.is_error
-            || result.content.iter().any(|c| {
-                if let things3_cli::mcp::Content::Text { text } = c {
-                    !text.is_empty()
-                } else {
-                    false
-                }
-            }),
+        !result.is_error || has_content,
         "Should handle missing arguments gracefully"
     );
 }
