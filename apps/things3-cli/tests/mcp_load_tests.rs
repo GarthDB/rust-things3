@@ -223,9 +223,14 @@ async fn load_test_response_times() {
     }
 
     response_times.sort();
-    let p50 = response_times[num_samples / 2];
-    let p95 = response_times[(num_samples * 95) / 100];
-    let p99 = response_times[(num_samples * 99) / 100];
+    // Calculate percentile indices using proper formula: (percentile / 100.0) * (n - 1)
+    let p50_idx = ((50.0 / 100.0) * (num_samples - 1) as f64).round() as usize;
+    let p95_idx = ((95.0 / 100.0) * (num_samples - 1) as f64).round() as usize;
+    let p99_idx = ((99.0 / 100.0) * (num_samples - 1) as f64).round() as usize;
+
+    let p50 = response_times[p50_idx];
+    let p95 = response_times[p95_idx];
+    let p99 = response_times[p99_idx];
 
     println!("Response time percentiles:");
     println!("  P50: {}ms", p50);
