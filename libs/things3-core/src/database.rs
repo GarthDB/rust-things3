@@ -11,7 +11,7 @@ use tracing::{debug, error, info, instrument};
 use uuid::Uuid;
 
 /// Convert f64 timestamp to i64 safely
-fn safe_timestamp_convert(ts_f64: f64) -> i64 {
+pub(crate) fn safe_timestamp_convert(ts_f64: f64) -> i64 {
     // Use try_from to avoid clippy warnings about casting
     if ts_f64.is_finite() && ts_f64 >= 0.0 {
         // Use a reasonable upper bound for timestamps (year 2100)
@@ -29,7 +29,7 @@ fn safe_timestamp_convert(ts_f64: f64) -> i64 {
 }
 
 /// Convert Things 3 date value (seconds since 2001-01-01) to NaiveDate
-fn things_date_to_naive_date(seconds_since_2001: i64) -> Option<chrono::NaiveDate> {
+pub(crate) fn things_date_to_naive_date(seconds_since_2001: i64) -> Option<chrono::NaiveDate> {
     use chrono::{TimeZone, Utc};
 
     if seconds_since_2001 <= 0 {
@@ -47,7 +47,7 @@ fn things_date_to_naive_date(seconds_since_2001: i64) -> Option<chrono::NaiveDat
 
 /// Convert Things 3 UUID format to standard UUID
 /// Things 3 uses base64-like strings, we'll generate a UUID from the hash
-fn things_uuid_to_uuid(things_uuid: &str) -> Uuid {
+pub(crate) fn things_uuid_to_uuid(things_uuid: &str) -> Uuid {
     // For now, create a deterministic UUID from the Things 3 ID
     // This ensures consistent mapping between Things 3 IDs and UUIDs
     use std::collections::hash_map::DefaultHasher;
@@ -1472,5 +1472,239 @@ mod tests {
             health.pool_metrics.is_healthy,
             "Pool metrics should be healthy"
         );
+    }
+
+    // ============================================================================
+    // Date Conversion Tests - Edge Cases
+    // ============================================================================
+
+    #[test]
+    fn test_things_date_negative_returns_none() {
+        // Negative values should return None
+        assert_eq!(things_date_to_naive_date(-1), None);
+        assert_eq!(things_date_to_naive_date(-100), None);
+        assert_eq!(things_date_to_naive_date(i64::MIN), None);
+    }
+
+    #[test]
+    fn test_things_date_zero_returns_none() {
+        // Zero should return None (no date set)
+        assert_eq!(things_date_to_naive_date(0), None);
+    }
+
+    #[test]
+    fn test_things_date_boundary_2001() {
+        use chrono::Datelike;
+        // 1 second after 2001-01-01 00:00:00 should be 2001-01-01
+        let result = things_date_to_naive_date(1);
+        assert!(result.is_some());
+
+        let date = result.unwrap();
+        assert_eq!(date.year(), 2001);
+        assert_eq!(date.month(), 1);
+        assert_eq!(date.day(), 1);
+    }
+
+    #[test]
+    fn test_things_date_one_day() {
+        use chrono::Datelike;
+        // 86400 seconds = 1 day (60 * 60 * 24), should be 2001-01-02
+        let seconds_per_day = 86400i64;
+        let result = things_date_to_naive_date(seconds_per_day);
+        assert!(result.is_some());
+
+        let date = result.unwrap();
+        assert_eq!(date.year(), 2001);
+        assert_eq!(date.month(), 1);
+        assert_eq!(date.day(), 2);
+    }
+
+    #[test]
+    fn test_things_date_one_year() {
+        use chrono::Datelike;
+        // ~365 days should be around 2002-01-01 (365 days * 86400 seconds/day)
+        let seconds_per_year = 365 * 86400i64;
+        let result = things_date_to_naive_date(seconds_per_year);
+        assert!(result.is_some());
+
+        let date = result.unwrap();
+        assert_eq!(date.year(), 2002);
+    }
+
+    #[test]
+    fn test_things_date_current_era() {
+        use chrono::Datelike;
+        // Test a date in the current era (2024)
+        // Days from 2001-01-01 to 2024-01-01 = ~8401 days
+        // Calculation: (2024-2001) * 365 + leap days (2004, 2008, 2012, 2016, 2020) = 23 * 365 + 5 = 8400
+        let days_to_2024 = 8401i64;
+        let seconds_to_2024 = days_to_2024 * 86400;
+
+        let result = things_date_to_naive_date(seconds_to_2024);
+        assert!(result.is_some());
+
+        let date = result.unwrap();
+        assert_eq!(date.year(), 2024);
+    }
+
+    #[test]
+    fn test_things_date_leap_year() {
+        use chrono::{Datelike, TimeZone, Utc};
+        // Test Feb 29, 2004 (leap year)
+        // Days from 2001-01-01 to 2004-02-29
+        let base_date = Utc.with_ymd_and_hms(2001, 1, 1, 0, 0, 0).single().unwrap();
+        let target_date = Utc.with_ymd_and_hms(2004, 2, 29, 0, 0, 0).single().unwrap();
+        let seconds_diff = (target_date - base_date).num_seconds();
+
+        let result = things_date_to_naive_date(seconds_diff);
+        assert!(result.is_some());
+
+        let date = result.unwrap();
+        assert_eq!(date.year(), 2004);
+        assert_eq!(date.month(), 2);
+        assert_eq!(date.day(), 29);
+    }
+
+    // ============================================================================
+    // UUID Conversion Tests
+    // ============================================================================
+
+    #[test]
+    fn test_uuid_conversion_consistency() {
+        // Same input should always produce same UUID
+        let input = "ABC123";
+        let uuid1 = things_uuid_to_uuid(input);
+        let uuid2 = things_uuid_to_uuid(input);
+
+        assert_eq!(uuid1, uuid2);
+    }
+
+    #[test]
+    fn test_uuid_conversion_uniqueness() {
+        // Different inputs should produce different UUIDs
+        let uuid1 = things_uuid_to_uuid("ABC123");
+        let uuid2 = things_uuid_to_uuid("ABC124");
+        let uuid3 = things_uuid_to_uuid("XYZ789");
+
+        assert_ne!(uuid1, uuid2);
+        assert_ne!(uuid1, uuid3);
+        assert_ne!(uuid2, uuid3);
+    }
+
+    #[test]
+    fn test_uuid_conversion_empty_string() {
+        // Empty string should still produce a valid UUID
+        let uuid = things_uuid_to_uuid("");
+        assert!(!uuid.to_string().is_empty());
+    }
+
+    #[test]
+    fn test_uuid_conversion_special_characters() {
+        // Special characters should be handled
+        let uuid1 = things_uuid_to_uuid("test-with-dashes");
+        let uuid2 = things_uuid_to_uuid("test_with_underscores");
+        let uuid3 = things_uuid_to_uuid("test.with.dots");
+
+        // All should be valid and different
+        assert_ne!(uuid1, uuid2);
+        assert_ne!(uuid1, uuid3);
+        assert_ne!(uuid2, uuid3);
+    }
+
+    // ============================================================================
+    // Timestamp Conversion Tests
+    // ============================================================================
+
+    #[test]
+    fn test_safe_timestamp_convert_normal_values() {
+        // Normal timestamp values should convert correctly
+        let ts = 1_700_000_000.0; // Around 2023
+        let result = safe_timestamp_convert(ts);
+        assert_eq!(result, 1_700_000_000);
+    }
+
+    #[test]
+    fn test_safe_timestamp_convert_zero() {
+        // Zero should return zero
+        assert_eq!(safe_timestamp_convert(0.0), 0);
+    }
+
+    #[test]
+    fn test_safe_timestamp_convert_negative() {
+        // Negative values should return zero (safe fallback)
+        assert_eq!(safe_timestamp_convert(-1.0), 0);
+        assert_eq!(safe_timestamp_convert(-1000.0), 0);
+    }
+
+    #[test]
+    fn test_safe_timestamp_convert_infinity() {
+        // Infinity should return zero (safe fallback)
+        assert_eq!(safe_timestamp_convert(f64::INFINITY), 0);
+        assert_eq!(safe_timestamp_convert(f64::NEG_INFINITY), 0);
+    }
+
+    #[test]
+    fn test_safe_timestamp_convert_nan() {
+        // NaN should return zero (safe fallback)
+        assert_eq!(safe_timestamp_convert(f64::NAN), 0);
+    }
+
+    #[test]
+    fn test_date_roundtrip_known_dates() {
+        use chrono::{Datelike, TimeZone, Utc};
+        // Test roundtrip conversion for known dates
+        // Note: Starting from 2001-01-02 because 2001-01-01 is the base date (0 seconds)
+        // and things_date_to_naive_date returns None for values <= 0
+        let test_cases = vec![
+            (2001, 1, 2), // Start from day 2 since day 1 is the base (0 seconds)
+            (2010, 6, 15),
+            (2020, 12, 31),
+            (2024, 2, 29), // Leap year
+            (2025, 7, 4),
+        ];
+
+        for (year, month, day) in test_cases {
+            let base_date = Utc.with_ymd_and_hms(2001, 1, 1, 0, 0, 0).single().unwrap();
+            let target_date = Utc
+                .with_ymd_and_hms(year, month, day, 0, 0, 0)
+                .single()
+                .unwrap();
+            let seconds = (target_date - base_date).num_seconds();
+
+            let converted = things_date_to_naive_date(seconds);
+            assert!(
+                converted.is_some(),
+                "Failed to convert {}-{:02}-{:02}",
+                year,
+                month,
+                day
+            );
+
+            let result_date = converted.unwrap();
+            assert_eq!(
+                result_date.year(),
+                year,
+                "Year mismatch for {}-{:02}-{:02}",
+                year,
+                month,
+                day
+            );
+            assert_eq!(
+                result_date.month(),
+                month,
+                "Month mismatch for {}-{:02}-{:02}",
+                year,
+                month,
+                day
+            );
+            assert_eq!(
+                result_date.day(),
+                day,
+                "Day mismatch for {}-{:02}-{:02}",
+                year,
+                month,
+                day
+            );
+        }
     }
 }

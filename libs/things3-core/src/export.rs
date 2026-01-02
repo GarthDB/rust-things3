@@ -584,8 +584,12 @@ mod tests {
     fn test_format_datetime_csv() {
         let datetime = Utc::now();
         let formatted = format_datetime_csv(datetime);
+        // Check that the formatted string contains the current year
+        let current_year = datetime.format("%Y").to_string();
         assert!(
-            formatted.contains("2023") || formatted.contains("2024") || formatted.contains("2025")
+            formatted.contains(&current_year),
+            "Formatted datetime should contain current year: {}",
+            current_year
         );
         assert!(formatted.contains('-'));
         assert!(formatted.contains(' '));

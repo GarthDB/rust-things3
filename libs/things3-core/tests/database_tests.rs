@@ -584,3 +584,368 @@ async fn test_database_performance_with_large_limits() {
     let tasks = db.search_tasks("test").await.unwrap();
     assert!(tasks.len() <= 10000);
 }
+
+// ============================================================================
+// Comprehensive get_today Tests with todayIndex Variations
+// ============================================================================
+
+/// Helper function to create a minimal TMTask schema for testing
+async fn create_minimal_task_schema(pool: &sqlx::SqlitePool) {
+    sqlx::query(
+        r"
+        CREATE TABLE IF NOT EXISTS TMTask (
+            uuid TEXT PRIMARY KEY,
+            title TEXT NOT NULL,
+            type INTEGER NOT NULL DEFAULT 0,
+            status INTEGER NOT NULL DEFAULT 0,
+            notes TEXT,
+            startDate INTEGER,
+            deadline INTEGER,
+            creationDate REAL NOT NULL,
+            userModificationDate REAL NOT NULL,
+            project TEXT,
+            area TEXT,
+            heading TEXT,
+            trashed INTEGER NOT NULL DEFAULT 0,
+            cachedTags BLOB,
+            todayIndex INTEGER
+        )
+        ",
+    )
+    .execute(pool)
+    .await
+    .unwrap();
+}
+
+#[tokio::test]
+async fn test_get_today_with_null_today_index() {
+    let db = ThingsDatabase::from_connection_string("sqlite::memory:")
+        .await
+        .unwrap();
+    let pool = db.pool();
+
+    // Create schema
+    create_minimal_task_schema(pool).await;
+
+    let now = 1_700_000_000.0;
+
+    // Insert task with NULL todayIndex (should NOT appear in Today)
+    sqlx::query(
+        "INSERT INTO TMTask (uuid, title, type, status, creationDate, userModificationDate, trashed, todayIndex) 
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+    )
+    .bind("task-null-today")
+    .bind("Task with NULL todayIndex")
+    .bind(0)
+    .bind(0)
+    .bind(now)
+    .bind(now)
+    .bind(0)
+    .bind(Option::<i64>::None) // NULL todayIndex
+    .execute(pool)
+    .await
+    .unwrap();
+
+    let today_tasks = db.get_today(None).await.unwrap();
+    assert_eq!(
+        today_tasks.len(),
+        0,
+        "Tasks with NULL todayIndex should not appear in Today"
+    );
+}
+
+#[tokio::test]
+async fn test_get_today_with_zero_today_index() {
+    let db = ThingsDatabase::from_connection_string("sqlite::memory:")
+        .await
+        .unwrap();
+    let pool = db.pool();
+
+    // Create schema
+    create_minimal_task_schema(pool).await;
+
+    let now = 1_700_000_000.0;
+
+    // Insert task with todayIndex = 0 (should NOT appear in Today)
+    sqlx::query(
+        "INSERT INTO TMTask (uuid, title, type, status, creationDate, userModificationDate, trashed, todayIndex) 
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+    )
+    .bind("task-zero-today")
+    .bind("Task with zero todayIndex")
+    .bind(0)
+    .bind(0)
+    .bind(now)
+    .bind(now)
+    .bind(0)
+    .bind(0) // todayIndex = 0
+    .execute(pool)
+    .await
+    .unwrap();
+
+    let today_tasks = db.get_today(None).await.unwrap();
+    assert_eq!(
+        today_tasks.len(),
+        0,
+        "Tasks with todayIndex = 0 should not appear in Today"
+    );
+}
+
+#[tokio::test]
+async fn test_get_today_with_positive_today_index() {
+    let db = ThingsDatabase::from_connection_string("sqlite::memory:")
+        .await
+        .unwrap();
+    let pool = db.pool();
+
+    // Create schema
+    create_minimal_task_schema(pool).await;
+
+    let now = 1_700_000_000.0;
+
+    // Insert task with positive todayIndex (SHOULD appear in Today)
+    sqlx::query(
+        "INSERT INTO TMTask (uuid, title, type, status, creationDate, userModificationDate, trashed, todayIndex) 
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+    )
+    .bind("task-positive-today")
+    .bind("Task in Today")
+    .bind(0)
+    .bind(0)
+    .bind(now)
+    .bind(now)
+    .bind(0)
+    .bind(1) // todayIndex = 1
+    .execute(pool)
+    .await
+    .unwrap();
+
+    let today_tasks = db.get_today(None).await.unwrap();
+    assert_eq!(
+        today_tasks.len(),
+        1,
+        "Tasks with positive todayIndex should appear in Today"
+    );
+    assert_eq!(today_tasks[0].title, "Task in Today");
+}
+
+#[tokio::test]
+async fn test_get_today_excludes_trashed() {
+    let db = ThingsDatabase::from_connection_string("sqlite::memory:")
+        .await
+        .unwrap();
+    let pool = db.pool();
+
+    // Create schema
+    create_minimal_task_schema(pool).await;
+
+    let now = 1_700_000_000.0;
+
+    // Insert trashed task with positive todayIndex
+    sqlx::query(
+        "INSERT INTO TMTask (uuid, title, type, status, creationDate, userModificationDate, trashed, todayIndex) 
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+    )
+    .bind("task-trashed")
+    .bind("Trashed Task")
+    .bind(0)
+    .bind(0)
+    .bind(now)
+    .bind(now)
+    .bind(1) // trashed = 1
+    .bind(1) // todayIndex = 1
+    .execute(pool)
+    .await
+    .unwrap();
+
+    let today_tasks = db.get_today(None).await.unwrap();
+    assert_eq!(
+        today_tasks.len(),
+        0,
+        "Trashed tasks should not appear in Today"
+    );
+}
+
+#[tokio::test]
+async fn test_get_today_with_limit() {
+    let db = ThingsDatabase::from_connection_string("sqlite::memory:")
+        .await
+        .unwrap();
+    let pool = db.pool();
+
+    // Create schema
+    create_minimal_task_schema(pool).await;
+
+    let now = 1_700_000_000.0;
+
+    // Insert 5 tasks
+    for i in 1..=5 {
+        sqlx::query(
+            "INSERT INTO TMTask (uuid, title, type, status, creationDate, userModificationDate, trashed, todayIndex) 
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+        )
+        .bind(format!("task-{}", i))
+        .bind(format!("Task {}", i))
+        .bind(0)
+        .bind(0)
+        .bind(now)
+        .bind(now)
+        .bind(0)
+        .bind(i as i64)
+        .execute(pool)
+        .await
+        .unwrap();
+    }
+
+    // Test with limit
+    let today_tasks = db.get_today(Some(3)).await.unwrap();
+    assert_eq!(today_tasks.len(), 3, "Should respect limit parameter");
+}
+
+// ============================================================================
+// Comprehensive get_inbox Error Scenario Tests
+// ============================================================================
+
+#[tokio::test]
+async fn test_get_inbox_empty_database() {
+    let db = ThingsDatabase::from_connection_string("sqlite::memory:")
+        .await
+        .unwrap();
+    let pool = db.pool();
+
+    // Create schema but insert no data
+    create_minimal_task_schema(pool).await;
+
+    let inbox = db.get_inbox(None).await.unwrap();
+    assert_eq!(inbox.len(), 0, "Empty database should return empty inbox");
+}
+
+#[tokio::test]
+async fn test_get_inbox_excludes_tasks_with_project() {
+    let db = ThingsDatabase::from_connection_string("sqlite::memory:")
+        .await
+        .unwrap();
+    let pool = db.pool();
+
+    // Create schema
+    create_minimal_task_schema(pool).await;
+
+    let now = 1_700_000_000.0;
+
+    // Insert task with project (should NOT be in inbox)
+    sqlx::query(
+        "INSERT INTO TMTask (uuid, title, type, status, creationDate, userModificationDate, project, trashed) 
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+    )
+    .bind("task-with-project")
+    .bind("Task in Project")
+    .bind(0)
+    .bind(0)
+    .bind(now)
+    .bind(now)
+    .bind("project-uuid")
+    .bind(0)
+    .execute(pool)
+    .await
+    .unwrap();
+
+    // Insert task without project (SHOULD be in inbox)
+    sqlx::query(
+        "INSERT INTO TMTask (uuid, title, type, status, creationDate, userModificationDate, project, trashed) 
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+    )
+    .bind("task-inbox")
+    .bind("Inbox Task")
+    .bind(0)
+    .bind(0)
+    .bind(now)
+    .bind(now)
+    .bind(Option::<String>::None)
+    .bind(0)
+    .execute(pool)
+    .await
+    .unwrap();
+
+    let inbox = db.get_inbox(None).await.unwrap();
+    assert_eq!(
+        inbox.len(),
+        1,
+        "Only tasks without project should be in inbox"
+    );
+    assert_eq!(inbox[0].title, "Inbox Task");
+}
+
+#[tokio::test]
+async fn test_get_inbox_with_limit_zero() {
+    let db = ThingsDatabase::from_connection_string("sqlite::memory:")
+        .await
+        .unwrap();
+    let pool = db.pool();
+
+    // Create schema
+    create_minimal_task_schema(pool).await;
+
+    let now = 1_700_000_000.0;
+
+    // Insert task
+    sqlx::query(
+        "INSERT INTO TMTask (uuid, title, type, status, creationDate, userModificationDate, project, trashed) 
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+    )
+    .bind("task-1")
+    .bind("Task 1")
+    .bind(0)
+    .bind(0)
+    .bind(now)
+    .bind(now)
+    .bind(Option::<String>::None)
+    .bind(0)
+    .execute(pool)
+    .await
+    .unwrap();
+
+    let inbox = db.get_inbox(Some(0)).await.unwrap();
+    assert_eq!(inbox.len(), 0, "Limit of 0 should return no tasks");
+}
+
+#[tokio::test]
+async fn test_get_inbox_large_result_set() {
+    let db = ThingsDatabase::from_connection_string("sqlite::memory:")
+        .await
+        .unwrap();
+    let pool = db.pool();
+
+    // Create schema
+    create_minimal_task_schema(pool).await;
+
+    let now = 1_700_000_000.0;
+
+    // Insert 100 tasks
+    for i in 0..100 {
+        sqlx::query(
+            "INSERT INTO TMTask (uuid, title, type, status, creationDate, userModificationDate, project, trashed) 
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+        )
+        .bind(format!("task-{}", i))
+        .bind(format!("Task {}", i))
+        .bind(0)
+        .bind(0)
+        .bind(now)
+        .bind(now)
+        .bind(Option::<String>::None)
+        .bind(0)
+        .execute(pool)
+        .await
+        .unwrap();
+    }
+
+    let inbox = db.get_inbox(None).await.unwrap();
+    assert_eq!(inbox.len(), 100, "Should handle large result sets");
+
+    let limited_inbox = db.get_inbox(Some(10)).await.unwrap();
+    assert_eq!(
+        limited_inbox.len(),
+        10,
+        "Should respect limit with large datasets"
+    );
+}
