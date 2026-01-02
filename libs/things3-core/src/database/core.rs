@@ -1,5 +1,5 @@
 use crate::{
-    database::mappers::map_task_row,
+    database::{mappers::map_task_row, query_builders::TaskUpdateBuilder},
     error::{Result as ThingsResult, ThingsError},
     models::{
         Area, CreateTaskRequest, DeleteChildHandling, Project, Task, TaskStatus, TaskType,
@@ -1019,53 +1019,18 @@ impl ThingsDatabase {
             self.validate_area_exists(area_uuid).await?;
         }
 
-        // Build dynamic UPDATE query based on provided fields
-        let mut updates = Vec::new();
+        // Use the TaskUpdateBuilder to construct the query
+        let builder = TaskUpdateBuilder::from_request(&request);
 
-        if request.title.is_some() {
-            updates.push("title = ?");
+        // If no fields to update, just return (modification date will still be updated)
+        if builder.is_empty() {
+            return Ok(());
         }
 
-        if request.notes.is_some() {
-            updates.push("notes = ?");
-        }
+        let query_string = builder.build_query_string();
+        let mut q = sqlx::query(&query_string);
 
-        if request.start_date.is_some() {
-            updates.push("startDate = ?");
-        }
-
-        if request.deadline.is_some() {
-            updates.push("deadline = ?");
-        }
-
-        if request.status.is_some() {
-            updates.push("status = ?");
-        }
-
-        if request.project_uuid.is_some() {
-            updates.push("project = ?");
-        }
-
-        if request.area_uuid.is_some() {
-            updates.push("area = ?");
-        }
-
-        if request.tags.is_some() {
-            updates.push("cachedTags = ?");
-        }
-
-        // Always update modification date
-        updates.push("userModificationDate = ?");
-
-        if updates.is_empty() {
-            return Ok(()); // Nothing to update
-        }
-
-        let query = format!("UPDATE TMTask SET {} WHERE uuid = ?", updates.join(", "));
-
-        // Build query with bindings
-        let mut q = sqlx::query(&query);
-
+        // Bind values in the same order as the builder added fields
         if let Some(title) = &request.title {
             q = q.bind(title);
         }
@@ -1099,7 +1064,7 @@ impl ThingsDatabase {
             q = q.bind(cached_tags);
         }
 
-        // Bind modification date and UUID
+        // Bind modification date and UUID (always added by builder)
         let now = Utc::now().timestamp() as f64;
         q = q.bind(now).bind(request.uuid.to_string());
 
