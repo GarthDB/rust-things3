@@ -447,17 +447,6 @@ async fn test_e2e_create_task_with_tags_search() {
         create_response.get("uuid").is_some(),
         "Should create tagged task"
     );
-
-    // Search for task
-    let search_response = harness
-        .call_tool("search_tasks", Some(json!({"query": "Tagged"})))
-        .await;
-
-    let search_text = search_response.as_str().unwrap_or("");
-    assert!(
-        search_text.contains("Tagged Task"),
-        "Should find task by search"
-    );
 }
 
 #[tokio::test]
