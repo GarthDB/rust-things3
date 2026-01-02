@@ -2,7 +2,7 @@
 
 pub(crate) use serde_json::json;
 use sqlx::SqlitePool;
-pub(crate) use things3_cli::mcp::{CallToolRequest, Content, McpError, ThingsMcpServer};
+pub(crate) use things3_cli::mcp::{CallToolRequest, Content, ThingsMcpServer};
 use things3_core::{config::ThingsConfig, database::ThingsDatabase};
 
 /// Create a test MCP server with mock database
