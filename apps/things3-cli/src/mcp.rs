@@ -10,10 +10,12 @@ use things3_core::{
 use thiserror::Error;
 use tokio::sync::Mutex;
 
+pub mod io_wrapper;
 pub mod middleware;
 // pub mod performance_tests; // Temporarily disabled due to API changes
 pub mod test_harness;
 
+use io_wrapper::{McpIo, StdIo};
 use middleware::{MiddlewareChain, MiddlewareConfig};
 
 /// MCP-specific error types for better error handling and user experience
@@ -526,36 +528,40 @@ pub async fn start_mcp_server(
     db: Arc<ThingsDatabase>,
     config: ThingsConfig,
 ) -> things3_core::Result<()> {
-    use tokio::io::{stdin, stdout};
-    use tokio::io::{AsyncBufReadExt, AsyncWriteExt};
+    let io = StdIo::new();
+    start_mcp_server_generic(db, config, io).await
+}
 
+/// Generic MCP server implementation that works with any I/O implementation
+///
+/// This function is generic over the I/O layer, allowing it to work with both
+/// production stdin/stdout (via `StdIo`) and test mocks (via `MockIo`).
+pub async fn start_mcp_server_generic<I: McpIo>(
+    db: Arc<ThingsDatabase>,
+    config: ThingsConfig,
+    mut io: I,
+) -> things3_core::Result<()> {
     let server = Arc::new(tokio::sync::Mutex::new(ThingsMcpServer::new(db, config)));
-
-    // Use async stdin/stdout
-    let mut stdin_handle = stdin();
-    let mut stdout_handle = stdout();
-    let mut reader = tokio::io::BufReader::new(&mut stdin_handle);
-    let mut line = String::new();
 
     // Read JSON-RPC requests line by line
     loop {
-        line.clear();
-        let bytes_read = reader.read_line(&mut line).await.map_err(|e| {
-            things3_core::ThingsError::unknown(format!("Failed to read from stdin: {}", e))
+        // Read a line from input
+        let line = io.read_line().await.map_err(|e| {
+            things3_core::ThingsError::unknown(format!("Failed to read from input: {}", e))
         })?;
 
         // EOF reached
-        if bytes_read == 0 {
+        let Some(line) = line else {
             break;
-        }
+        };
 
-        let trimmed = line.trim();
-        if trimmed.is_empty() {
+        // Skip empty lines
+        if line.is_empty() {
             continue;
         }
 
         // Parse JSON-RPC request
-        let request: serde_json::Value = serde_json::from_str(trimmed).map_err(|e| {
+        let request: serde_json::Value = serde_json::from_str(&line).map_err(|e| {
             things3_core::ThingsError::unknown(format!("Failed to parse JSON-RPC request: {}", e))
         })?;
 
@@ -572,17 +578,12 @@ pub async fn start_mcp_server(
                 things3_core::ThingsError::unknown(format!("Failed to serialize response: {}", e))
             })?;
 
-            stdout_handle
-                .write_all(response_str.as_bytes())
-                .await
-                .map_err(|e| {
-                    things3_core::ThingsError::unknown(format!("Failed to write to stdout: {}", e))
-                })?;
-            stdout_handle.write_all(b"\n").await.map_err(|e| {
-                things3_core::ThingsError::unknown(format!("Failed to write newline: {}", e))
+            io.write_line(&response_str).await.map_err(|e| {
+                things3_core::ThingsError::unknown(format!("Failed to write response: {}", e))
             })?;
-            stdout_handle.flush().await.map_err(|e| {
-                things3_core::ThingsError::unknown(format!("Failed to flush stdout: {}", e))
+
+            io.flush().await.map_err(|e| {
+                things3_core::ThingsError::unknown(format!("Failed to flush output: {}", e))
             })?;
         }
         // Notifications don't require a response, so we silently continue
@@ -603,9 +604,16 @@ pub async fn start_mcp_server_with_config(
     db: Arc<ThingsDatabase>,
     mcp_config: McpServerConfig,
 ) -> things3_core::Result<()> {
-    use tokio::io::{stdin, stdout};
-    use tokio::io::{AsyncBufReadExt, AsyncWriteExt};
+    let io = StdIo::new();
+    start_mcp_server_with_config_generic(db, mcp_config, io).await
+}
 
+/// Generic MCP server with config implementation that works with any I/O implementation
+pub async fn start_mcp_server_with_config_generic<I: McpIo>(
+    db: Arc<ThingsDatabase>,
+    mcp_config: McpServerConfig,
+    mut io: I,
+) -> things3_core::Result<()> {
     // Convert McpServerConfig to ThingsConfig for backward compatibility
     let things_config = ThingsConfig::new(
         mcp_config.database.path.clone(),
@@ -616,31 +624,25 @@ pub async fn start_mcp_server_with_config(
         ThingsMcpServer::new_with_mcp_config(db, things_config, mcp_config),
     ));
 
-    // Use async stdin/stdout
-    let mut stdin_handle = stdin();
-    let mut stdout_handle = stdout();
-    let mut reader = tokio::io::BufReader::new(&mut stdin_handle);
-    let mut line = String::new();
-
     // Read JSON-RPC requests line by line
     loop {
-        line.clear();
-        let bytes_read = reader.read_line(&mut line).await.map_err(|e| {
-            things3_core::ThingsError::unknown(format!("Failed to read from stdin: {}", e))
+        // Read a line from input
+        let line = io.read_line().await.map_err(|e| {
+            things3_core::ThingsError::unknown(format!("Failed to read from input: {}", e))
         })?;
 
         // EOF reached
-        if bytes_read == 0 {
+        let Some(line) = line else {
             break;
-        }
+        };
 
-        let trimmed = line.trim();
-        if trimmed.is_empty() {
+        // Skip empty lines
+        if line.is_empty() {
             continue;
         }
 
         // Parse JSON-RPC request
-        let request: serde_json::Value = serde_json::from_str(trimmed).map_err(|e| {
+        let request: serde_json::Value = serde_json::from_str(&line).map_err(|e| {
             things3_core::ThingsError::unknown(format!("Failed to parse JSON-RPC request: {}", e))
         })?;
 
@@ -657,17 +659,12 @@ pub async fn start_mcp_server_with_config(
                 things3_core::ThingsError::unknown(format!("Failed to serialize response: {}", e))
             })?;
 
-            stdout_handle
-                .write_all(response_str.as_bytes())
-                .await
-                .map_err(|e| {
-                    things3_core::ThingsError::unknown(format!("Failed to write to stdout: {}", e))
-                })?;
-            stdout_handle.write_all(b"\n").await.map_err(|e| {
-                things3_core::ThingsError::unknown(format!("Failed to write newline: {}", e))
+            io.write_line(&response_str).await.map_err(|e| {
+                things3_core::ThingsError::unknown(format!("Failed to write response: {}", e))
             })?;
-            stdout_handle.flush().await.map_err(|e| {
-                things3_core::ThingsError::unknown(format!("Failed to flush stdout: {}", e))
+
+            io.flush().await.map_err(|e| {
+                things3_core::ThingsError::unknown(format!("Failed to flush output: {}", e))
             })?;
         }
         // Notifications don't require a response, so we silently continue
