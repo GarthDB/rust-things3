@@ -51,15 +51,17 @@ async fn test_fallback_to_mock_data() {
         // Real database not available, use mock data
         println!("Real database not available, testing fallback behavior");
 
+        // Create temp file OUTSIDE cfg blocks to keep it alive for entire test
+        let _temp_file = NamedTempFile::new().unwrap();
+        let temp_path = _temp_file.path();
+
         #[cfg(feature = "test-utils")]
         {
             // With test-utils: test fallback to mock data
             println!("Testing fallback to mock data (test-utils enabled)");
-            let temp_file = NamedTempFile::new().unwrap();
-            let db_path = temp_file.path();
 
-            test_utils::create_test_database(db_path).await.unwrap();
-            let db = ThingsDatabase::new(db_path).await.unwrap();
+            test_utils::create_test_database(temp_path).await.unwrap();
+            let db = ThingsDatabase::new(temp_path).await.unwrap();
             test_database_operations(&db);
 
             println!("✅ Fallback to mock data successful");
@@ -70,13 +72,9 @@ async fn test_fallback_to_mock_data() {
             // Without test-utils: verify we can handle databases gracefully
             println!("Testing database handling without test-utils");
 
-            // Test with a path that exists but is not a valid Things database
-            let temp_file = NamedTempFile::new().unwrap();
-            let empty_db_path = temp_file.path();
-
             // ThingsDatabase::new() may succeed (SQLite can open empty files)
             // but queries should fail gracefully on an invalid database
-            let result = ThingsDatabase::new(empty_db_path).await;
+            let result = ThingsDatabase::new(temp_path).await;
 
             match result {
                 Ok(db) => {
