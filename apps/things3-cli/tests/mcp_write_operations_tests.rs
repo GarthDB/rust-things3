@@ -1,13 +1,8 @@
 use serde_json::json;
-use things3_cli::mcp::{CallToolRequest, ThingsMcpServer};
-use things3_core::{TaskStatus, TaskType, ThingsConfig, ThingsDatabase};
-use uuid::Uuid;
-
-#[cfg(feature = "test-utils")]
-use things3_core::test_utils::create_test_database;
-
-#[cfg(feature = "test-utils")]
 use tempfile::NamedTempFile;
+use things3_cli::mcp::{CallToolRequest, ThingsMcpServer};
+use things3_core::{test_utils::create_test_database, ThingsConfig, ThingsDatabase};
+use uuid::Uuid;
 
 // Test harness for MCP server
 struct McpTestHarness {
@@ -16,7 +11,6 @@ struct McpTestHarness {
 }
 
 impl McpTestHarness {
-    #[cfg(feature = "test-utils")]
     async fn new() -> Self {
         let temp_file = NamedTempFile::new().unwrap();
         let db_path = temp_file.path();
@@ -68,7 +62,6 @@ impl McpTestHarness {
 // ============================================================================
 
 #[tokio::test]
-#[cfg(feature = "test-utils")]
 async fn test_create_task_via_mcp_returns_valid_response() {
     let harness = McpTestHarness::new().await;
 
@@ -92,7 +85,7 @@ async fn test_create_task_via_mcp_returns_valid_response() {
 }
 
 #[tokio::test]
-#[cfg(feature = "test-utils")]
+
 async fn test_update_task_via_mcp_returns_success() {
     let harness = McpTestHarness::new().await;
 
@@ -126,7 +119,7 @@ async fn test_update_task_via_mcp_returns_success() {
 }
 
 #[tokio::test]
-#[cfg(feature = "test-utils")]
+
 async fn test_created_task_can_be_queried() {
     let harness = McpTestHarness::new().await;
 
@@ -155,7 +148,7 @@ async fn test_created_task_can_be_queried() {
 }
 
 #[tokio::test]
-#[cfg(feature = "test-utils")]
+
 async fn test_validation_failure_error_response() {
     let harness = McpTestHarness::new().await;
 
@@ -177,7 +170,7 @@ async fn test_validation_failure_error_response() {
 }
 
 #[tokio::test]
-#[cfg(feature = "test-utils")]
+
 async fn test_missing_required_parameter() {
     let harness = McpTestHarness::new().await;
 
@@ -191,7 +184,7 @@ async fn test_missing_required_parameter() {
 }
 
 #[tokio::test]
-#[cfg(feature = "test-utils")]
+
 async fn test_invalid_parameter_types() {
     let harness = McpTestHarness::new().await;
 
@@ -212,7 +205,7 @@ async fn test_invalid_parameter_types() {
 }
 
 #[tokio::test]
-#[cfg(feature = "test-utils")]
+
 async fn test_null_vs_missing_fields() {
     let harness = McpTestHarness::new().await;
 
@@ -249,7 +242,7 @@ async fn test_null_vs_missing_fields() {
 }
 
 #[tokio::test]
-#[cfg(feature = "test-utils")]
+
 async fn test_create_then_update_workflow() {
     let harness = McpTestHarness::new().await;
 
@@ -285,7 +278,7 @@ async fn test_create_then_update_workflow() {
 }
 
 #[tokio::test]
-#[cfg(feature = "test-utils")]
+
 async fn test_create_task_with_all_fields() {
     let harness = McpTestHarness::new().await;
 
@@ -326,7 +319,7 @@ async fn test_create_task_with_all_fields() {
 }
 
 #[tokio::test]
-#[cfg(feature = "test-utils")]
+
 async fn test_update_nonexistent_task_error() {
     let harness = McpTestHarness::new().await;
 
@@ -352,7 +345,7 @@ async fn test_update_nonexistent_task_error() {
 // ============================================================================
 
 #[tokio::test]
-#[cfg(feature = "test-utils")]
+
 async fn test_e2e_create_task_verify_in_inbox() {
     let harness = McpTestHarness::new().await;
 
@@ -381,7 +374,7 @@ async fn test_e2e_create_task_verify_in_inbox() {
 }
 
 #[tokio::test]
-#[cfg(feature = "test-utils")]
+
 async fn test_e2e_create_task_in_project_verify() {
     let harness = McpTestHarness::new().await;
 
@@ -424,7 +417,7 @@ async fn test_e2e_create_task_in_project_verify() {
 }
 
 #[tokio::test]
-#[cfg(feature = "test-utils")]
+
 async fn test_e2e_update_status_verify_completion() {
     let harness = McpTestHarness::new().await;
 
@@ -459,7 +452,7 @@ async fn test_e2e_update_status_verify_completion() {
 }
 
 #[tokio::test]
-#[cfg(feature = "test-utils")]
+
 async fn test_e2e_create_task_with_tags_search() {
     let harness = McpTestHarness::new().await;
 
@@ -492,7 +485,7 @@ async fn test_e2e_create_task_with_tags_search() {
 }
 
 #[tokio::test]
-#[cfg(feature = "test-utils")]
+
 async fn test_e2e_full_crud_cycle() {
     let harness = McpTestHarness::new().await;
 
