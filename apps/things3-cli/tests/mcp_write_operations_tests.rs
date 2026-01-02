@@ -17,7 +17,7 @@ impl McpTestHarness {
         create_test_database(db_path).await.unwrap();
         let db = ThingsDatabase::new(db_path).await.unwrap();
         let config = ThingsConfig::default();
-        let server = ThingsMcpServer::new(db, config);
+        let server = ThingsMcpServer::new(std::sync::Arc::new(db), config);
 
         Self {
             server,
@@ -32,7 +32,7 @@ impl McpTestHarness {
     ) -> serde_json::Value {
         let request = CallToolRequest {
             name: name.to_string(),
-            arguments: arguments.unwrap_or(json!({})),
+            arguments: Some(arguments.unwrap_or(json!({}))),
         };
 
         let result = self.server.call_tool_with_fallback(request).await;
