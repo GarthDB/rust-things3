@@ -1594,7 +1594,7 @@ mod tests {
     fn test_uuid_conversion_empty_string() {
         // Empty string should still produce a valid UUID
         let uuid = things_uuid_to_uuid("");
-        assert!(uuid.to_string().len() > 0);
+        assert!(!uuid.to_string().is_empty());
     }
 
     #[test]
@@ -1680,7 +1680,7 @@ mod tests {
             let result_date = converted.unwrap();
             assert_eq!(
                 result_date.year(),
-                year as i32,
+                year,
                 "Year mismatch for {}-{:02}-{:02}",
                 year,
                 month,
