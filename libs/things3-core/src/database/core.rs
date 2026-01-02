@@ -1067,6 +1067,9 @@ impl ThingsDatabase {
     /// Returns an error if validation fails or if the database insert fails
     #[instrument(skip(self))]
     pub async fn create_task(&self, request: CreateTaskRequest) -> ThingsResult<Uuid> {
+        // Validate date range (deadline must be >= start_date)
+        crate::database::validate_date_range(request.start_date, request.deadline)?;
+
         // Generate UUID for new task
         let uuid = Uuid::new_v4();
         let uuid_str = uuid.to_string();
@@ -1143,6 +1146,9 @@ impl ThingsDatabase {
         &self,
         request: crate::models::CreateProjectRequest,
     ) -> ThingsResult<Uuid> {
+        // Validate date range (deadline must be >= start_date)
+        crate::database::validate_date_range(request.start_date, request.deadline)?;
+
         // Generate UUID for new project
         let uuid = Uuid::new_v4();
         let uuid_str = uuid.to_string();
@@ -1206,6 +1212,16 @@ impl ThingsDatabase {
     pub async fn update_task(&self, request: UpdateTaskRequest) -> ThingsResult<()> {
         // Verify task exists
         validators::validate_task_exists(&self.pool, &request.uuid).await?;
+
+        // Validate dates if either is being updated
+        if request.start_date.is_some() || request.deadline.is_some() {
+            // Get current task to merge dates
+            if let Some(current_task) = self.get_task_by_uuid(&request.uuid).await? {
+                let final_start = request.start_date.or(current_task.start_date);
+                let final_deadline = request.deadline.or(current_task.deadline);
+                crate::database::validate_date_range(final_start, final_deadline)?;
+            }
+        }
 
         // Validate referenced entities if being updated
         if let Some(project_uuid) = &request.project_uuid {
@@ -1288,6 +1304,18 @@ impl ThingsDatabase {
     ) -> ThingsResult<()> {
         // Verify project exists (type = 1, trashed = 0)
         validators::validate_project_exists(&self.pool, &request.uuid).await?;
+
+        // Validate dates if either is being updated
+        if request.start_date.is_some() || request.deadline.is_some() {
+            // Fetch current project to merge dates
+            let current_projects = self.get_all_projects().await?;
+            if let Some(current_project) = current_projects.iter().find(|p| p.uuid == request.uuid)
+            {
+                let final_start = request.start_date.or(current_project.start_date);
+                let final_deadline = request.deadline.or(current_project.deadline);
+                crate::database::validate_date_range(final_start, final_deadline)?;
+            }
+        }
 
         // Validate area if being updated
         if let Some(area_uuid) = &request.area_uuid {

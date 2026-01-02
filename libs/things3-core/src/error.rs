@@ -26,6 +26,12 @@ pub enum ThingsError {
     #[error("Invalid date: {date}")]
     InvalidDate { date: String },
 
+    #[error("Date validation failed: {0}")]
+    DateValidation(#[from] crate::database::DateValidationError),
+
+    #[error("Date conversion failed: {0}")]
+    DateConversion(#[from] crate::database::DateConversionError),
+
     #[error("Task not found: {uuid}")]
     TaskNotFound { uuid: String },
 
