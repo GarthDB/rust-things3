@@ -345,6 +345,7 @@ impl McpTestHarness {
                 notes TEXT,
                 startDate INTEGER,
                 deadline INTEGER,
+                stopDate REAL,
                 creationDate REAL NOT NULL,
                 userModificationDate REAL NOT NULL,
                 project TEXT,

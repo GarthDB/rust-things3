@@ -36,6 +36,7 @@ async fn create_test_schema(db: &ThingsDatabase) -> Result<(), Box<dyn std::erro
             notes TEXT,
             startDate INTEGER,
             deadline INTEGER,
+            stopDate REAL,
             creationDate REAL NOT NULL,
             userModificationDate REAL NOT NULL,
             project TEXT,

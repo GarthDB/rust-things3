@@ -1,6 +1,9 @@
 use crate::{
     error::{Result as ThingsResult, ThingsError},
-    models::{Area, CreateTaskRequest, Project, Task, TaskStatus, TaskType, UpdateTaskRequest},
+    models::{
+        Area, CreateTaskRequest, DeleteChildHandling, Project, Task, TaskStatus, TaskType,
+        UpdateTaskRequest,
+    },
 };
 use chrono::{DateTime, NaiveDate, Utc};
 use serde::{Deserialize, Serialize};
@@ -621,6 +624,7 @@ impl ThingsDatabase {
                 modified: DateTime::parse_from_rfc3339(&row.get::<String, _>("modified"))
                     .ok()
                     .map_or_else(Utc::now, |dt| dt.with_timezone(&Utc)),
+                stop_date: None, // Not available in this query context
             };
             tasks.push(task);
         }
@@ -787,6 +791,7 @@ impl ThingsDatabase {
                 modified: DateTime::parse_from_rfc3339(&row.get::<String, _>("modified"))
                     .ok()
                     .map_or_else(Utc::now, |dt| dt.with_timezone(&Utc)),
+                stop_date: None, // Not available in this query context
             };
             tasks.push(task);
         }
@@ -807,7 +812,7 @@ impl ThingsDatabase {
             r"
             SELECT 
                 uuid, title, status, type, 
-                startDate, deadline, 
+                startDate, deadline, stopDate,
                 project, area,
                 notes, cachedTags, 
                 creationDate, userModificationDate
@@ -860,6 +865,10 @@ impl ThingsDatabase {
                     let ts = safe_timestamp_convert(ts_f64);
                     DateTime::from_timestamp(ts, 0).unwrap_or_else(Utc::now)
                 },
+                stop_date: row.get::<Option<f64>, _>("stopDate").and_then(|ts| {
+                    let ts_i64 = safe_timestamp_convert(ts);
+                    DateTime::from_timestamp(ts_i64, 0)
+                }),
             };
             tasks.push(task);
         }
@@ -876,9 +885,9 @@ impl ThingsDatabase {
     #[instrument(skip(self))]
     pub async fn get_inbox(&self, limit: Option<usize>) -> ThingsResult<Vec<Task>> {
         let query = if let Some(limit) = limit {
-            format!("SELECT uuid, title, type, status, notes, startDate, deadline, creationDate, userModificationDate, project, area, heading, cachedTags FROM TMTask WHERE type = 0 AND status = 0 AND project IS NULL AND trashed = 0 ORDER BY creationDate DESC LIMIT {limit}")
+            format!("SELECT uuid, title, type, status, notes, startDate, deadline, stopDate, creationDate, userModificationDate, project, area, heading, cachedTags FROM TMTask WHERE type = 0 AND status = 0 AND project IS NULL AND trashed = 0 ORDER BY creationDate DESC LIMIT {limit}")
         } else {
-            "SELECT uuid, title, type, status, notes, startDate, deadline, creationDate, userModificationDate, project, area, heading, cachedTags FROM TMTask WHERE type = 0 AND status = 0 AND project IS NULL AND trashed = 0 ORDER BY creationDate DESC"
+            "SELECT uuid, title, type, status, notes, startDate, deadline, stopDate, creationDate, userModificationDate, project, area, heading, cachedTags FROM TMTask WHERE type = 0 AND status = 0 AND project IS NULL AND trashed = 0 ORDER BY creationDate DESC"
                 .to_string()
         };
 
@@ -913,6 +922,10 @@ impl ThingsDatabase {
                         let ts = safe_timestamp_convert(ts_f64);
                         DateTime::from_timestamp(ts, 0).unwrap_or_else(Utc::now)
                     },
+                    stop_date: row.get::<Option<f64>, _>("stopDate").and_then(|ts| {
+                        let ts_i64 = safe_timestamp_convert(ts);
+                        DateTime::from_timestamp(ts_i64, 0)
+                    }),
                     project_uuid: row
                         .get::<Option<String>, _>("project")
                         .map(|s| things_uuid_to_uuid(&s)),
@@ -949,10 +962,10 @@ impl ThingsDatabase {
         // A task is in "Today" if todayIndex IS NOT NULL AND todayIndex != 0
         let query = if let Some(limit) = limit {
             format!(
-                "SELECT uuid, title, type, status, notes, startDate, deadline, creationDate, userModificationDate, project, area, heading, cachedTags FROM TMTask WHERE status = 0 AND todayIndex IS NOT NULL AND todayIndex != 0 AND trashed = 0 ORDER BY todayIndex ASC LIMIT {limit}"
+                "SELECT uuid, title, type, status, notes, startDate, deadline, stopDate, creationDate, userModificationDate, project, area, heading, cachedTags FROM TMTask WHERE status = 0 AND todayIndex IS NOT NULL AND todayIndex != 0 AND trashed = 0 ORDER BY todayIndex ASC LIMIT {limit}"
             )
         } else {
-            "SELECT uuid, title, type, status, notes, startDate, deadline, creationDate, userModificationDate, project, area, heading, cachedTags FROM TMTask WHERE status = 0 AND todayIndex IS NOT NULL AND todayIndex != 0 AND trashed = 0 ORDER BY todayIndex ASC".to_string()
+            "SELECT uuid, title, type, status, notes, startDate, deadline, stopDate, creationDate, userModificationDate, project, area, heading, cachedTags FROM TMTask WHERE status = 0 AND todayIndex IS NOT NULL AND todayIndex != 0 AND trashed = 0 ORDER BY todayIndex ASC".to_string()
         };
 
         let rows = sqlx::query(&query)
@@ -986,6 +999,10 @@ impl ThingsDatabase {
                         let ts = safe_timestamp_convert(ts_f64);
                         DateTime::from_timestamp(ts, 0).unwrap_or_else(Utc::now)
                     },
+                    stop_date: row.get::<Option<f64>, _>("stopDate").and_then(|ts| {
+                        let ts_i64 = safe_timestamp_convert(ts);
+                        DateTime::from_timestamp(ts_i64, 0)
+                    }),
                     project_uuid: row
                         .get::<Option<String>, _>("project")
                         .map(|s| things_uuid_to_uuid(&s)),
@@ -1225,8 +1242,9 @@ impl ThingsDatabase {
     /// # Errors
     ///
     /// Returns an error if the task does not exist or if the database query fails
+    /// Note: Trashed tasks are treated as non-existent (trashed = 0 filter applied)
     async fn validate_task_exists(&self, uuid: &Uuid) -> ThingsResult<()> {
-        let exists = sqlx::query("SELECT 1 FROM TMTask WHERE uuid = ?")
+        let exists = sqlx::query("SELECT 1 FROM TMTask WHERE uuid = ? AND trashed = 0")
             .bind(uuid.to_string())
             .fetch_optional(&self.pool)
             .await
@@ -1244,13 +1262,15 @@ impl ThingsDatabase {
     /// # Errors
     ///
     /// Returns an error if the project does not exist or if the database query fails
+    /// Note: Trashed projects are treated as non-existent (trashed = 0 filter applied)
     async fn validate_project_exists(&self, uuid: &Uuid) -> ThingsResult<()> {
-        let exists = sqlx::query("SELECT 1 FROM TMTask WHERE uuid = ? AND type = 1")
-            .bind(uuid.to_string())
-            .fetch_optional(&self.pool)
-            .await
-            .map_err(|e| ThingsError::unknown(format!("Failed to validate project: {e}")))?
-            .is_some();
+        let exists =
+            sqlx::query("SELECT 1 FROM TMTask WHERE uuid = ? AND type = 1 AND trashed = 0")
+                .bind(uuid.to_string())
+                .fetch_optional(&self.pool)
+                .await
+                .map_err(|e| ThingsError::unknown(format!("Failed to validate project: {e}")))?
+                .is_some();
 
         if !exists {
             return Err(ThingsError::unknown(format!("Project not found: {uuid}")));
@@ -1274,6 +1294,231 @@ impl ThingsDatabase {
         if !exists {
             return Err(ThingsError::unknown(format!("Area not found: {uuid}")));
         }
+        Ok(())
+    }
+
+    /// Get a task by its UUID
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the task does not exist or if the database query fails
+    #[instrument(skip(self))]
+    pub async fn get_task_by_uuid(&self, uuid: &Uuid) -> ThingsResult<Option<Task>> {
+        let row = sqlx::query(
+            r"
+            SELECT 
+                uuid, title, status, type, 
+                startDate, deadline, stopDate,
+                project, area, heading,
+                notes, cachedTags, 
+                creationDate, userModificationDate,
+                trashed
+            FROM TMTask
+            WHERE uuid = ?
+            ",
+        )
+        .bind(uuid.to_string())
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|e| ThingsError::unknown(format!("Failed to fetch task: {e}")))?;
+
+        if let Some(row) = row {
+            // Check if trashed
+            let trashed: i64 = row.get("trashed");
+            if trashed == 1 {
+                return Ok(None); // Return None for trashed tasks
+            }
+
+            let uuid_str = row.get::<String, _>("uuid");
+            // Try to parse as standard UUID first, fall back to Things UUID conversion
+            let uuid =
+                Uuid::parse_str(&uuid_str).unwrap_or_else(|_| things_uuid_to_uuid(&uuid_str));
+
+            let task = Task {
+                uuid,
+                title: row.get("title"),
+                status: TaskStatus::from_i32(row.get("status")).unwrap_or(TaskStatus::Incomplete),
+                task_type: TaskType::from_i32(row.get("type")).unwrap_or(TaskType::Todo),
+                notes: row.get("notes"),
+                start_date: row
+                    .get::<Option<i64>, _>("startDate")
+                    .and_then(things_date_to_naive_date),
+                deadline: row
+                    .get::<Option<i64>, _>("deadline")
+                    .and_then(things_date_to_naive_date),
+                created: {
+                    let ts_f64 = row.get::<f64, _>("creationDate");
+                    let ts = safe_timestamp_convert(ts_f64);
+                    DateTime::from_timestamp(ts, 0).unwrap_or_else(Utc::now)
+                },
+                modified: {
+                    let ts_f64 = row.get::<f64, _>("userModificationDate");
+                    let ts = safe_timestamp_convert(ts_f64);
+                    DateTime::from_timestamp(ts, 0).unwrap_or_else(Utc::now)
+                },
+                stop_date: row.get::<Option<f64>, _>("stopDate").and_then(|ts| {
+                    let ts_i64 = safe_timestamp_convert(ts);
+                    DateTime::from_timestamp(ts_i64, 0)
+                }),
+                project_uuid: row.get::<Option<String>, _>("project").and_then(|s| {
+                    Uuid::parse_str(&s)
+                        .ok()
+                        .or_else(|| Some(things_uuid_to_uuid(&s)))
+                }),
+                area_uuid: row.get::<Option<String>, _>("area").and_then(|s| {
+                    Uuid::parse_str(&s)
+                        .ok()
+                        .or_else(|| Some(things_uuid_to_uuid(&s)))
+                }),
+                parent_uuid: row.get::<Option<String>, _>("heading").and_then(|s| {
+                    Uuid::parse_str(&s)
+                        .ok()
+                        .or_else(|| Some(things_uuid_to_uuid(&s)))
+                }),
+                tags: row
+                    .get::<Option<String>, _>("cachedTags")
+                    .map(|_| Vec::new()) // TODO: Parse binary tag data
+                    .unwrap_or_default(),
+                children: Vec::new(),
+            };
+            Ok(Some(task))
+        } else {
+            Ok(None)
+        }
+    }
+
+    /// Mark a task as completed
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the task does not exist or if the database update fails
+    #[instrument(skip(self))]
+    pub async fn complete_task(&self, uuid: &Uuid) -> ThingsResult<()> {
+        // Verify task exists
+        self.validate_task_exists(uuid).await?;
+
+        let now = Utc::now().timestamp() as f64;
+
+        sqlx::query(
+            "UPDATE TMTask SET status = 1, stopDate = ?, userModificationDate = ? WHERE uuid = ?",
+        )
+        .bind(now)
+        .bind(now)
+        .bind(uuid.to_string())
+        .execute(&self.pool)
+        .await
+        .map_err(|e| ThingsError::unknown(format!("Failed to complete task: {e}")))?;
+
+        info!("Completed task with UUID: {}", uuid);
+        Ok(())
+    }
+
+    /// Mark a completed task as incomplete
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the task does not exist or if the database update fails
+    #[instrument(skip(self))]
+    pub async fn uncomplete_task(&self, uuid: &Uuid) -> ThingsResult<()> {
+        // Verify task exists
+        self.validate_task_exists(uuid).await?;
+
+        let now = Utc::now().timestamp() as f64;
+
+        sqlx::query(
+            "UPDATE TMTask SET status = 0, stopDate = NULL, userModificationDate = ? WHERE uuid = ?",
+        )
+        .bind(now)
+        .bind(uuid.to_string())
+        .execute(&self.pool)
+        .await
+        .map_err(|e| ThingsError::unknown(format!("Failed to uncomplete task: {e}")))?;
+
+        info!("Uncompleted task with UUID: {}", uuid);
+        Ok(())
+    }
+
+    /// Soft delete a task (set trashed flag)
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the task does not exist, if child handling fails, or if the database update fails
+    #[instrument(skip(self))]
+    pub async fn delete_task(
+        &self,
+        uuid: &Uuid,
+        child_handling: DeleteChildHandling,
+    ) -> ThingsResult<()> {
+        // Verify task exists
+        self.validate_task_exists(uuid).await?;
+
+        // Check for child tasks
+        let children = sqlx::query("SELECT uuid FROM TMTask WHERE heading = ? AND trashed = 0")
+            .bind(uuid.to_string())
+            .fetch_all(&self.pool)
+            .await
+            .map_err(|e| ThingsError::unknown(format!("Failed to query child tasks: {e}")))?;
+
+        let has_children = !children.is_empty();
+
+        if has_children {
+            match child_handling {
+                DeleteChildHandling::Error => {
+                    return Err(ThingsError::unknown(format!(
+                        "Task {} has {} child task(s). Use cascade or orphan mode to delete.",
+                        uuid,
+                        children.len()
+                    )));
+                }
+                DeleteChildHandling::Cascade => {
+                    // Delete all children
+                    let now = Utc::now().timestamp() as f64;
+                    for child_row in &children {
+                        let child_uuid: String = child_row.get("uuid");
+                        sqlx::query(
+                            "UPDATE TMTask SET trashed = 1, userModificationDate = ? WHERE uuid = ?",
+                        )
+                        .bind(now)
+                        .bind(&child_uuid)
+                        .execute(&self.pool)
+                        .await
+                        .map_err(|e| {
+                            ThingsError::unknown(format!("Failed to delete child task: {e}"))
+                        })?;
+                    }
+                    info!("Cascade deleted {} child task(s)", children.len());
+                }
+                DeleteChildHandling::Orphan => {
+                    // Clear parent reference for children
+                    let now = Utc::now().timestamp() as f64;
+                    for child_row in &children {
+                        let child_uuid: String = child_row.get("uuid");
+                        sqlx::query(
+                            "UPDATE TMTask SET heading = NULL, userModificationDate = ? WHERE uuid = ?",
+                        )
+                        .bind(now)
+                        .bind(&child_uuid)
+                        .execute(&self.pool)
+                        .await
+                        .map_err(|e| {
+                            ThingsError::unknown(format!("Failed to orphan child task: {e}"))
+                        })?;
+                    }
+                    info!("Orphaned {} child task(s)", children.len());
+                }
+            }
+        }
+
+        // Delete the parent task
+        let now = Utc::now().timestamp() as f64;
+        sqlx::query("UPDATE TMTask SET trashed = 1, userModificationDate = ? WHERE uuid = ?")
+            .bind(now)
+            .bind(uuid.to_string())
+            .execute(&self.pool)
+            .await
+            .map_err(|e| ThingsError::unknown(format!("Failed to delete task: {e}")))?;
+
+        info!("Deleted task with UUID: {}", uuid);
         Ok(())
     }
 }

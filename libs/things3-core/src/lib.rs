@@ -47,6 +47,8 @@ pub use export::{DataExporter, ExportConfig, ExportData, ExportFormat};
 pub use mcp_cache_middleware::{MCPCacheConfig, MCPCacheEntry, MCPCacheMiddleware, MCPCacheStats};
 pub use mcp_config::McpServerConfig;
 pub use models::*;
+// Explicitly re-export DeleteChildHandling for clarity
+pub use models::DeleteChildHandling;
 pub use observability::{
     CheckResult, HealthStatus, ObservabilityConfig, ObservabilityError, ObservabilityManager,
     ThingsMetrics,

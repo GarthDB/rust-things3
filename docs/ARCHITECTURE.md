@@ -208,6 +208,103 @@ sequenceDiagram
     Handler-->>MCP: Success response
 ```
 
+### Task Lifecycle Flow (Complete/Delete Operations)
+
+```mermaid
+sequenceDiagram
+    participant AI as AI Agent
+    participant MCP as MCP Server
+    participant Handler as Tool Handler
+    participant DB as ThingsDatabase
+    participant Validator as Validation Layer
+    participant SQLx as SQLx Pool
+    participant SQLite
+    
+    Note over AI,SQLite: Task Completion Flow
+    AI->>MCP: complete_task(uuid)
+    MCP->>Handler: handle_complete_task()
+    Handler->>DB: complete_task(uuid)
+    DB->>Validator: validate_task_exists()
+    Validator->>SQLite: SELECT 1 FROM TMTask WHERE uuid=?
+    SQLite-->>Validator: Task exists
+    Validator-->>DB: Validation OK
+    DB->>DB: Get current timestamp
+    DB->>SQLx: UPDATE TMTask SET status=1, stopDate=?, userModificationDate=?
+    SQLx->>SQLite: Execute UPDATE
+    SQLite-->>SQLx: Success
+    SQLx-->>DB: Rows affected
+    DB-->>Handler: Success
+    Handler-->>MCP: Success response
+    MCP-->>AI: Task completed
+    
+    Note over AI,SQLite: Task Deletion Flow (with Children)
+    AI->>MCP: delete_task(uuid, child_handling)
+    MCP->>Handler: handle_delete_task()
+    Handler->>DB: delete_task(uuid, DeleteChildHandling)
+    DB->>Validator: validate_task_exists()
+    Validator-->>DB: Task exists
+    DB->>SQLx: SELECT uuid FROM TMTask WHERE heading=?
+    SQLx->>SQLite: Query children
+    SQLite-->>SQLx: Child rows
+    SQLx-->>DB: Children found
+    
+    alt child_handling = Error
+        DB-->>Handler: Error: Task has children
+        Handler-->>MCP: Error response
+    else child_handling = Cascade
+        loop For each child
+            DB->>SQLx: UPDATE TMTask SET trashed=1 WHERE uuid=?
+            SQLx->>SQLite: Mark child as trashed
+        end
+        DB->>SQLx: UPDATE TMTask SET trashed=1 WHERE uuid=?
+        SQLx->>SQLite: Mark parent as trashed
+        SQLite-->>DB: Success
+        DB-->>Handler: Success
+    else child_handling = Orphan
+        loop For each child
+            DB->>SQLx: UPDATE TMTask SET heading=NULL WHERE uuid=?
+            SQLx->>SQLite: Clear parent reference
+        end
+        DB->>SQLx: UPDATE TMTask SET trashed=1 WHERE uuid=?
+        SQLx->>SQLite: Mark parent as trashed
+        SQLite-->>DB: Success
+        DB-->>Handler: Success
+    end
+    
+    Handler-->>MCP: Success/Error response
+    MCP-->>AI: Task deleted or error
+```
+
+### Task Lifecycle State Machine
+
+```mermaid
+stateDiagram-v2
+    [*] --> Incomplete: create_task
+    Incomplete --> Completed: complete_task
+    Completed --> Incomplete: uncomplete_task
+    Incomplete --> Trashed: delete_task
+    Completed --> Trashed: delete_task
+    Trashed --> [*]
+    
+    note right of Incomplete
+        - Appears in inbox/today
+        - stopDate = NULL
+        - status = 0
+    end note
+    
+    note right of Completed
+        - Excluded from inbox/today
+        - stopDate = timestamp
+        - status = 1
+    end note
+    
+    note right of Trashed
+        - Excluded from all queries
+        - trashed = 1
+        - Soft delete (data preserved)
+    end note
+```
+
 ## Module Boundaries
 
 ### things3-core
