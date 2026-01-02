@@ -590,3 +590,89 @@ async fn test_notification_no_response() {
     assert_eq!(response["jsonrpc"], "2.0");
     assert_eq!(response["id"], 13);
 }
+
+// ============================================================================
+// start_mcp_server_with_config_generic Tests
+// ============================================================================
+
+#[tokio::test]
+async fn test_start_mcp_server_with_config() {
+    use things3_cli::mcp::start_mcp_server_with_config_generic;
+    use things3_core::McpServerConfig;
+
+    let (_temp, db) = create_test_db().await;
+
+    // Create MCP config
+    let mcp_config = McpServerConfig::default();
+
+    let (server_io, mut client_io) = MockIo::create_pair(4096);
+
+    tokio::spawn(
+        async move { start_mcp_server_with_config_generic(db, mcp_config, server_io).await },
+    );
+
+    // Test that server works with config
+    let initialize_request = json!({
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "initialize",
+        "params": {}
+    });
+
+    let response = send_request_read_response(&mut client_io, initialize_request).await;
+
+    assert_eq!(response["jsonrpc"], "2.0");
+    assert_eq!(response["id"], 1);
+    assert_eq!(response["result"]["protocolVersion"], "2024-11-05");
+}
+
+#[tokio::test]
+async fn test_start_mcp_server_with_config_tools() {
+    use things3_cli::mcp::start_mcp_server_with_config_generic;
+    use things3_core::McpServerConfig;
+
+    let (_temp, db) = create_test_db().await;
+    let mcp_config = McpServerConfig::default();
+
+    let (server_io, mut client_io) = MockIo::create_pair(4096);
+
+    tokio::spawn(
+        async move { start_mcp_server_with_config_generic(db, mcp_config, server_io).await },
+    );
+
+    // Test tools/call with config
+    let tools_call_request = json!({
+        "jsonrpc": "2.0",
+        "id": 2,
+        "method": "tools/call",
+        "params": {
+            "name": "get_today",
+            "arguments": {}
+        }
+    });
+
+    let response = send_request_read_response(&mut client_io, tools_call_request).await;
+
+    assert_eq!(response["jsonrpc"], "2.0");
+    assert_eq!(response["id"], 2);
+    assert!(response["result"].is_object());
+}
+
+#[tokio::test]
+async fn test_io_error_handling() {
+    let (_temp, db) = create_test_db().await;
+    let config = ThingsConfig::default();
+
+    let (server_io, client_io) = MockIo::create_pair(4096);
+
+    let server_handle =
+        tokio::spawn(async move { start_mcp_server_generic(db, config, server_io).await });
+
+    // Drop client immediately to trigger EOF
+    drop(client_io);
+
+    // Server should exit gracefully on EOF
+    let result = timeout(Duration::from_secs(2), server_handle).await;
+    assert!(result.is_ok(), "Server should handle EOF gracefully");
+    assert!(result.unwrap().is_ok(), "Server should not error on EOF");
+}
