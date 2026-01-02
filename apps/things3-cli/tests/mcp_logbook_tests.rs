@@ -121,7 +121,6 @@ async fn test_logbook_search_with_date_range() {
     create_and_complete_task(&harness, "Task 1", None, None, None).await;
     create_and_complete_task(&harness, "Task 2", None, None, None).await;
 
-    let today = Utc::now().date_naive().format("%Y-%m-%d").to_string();
     let yesterday = (Utc::now() - chrono::Duration::days(1))
         .date_naive()
         .format("%Y-%m-%d")
@@ -173,7 +172,7 @@ async fn test_logbook_search_from_date_only() {
 
     assert!(response.is_array());
     let tasks = response.as_array().unwrap();
-    assert!(tasks.len() >= 1, "Should find at least 1 task from today");
+    assert!(!tasks.is_empty(), "Should find at least 1 task from today");
 }
 
 #[tokio::test]
@@ -202,7 +201,7 @@ async fn test_logbook_search_to_date_only() {
     assert!(response.is_array());
     let tasks = response.as_array().unwrap();
     assert!(
-        tasks.len() >= 1,
+        !tasks.is_empty(),
         "Should find at least 1 task up to tomorrow"
     );
 }
