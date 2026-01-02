@@ -59,7 +59,9 @@ pub async fn create_test_database<P: AsRef<Path>>(db_path: P) -> crate::Result<(
             uuid TEXT PRIMARY KEY,
             title TEXT NOT NULL,
             visible INTEGER NOT NULL DEFAULT 1,
-            'index' INTEGER NOT NULL DEFAULT 0
+            'index' INTEGER NOT NULL DEFAULT 0,
+            creationDate REAL NOT NULL,
+            userModificationDate REAL NOT NULL
         )
         ",
     )
@@ -90,11 +92,14 @@ async fn insert_test_data(pool: &sqlx::SqlitePool) -> crate::Result<()> {
     let task_uuid = Uuid::new_v4().to_string();
 
     // Insert test areas
-    sqlx::query("INSERT INTO TMArea (uuid, title, visible, 'index') VALUES (?, ?, ?, ?)")
+    let now = chrono::Utc::now().timestamp() as f64;
+    sqlx::query("INSERT INTO TMArea (uuid, title, visible, 'index', creationDate, userModificationDate) VALUES (?, ?, ?, ?, ?, ?)")
         .bind(&area_uuid)
         .bind("Work")
         .bind(1) // Visible
         .bind(0) // Index
+        .bind(now) // creationDate
+        .bind(now) // userModificationDate
         .execute(pool)
         .await
         .map_err(|e| crate::ThingsError::Database(format!("Failed to insert test area: {e}")))?;
@@ -526,7 +531,9 @@ mod tests {
                 uuid TEXT PRIMARY KEY,
                 title TEXT NOT NULL,
                 visible INTEGER NOT NULL DEFAULT 1,
-                'index' INTEGER NOT NULL DEFAULT 0
+                'index' INTEGER NOT NULL DEFAULT 0,
+                creationDate REAL NOT NULL,
+                userModificationDate REAL NOT NULL
             )
             ",
         )

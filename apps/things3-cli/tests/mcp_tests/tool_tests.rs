@@ -10,4 +10,3 @@ use super::common::*;
 
 // TODO: Migrate remaining tool tests from mcp_tests_backup.rs
 // This module will contain approximately 40 tests covering all tool operations
-

@@ -9,4 +9,3 @@ use super::common::*;
 
 // TODO: Migrate prompt tests from mcp_tests_backup.rs
 // This module will contain approximately 15 tests covering all prompt operations
-
