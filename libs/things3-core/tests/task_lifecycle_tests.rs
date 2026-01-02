@@ -68,6 +68,7 @@ async fn test_complete_task_sets_stop_date() {
     // Complete the task
     let before_complete = Utc::now();
     db.complete_task(&task_uuid).await.unwrap();
+    let after_complete = Utc::now();
 
     // Verify the task is completed and stopDate is set
     let task = db.get_task_by_uuid(&task_uuid).await.unwrap().unwrap();
@@ -75,9 +76,11 @@ async fn test_complete_task_sets_stop_date() {
     assert!(task.stop_date.is_some(), "stopDate should be set");
 
     let stop_date = task.stop_date.unwrap();
+    // stopDate should be within the time window of the operation (allow for precision/timing)
     assert!(
-        stop_date >= before_complete,
-        "stopDate should be after or equal to completion time"
+        stop_date >= before_complete - chrono::Duration::seconds(1)
+            && stop_date <= after_complete + chrono::Duration::seconds(1),
+        "stopDate should be around completion time"
     );
 }
 
@@ -141,8 +144,8 @@ async fn test_complete_task_updates_modification_date() {
     let task_before = db.get_task_by_uuid(&task_uuid).await.unwrap().unwrap();
     let modified_before = task_before.modified;
 
-    // Small delay to ensure timestamp difference
-    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+    // Delay to ensure timestamp difference (1 second for reliable comparison)
+    tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
 
     // Complete the task
     db.complete_task(&task_uuid).await.unwrap();
@@ -399,8 +402,8 @@ async fn test_uncomplete_updates_modification_date() {
     let task_before = db.get_task_by_uuid(&task_uuid).await.unwrap().unwrap();
     let modified_before = task_before.modified;
 
-    // Small delay
-    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+    // Delay to ensure timestamp difference (1 second for reliable comparison)
+    tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
 
     // Uncomplete the task
     db.uncomplete_task(&task_uuid).await.unwrap();
