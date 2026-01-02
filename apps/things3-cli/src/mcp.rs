@@ -4,8 +4,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::sync::Arc;
 use things3_core::{
-    BackupManager, DataExporter, McpServerConfig, PerformanceMonitor, ThingsCache, ThingsConfig,
-    ThingsDatabase, ThingsError,
+    BackupManager, DataExporter, DeleteChildHandling, McpServerConfig, PerformanceMonitor,
+    ThingsCache, ThingsConfig, ThingsDatabase, ThingsError,
 };
 use thiserror::Error;
 use tokio::sync::Mutex;
@@ -1112,6 +1112,57 @@ impl ThingsMcpServer {
                 }),
             },
             Tool {
+                name: "complete_task".to_string(),
+                description: "Mark a task as completed".to_string(),
+                input_schema: serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "uuid": {
+                            "type": "string",
+                            "format": "uuid",
+                            "description": "UUID of the task to complete"
+                        }
+                    },
+                    "required": ["uuid"]
+                }),
+            },
+            Tool {
+                name: "uncomplete_task".to_string(),
+                description: "Mark a completed task as incomplete".to_string(),
+                input_schema: serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "uuid": {
+                            "type": "string",
+                            "format": "uuid",
+                            "description": "UUID of the task to mark incomplete"
+                        }
+                    },
+                    "required": ["uuid"]
+                }),
+            },
+            Tool {
+                name: "delete_task".to_string(),
+                description: "Soft delete a task (set trashed=1)".to_string(),
+                input_schema: serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "uuid": {
+                            "type": "string",
+                            "format": "uuid",
+                            "description": "UUID of the task to delete"
+                        },
+                        "child_handling": {
+                            "type": "string",
+                            "enum": ["error", "cascade", "orphan"],
+                            "default": "error",
+                            "description": "How to handle child tasks: error (fail if children exist), cascade (delete children too), orphan (delete parent only)"
+                        }
+                    },
+                    "required": ["uuid"]
+                }),
+            },
+            Tool {
                 name: "bulk_create_tasks".to_string(),
                 description: "Create multiple tasks at once".to_string(),
                 input_schema: serde_json::json!({
@@ -1269,6 +1320,9 @@ impl ThingsMcpServer {
             "search_tasks" => self.handle_search_tasks(arguments).await,
             "create_task" => self.handle_create_task(arguments).await,
             "update_task" => self.handle_update_task(arguments).await,
+            "complete_task" => self.handle_complete_task(arguments).await,
+            "uncomplete_task" => self.handle_uncomplete_task(arguments).await,
+            "delete_task" => self.handle_delete_task(arguments).await,
             "get_productivity_metrics" => self.handle_get_productivity_metrics(arguments).await,
             "export_data" => self.handle_export_data(arguments).await,
             "bulk_create_tasks" => Self::handle_bulk_create_tasks(&arguments),
@@ -1451,6 +1505,101 @@ impl ThingsMcpServer {
             content: vec![Content::Text {
                 text: serde_json::to_string_pretty(&response)
                     .map_err(|e| McpError::serialization_failed("update_task response", e))?,
+            }],
+            is_error: false,
+        })
+    }
+
+    async fn handle_complete_task(&self, args: Value) -> McpResult<CallToolResult> {
+        let uuid_str = args
+            .get("uuid")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| McpError::invalid_parameter("uuid", "UUID is required"))?;
+
+        let uuid = uuid::Uuid::parse_str(uuid_str)
+            .map_err(|e| McpError::invalid_parameter("uuid", format!("Invalid UUID: {e}")))?;
+
+        self.db
+            .complete_task(&uuid)
+            .await
+            .map_err(|e| McpError::database_operation_failed("complete_task", e))?;
+
+        let response = serde_json::json!({
+            "message": "Task completed successfully",
+            "uuid": uuid_str
+        });
+
+        Ok(CallToolResult {
+            content: vec![Content::Text {
+                text: serde_json::to_string_pretty(&response)
+                    .map_err(|e| McpError::serialization_failed("complete_task response", e))?,
+            }],
+            is_error: false,
+        })
+    }
+
+    async fn handle_uncomplete_task(&self, args: Value) -> McpResult<CallToolResult> {
+        let uuid_str = args
+            .get("uuid")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| McpError::invalid_parameter("uuid", "UUID is required"))?;
+
+        let uuid = uuid::Uuid::parse_str(uuid_str)
+            .map_err(|e| McpError::invalid_parameter("uuid", format!("Invalid UUID: {e}")))?;
+
+        self.db
+            .uncomplete_task(&uuid)
+            .await
+            .map_err(|e| McpError::database_operation_failed("uncomplete_task", e))?;
+
+        let response = serde_json::json!({
+            "message": "Task marked as incomplete successfully",
+            "uuid": uuid_str
+        });
+
+        Ok(CallToolResult {
+            content: vec![Content::Text {
+                text: serde_json::to_string_pretty(&response)
+                    .map_err(|e| McpError::serialization_failed("uncomplete_task response", e))?,
+            }],
+            is_error: false,
+        })
+    }
+
+    async fn handle_delete_task(&self, args: Value) -> McpResult<CallToolResult> {
+        let uuid_str = args
+            .get("uuid")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| McpError::invalid_parameter("uuid", "UUID is required"))?;
+
+        let uuid = uuid::Uuid::parse_str(uuid_str)
+            .map_err(|e| McpError::invalid_parameter("uuid", format!("Invalid UUID: {e}")))?;
+
+        let child_handling_str = args
+            .get("child_handling")
+            .and_then(|v| v.as_str())
+            .unwrap_or("error");
+
+        let child_handling = match child_handling_str {
+            "cascade" => DeleteChildHandling::Cascade,
+            "orphan" => DeleteChildHandling::Orphan,
+            _ => DeleteChildHandling::Error,
+        };
+
+        self.db
+            .delete_task(&uuid, child_handling)
+            .await
+            .map_err(|e| McpError::database_operation_failed("delete_task", e))?;
+
+        let response = serde_json::json!({
+            "message": "Task deleted successfully",
+            "uuid": uuid_str
+        });
+
+        Ok(CallToolResult {
+            content: vec![Content::Text {
+                text: serde_json::to_string_pretty(&response)
+                    .map_err(|e| McpError::serialization_failed("delete_task response", e))?,
             }],
             is_error: false,
         })

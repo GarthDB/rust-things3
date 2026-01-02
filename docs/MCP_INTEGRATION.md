@@ -293,6 +293,139 @@ Update an existing task. Only provided fields will be updated (partial updates s
 }
 ```
 
+#### `complete_task`
+Mark a task as completed. Sets the task status to completed and records the completion timestamp.
+
+**Parameters**:
+- `uuid` (string, required): UUID of the task to complete
+
+**Example**:
+```json
+{
+  "name": "complete_task",
+  "arguments": {
+    "uuid": "550e8400-e29b-41d4-a716-446655440000"
+  }
+}
+```
+
+**Response**:
+```json
+{
+  "message": "Task completed successfully",
+  "uuid": "550e8400-e29b-41d4-a716-446655440000"
+}
+```
+
+**Notes**:
+- Sets `status` to `completed`
+- Records `stopDate` timestamp
+- Updates `userModificationDate`
+- Can be applied multiple times (idempotent)
+- Completed tasks are excluded from inbox and today views
+
+#### `uncomplete_task`
+Mark a completed task as incomplete. Clears the completion timestamp and restores the task to incomplete status.
+
+**Parameters**:
+- `uuid` (string, required): UUID of the task to mark incomplete
+
+**Example**:
+```json
+{
+  "name": "uncomplete_task",
+  "arguments": {
+    "uuid": "550e8400-e29b-41d4-a716-446655440000"
+  }
+}
+```
+
+**Response**:
+```json
+{
+  "message": "Task marked as incomplete successfully",
+  "uuid": "550e8400-e29b-41d4-a716-446655440000"
+}
+```
+
+**Notes**:
+- Sets `status` to `incomplete`
+- Clears `stopDate` (sets to NULL)
+- Updates `userModificationDate`
+- Task will reappear in inbox/today views if applicable
+
+#### `delete_task`
+Soft delete a task by setting its trashed flag. Supports configurable handling of child tasks.
+
+**Parameters**:
+- `uuid` (string, required): UUID of the task to delete
+- `child_handling` (string, optional): How to handle child tasks - "error" (default), "cascade", or "orphan"
+  - `error`: Fail if the task has children (safe default)
+  - `cascade`: Delete the task and all its children recursively
+  - `orphan`: Delete only the parent, leave children with cleared parent reference
+
+**Example (Basic)**:
+```json
+{
+  "name": "delete_task",
+  "arguments": {
+    "uuid": "550e8400-e29b-41d4-a716-446655440000"
+  }
+}
+```
+
+**Example (Cascade Delete)**:
+```json
+{
+  "name": "delete_task",
+  "arguments": {
+    "uuid": "550e8400-e29b-41d4-a716-446655440000",
+    "child_handling": "cascade"
+  }
+}
+```
+
+**Example (Orphan Children)**:
+```json
+{
+  "name": "delete_task",
+  "arguments": {
+    "uuid": "550e8400-e29b-41d4-a716-446655440000",
+    "child_handling": "orphan"
+  }
+}
+```
+
+**Response**:
+```json
+{
+  "message": "Task deleted successfully",
+  "uuid": "550e8400-e29b-41d4-a716-446655440000"
+}
+```
+
+**Error Response (when task has children and child_handling is "error")**:
+```json
+{
+  "error": "Task 550e8400-e29b-41d4-a716-446655440000 has 3 child task(s). Use cascade or orphan mode to delete."
+}
+```
+
+**Notes**:
+- Performs soft delete by setting `trashed = 1`
+- Updates `userModificationDate`
+- Deleted tasks are excluded from all queries (inbox, today, search, etc.)
+- `error` mode is the safest default to prevent accidental data loss
+- `cascade` mode recursively deletes all direct children (subtasks)
+- `orphan` mode clears the `heading` (parent) reference for children
+
+**Task Lifecycle**:
+```
+Create → [Update*] → [Complete] → [Uncomplete*] → [Delete]
+                         ↓
+                    [Deleted]
+```
+
 #### `bulk_create_tasks`
 Create multiple tasks at once.
 

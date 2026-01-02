@@ -30,6 +30,20 @@ pub enum TaskType {
     Area,
 }
 
+/// How to handle child tasks when deleting a parent
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum DeleteChildHandling {
+    /// Return error if task has children (default)
+    #[serde(rename = "error")]
+    Error,
+    /// Delete parent and all children
+    #[serde(rename = "cascade")]
+    Cascade,
+    /// Delete parent only, orphan children
+    #[serde(rename = "orphan")]
+    Orphan,
+}
+
 /// Main task entity
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Task {
@@ -51,6 +65,8 @@ pub struct Task {
     pub created: DateTime<Utc>,
     /// Last modification timestamp
     pub modified: DateTime<Utc>,
+    /// Completion timestamp (when status changed to completed)
+    pub stop_date: Option<DateTime<Utc>>,
     /// Parent project UUID
     pub project_uuid: Option<Uuid>,
     /// Parent area UUID
@@ -287,6 +303,7 @@ mod tests {
             deadline: Some(deadline),
             created: now,
             modified: now,
+            stop_date: None,
             project_uuid: None,
             area_uuid: None,
             parent_uuid: None,
@@ -321,6 +338,7 @@ mod tests {
             deadline: None,
             created: now,
             modified: now,
+            stop_date: None,
             project_uuid: None,
             area_uuid: None,
             parent_uuid: None,
@@ -665,6 +683,7 @@ mod tests {
             deadline: None,
             created: now,
             modified: now,
+            stop_date: None,
             project_uuid: None,
             area_uuid: None,
             parent_uuid: Some(parent_uuid),
@@ -682,6 +701,7 @@ mod tests {
             deadline: None,
             created: now,
             modified: now,
+            stop_date: None,
             project_uuid: None,
             area_uuid: None,
             parent_uuid: None,
@@ -710,6 +730,7 @@ mod tests {
             deadline: None,
             created: now,
             modified: now,
+            stop_date: None,
             project_uuid: Some(project_uuid),
             area_uuid: None,
             parent_uuid: None,

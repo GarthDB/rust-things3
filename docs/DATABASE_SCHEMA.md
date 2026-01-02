@@ -339,6 +339,122 @@ Task updates support partial modifications - only provided fields are updated.
 - Referenced areas must exist in `TMArea` table
 - Referenced parent tasks must exist in `TMTask` table
 
+### Task Lifecycle Operations
+
+#### Task Completion
+
+Marking a task as completed involves three key updates:
+
+**SQL Pattern**:
+```sql
+UPDATE TMTask 
+SET status = 1,                    -- 1 = completed
+    stopDate = ?,                  -- Current timestamp (seconds since Unix epoch)
+    userModificationDate = ?       -- Current timestamp
+WHERE uuid = ?
+```
+
+**Fields Modified**:
+- `status` - Set to `1` (completed)
+- `stopDate` - Set to current timestamp as REAL (seconds since Unix epoch, not Things epoch)
+- `userModificationDate` - Updated to current timestamp
+
+**Notes**:
+- `stopDate` uses Unix epoch (seconds since 1970-01-01), not Things epoch (2001-01-01)
+- Completed tasks remain in database but are filtered from inbox/today queries
+- Operation is idempotent - can be applied multiple times safely
+
+#### Task Uncompletion
+
+Reverting a completed task to incomplete state:
+
+**SQL Pattern**:
+```sql
+UPDATE TMTask 
+SET status = 0,                    -- 0 = incomplete
+    stopDate = NULL,               -- Clear completion timestamp
+    userModificationDate = ?       -- Current timestamp
+WHERE uuid = ?
+```
+
+**Fields Modified**:
+- `status` - Set to `0` (incomplete)
+- `stopDate` - Set to NULL (cleared)
+- `userModificationDate` - Updated to current timestamp
+
+**Notes**:
+- Task will reappear in inbox/today views if criteria are met
+- All other task properties (notes, dates, etc.) remain unchanged
+
+#### Task Deletion (Soft Delete)
+
+Soft deletion marks tasks as trashed without removing them from the database:
+
+**SQL Pattern (Simple)**:
+```sql
+UPDATE TMTask 
+SET trashed = 1,                   -- Mark as trashed
+    userModificationDate = ?       -- Current timestamp
+WHERE uuid = ?
+```
+
+**Child Task Handling**:
+
+Tasks can have child tasks (subtasks) via the `heading` field. Three handling modes are supported:
+
+**1. Error Mode (Default)**:
+- Check for children before deletion
+- Return error if children exist
+- Prevents accidental data loss
+
+```sql
+-- Check for children
+SELECT uuid FROM TMTask 
+WHERE heading = ? AND trashed = 0
+```
+
+**2. Cascade Mode**:
+- Delete parent and all direct children
+- Each child is marked `trashed = 1`
+- Recursive for nested hierarchies (grandchildren, etc.)
+
+```sql
+-- Delete each child
+UPDATE TMTask 
+SET trashed = 1, userModificationDate = ? 
+WHERE uuid = ? AND trashed = 0
+```
+
+**3. Orphan Mode**:
+- Delete only the parent
+- Clear parent reference (`heading`) for children
+- Children become independent tasks
+
+```sql
+-- Orphan children
+UPDATE TMTask 
+SET heading = NULL, userModificationDate = ? 
+WHERE heading = ?
+```
+
+**Fields Modified**:
+- `trashed` - Set to `1` (marked as deleted)
+- `userModificationDate` - Updated to current timestamp
+- `heading` - Cleared for orphaned children (orphan mode only)
+
+**Query Impact**:
+Deleted tasks (where `trashed = 1`) are excluded from all standard queries:
+- Inbox: `WHERE trashed = 0`
+- Today: `WHERE trashed = 0`
+- Search: `WHERE trashed = 0`
+- Projects: `WHERE trashed = 0`
+
+**Notes**:
+- Soft delete preserves data for potential recovery
+- Hard delete is not supported (would break Things 3 sync)
+- Deleted tasks may still appear in Things 3 "Trash" view
+- `stopDate` is preserved if task was previously completed
+
 ### Date Format for Write Operations
 
 Dates are stored as INTEGER timestamps representing **seconds since 2001-01-01 00:00:00 UTC**.
