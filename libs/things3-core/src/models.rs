@@ -480,31 +480,37 @@ mod tests {
 
         let request = CreateTaskRequest {
             title: "New Task".to_string(),
+            task_type: None,
             notes: Some("Task notes".to_string()),
             start_date: Some(start_date),
             deadline: None,
             project_uuid: Some(project_uuid),
             area_uuid: Some(area_uuid),
-            tags: vec!["new".to_string()],
+            parent_uuid: None,
+            tags: Some(vec!["new".to_string()]),
+            status: None,
         };
 
         assert_eq!(request.title, "New Task");
         assert_eq!(request.project_uuid, Some(project_uuid));
         assert_eq!(request.area_uuid, Some(area_uuid));
         assert_eq!(request.start_date, Some(start_date));
-        assert_eq!(request.tags.len(), 1);
+        assert_eq!(request.tags.as_ref().unwrap().len(), 1);
     }
 
     #[test]
     fn test_create_task_request_serialization() {
         let request = CreateTaskRequest {
             title: "Test".to_string(),
+            task_type: None,
             notes: None,
             start_date: None,
             deadline: None,
             project_uuid: None,
             area_uuid: None,
-            tags: vec![],
+            parent_uuid: None,
+            tags: None,
+            status: None,
         };
 
         let serialized = serde_json::to_string(&request).unwrap();
@@ -524,6 +530,8 @@ mod tests {
             start_date: None,
             deadline: None,
             status: Some(TaskStatus::Completed),
+            project_uuid: None,
+            area_uuid: None,
             tags: Some(vec!["updated".to_string()]),
         };
 
@@ -544,6 +552,8 @@ mod tests {
             start_date: None,
             deadline: None,
             status: None,
+            project_uuid: None,
+            area_uuid: None,
             tags: None,
         };
 
