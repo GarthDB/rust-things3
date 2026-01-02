@@ -842,6 +842,135 @@ impl ThingsDatabase {
         Ok(tasks)
     }
 
+    /// Search completed tasks in the logbook
+    ///
+    /// Returns completed tasks matching the provided filters.
+    /// All filters are optional and can be combined.
+    ///
+    /// # Parameters
+    ///
+    /// - `search_text`: Search in task titles and notes (case-insensitive)
+    /// - `from_date`: Start date for completion date range
+    /// - `to_date`: End date for completion date range
+    /// - `project_uuid`: Filter by project UUID
+    /// - `area_uuid`: Filter by area UUID
+    /// - `tags`: Filter by tags (all tags must match)
+    /// - `limit`: Maximum number of results (default: 50)
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database query fails or if task data is invalid
+    #[allow(clippy::too_many_arguments)]
+    #[instrument(skip(self))]
+    pub async fn search_logbook(
+        &self,
+        search_text: Option<String>,
+        from_date: Option<NaiveDate>,
+        to_date: Option<NaiveDate>,
+        project_uuid: Option<Uuid>,
+        area_uuid: Option<Uuid>,
+        tags: Option<Vec<String>>,
+        limit: Option<u32>,
+    ) -> ThingsResult<Vec<Task>> {
+        // Apply limit
+        let result_limit = limit.unwrap_or(50).min(500);
+
+        // Build and execute query based on filters
+        let rows = if let Some(ref text) = search_text {
+            let pattern = format!("%{text}%");
+            let mut q = String::from(
+                "SELECT uuid, title, status, type, startDate, deadline, stopDate, project, area, heading, notes, cachedTags, creationDate, userModificationDate FROM TMTask WHERE status = 1 AND trashed = 0 AND type = 0",
+            );
+            q.push_str(" AND (title LIKE ? OR notes LIKE ?)");
+
+            if let Some(date) = from_date {
+                // stopDate is stored as Unix timestamp (seconds since 1970-01-01)
+                let date_time = date.and_hms_opt(0, 0, 0).unwrap().and_utc();
+                let timestamp = date_time.timestamp() as f64;
+                q.push_str(&format!(" AND stopDate >= {}", timestamp));
+            }
+
+            if let Some(date) = to_date {
+                // Include tasks completed on to_date by adding 1 day
+                let end_date = date + chrono::Duration::days(1);
+                let date_time = end_date.and_hms_opt(0, 0, 0).unwrap().and_utc();
+                let timestamp = date_time.timestamp() as f64;
+                q.push_str(&format!(" AND stopDate < {}", timestamp));
+            }
+
+            if let Some(uuid) = project_uuid {
+                q.push_str(&format!(" AND project = '{}'", uuid));
+            }
+
+            if let Some(uuid) = area_uuid {
+                q.push_str(&format!(" AND area = '{}'", uuid));
+            }
+
+            q.push_str(&format!(" ORDER BY stopDate DESC LIMIT {result_limit}"));
+
+            sqlx::query(&q)
+                .bind(&pattern)
+                .bind(&pattern)
+                .fetch_all(&self.pool)
+                .await
+                .map_err(|e| ThingsError::unknown(format!("Failed to search logbook: {e}")))?
+        } else {
+            let mut q = String::from(
+                "SELECT uuid, title, status, type, startDate, deadline, stopDate, project, area, heading, notes, cachedTags, creationDate, userModificationDate FROM TMTask WHERE status = 1 AND trashed = 0 AND type = 0",
+            );
+
+            if let Some(date) = from_date {
+                // stopDate is stored as Unix timestamp (seconds since 1970-01-01)
+                let date_time = date.and_hms_opt(0, 0, 0).unwrap().and_utc();
+                let timestamp = date_time.timestamp() as f64;
+                q.push_str(&format!(" AND stopDate >= {}", timestamp));
+            }
+
+            if let Some(date) = to_date {
+                // Include tasks completed on to_date by adding 1 day
+                let end_date = date + chrono::Duration::days(1);
+                let date_time = end_date.and_hms_opt(0, 0, 0).unwrap().and_utc();
+                let timestamp = date_time.timestamp() as f64;
+                q.push_str(&format!(" AND stopDate < {}", timestamp));
+            }
+
+            if let Some(uuid) = project_uuid {
+                q.push_str(&format!(" AND project = '{}'", uuid));
+            }
+
+            if let Some(uuid) = area_uuid {
+                q.push_str(&format!(" AND area = '{}'", uuid));
+            }
+
+            q.push_str(&format!(" ORDER BY stopDate DESC LIMIT {result_limit}"));
+
+            sqlx::query(&q)
+                .fetch_all(&self.pool)
+                .await
+                .map_err(|e| ThingsError::unknown(format!("Failed to search logbook: {e}")))?
+        };
+
+        // Filter by tags if provided
+        let mut tasks = rows
+            .iter()
+            .map(map_task_row)
+            .collect::<ThingsResult<Vec<Task>>>()?;
+
+        if let Some(ref filter_tags) = tags {
+            if !filter_tags.is_empty() {
+                tasks.retain(|task| {
+                    // Check if task has all required tags
+                    filter_tags
+                        .iter()
+                        .all(|filter_tag| task.tags.contains(filter_tag))
+                });
+            }
+        }
+
+        debug!("Found {} completed tasks in logbook", tasks.len());
+        Ok(tasks)
+    }
+
     /// Get inbox tasks (incomplete tasks without project)
     ///
     /// # Errors

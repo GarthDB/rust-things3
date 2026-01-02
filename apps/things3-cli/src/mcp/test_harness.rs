@@ -371,7 +371,9 @@ impl McpTestHarness {
                 uuid TEXT PRIMARY KEY,
                 title TEXT NOT NULL,
                 visible INTEGER NOT NULL DEFAULT 1,
-                'index' INTEGER NOT NULL DEFAULT 0
+                'index' INTEGER NOT NULL DEFAULT 0,
+                creationDate REAL NOT NULL,
+                userModificationDate REAL NOT NULL
             )
             ",
         )
@@ -390,20 +392,26 @@ impl McpTestHarness {
         };
 
         // Insert test areas
-        sqlx::query("INSERT INTO TMArea (uuid, title, visible, 'index') VALUES (?, ?, ?, ?)")
+        let now = chrono::Utc::now().timestamp() as f64;
+
+        sqlx::query("INSERT INTO TMArea (uuid, title, visible, 'index', creationDate, userModificationDate) VALUES (?, ?, ?, ?, ?, ?)")
             .bind("550e8400-e29b-41d4-a716-446655440001")
             .bind("Work")
             .bind(1) // visible
             .bind(0) // index
+            .bind(now)
+            .bind(now)
             .execute(&pool)
             .await
             .unwrap();
 
-        sqlx::query("INSERT INTO TMArea (uuid, title, visible, 'index') VALUES (?, ?, ?, ?)")
+        sqlx::query("INSERT INTO TMArea (uuid, title, visible, 'index', creationDate, userModificationDate) VALUES (?, ?, ?, ?, ?, ?)")
             .bind("550e8400-e29b-41d4-a716-446655440002")
             .bind("Personal")
             .bind(1) // visible
             .bind(1) // index
+            .bind(now)
+            .bind(now)
             .execute(&pool)
             .await
             .unwrap();
