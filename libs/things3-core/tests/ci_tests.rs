@@ -49,21 +49,52 @@ async fn test_fallback_to_mock_data() {
         test_database_operations(&db);
     } else {
         // Real database not available, use mock data
-        println!("Real database not available, using mock data for testing");
-        let temp_file = NamedTempFile::new().unwrap();
-        let _db_path = temp_file.path();
+        println!("Real database not available, testing fallback behavior");
 
         #[cfg(feature = "test-utils")]
         {
-            test_utils::create_test_database(_db_path).await.unwrap();
-            let db = ThingsDatabase::new(_db_path).await.unwrap();
+            // With test-utils: test fallback to mock data
+            println!("Testing fallback to mock data (test-utils enabled)");
+            let temp_file = NamedTempFile::new().unwrap();
+            let db_path = temp_file.path();
+
+            test_utils::create_test_database(db_path).await.unwrap();
+            let db = ThingsDatabase::new(db_path).await.unwrap();
             test_database_operations(&db);
+
+            println!("✅ Fallback to mock data successful");
         }
 
         #[cfg(not(feature = "test-utils"))]
         {
-            println!("⚠️  test-utils feature not enabled, skipping mock data test");
-            // Test passes - this is expected behavior in non-dev environments
+            // Without test-utils: verify we can handle databases gracefully
+            println!("Testing database handling without test-utils");
+
+            // Test with a path that exists but is not a valid Things database
+            let temp_file = NamedTempFile::new().unwrap();
+            let empty_db_path = temp_file.path();
+
+            // ThingsDatabase::new() may succeed (SQLite can open empty files)
+            // but queries should fail gracefully on an invalid database
+            let result = ThingsDatabase::new(empty_db_path).await;
+
+            match result {
+                Ok(db) => {
+                    // Connection succeeded to empty file - test that queries fail gracefully
+                    println!("Connected to empty database file, testing query behavior");
+                    let inbox_result = db.get_inbox(Some(10)).await;
+                    // Queries should fail gracefully on invalid schema
+                    assert!(
+                        inbox_result.is_err(),
+                        "Queries should fail gracefully on invalid database"
+                    );
+                    println!("✅ Queries fail gracefully on invalid database");
+                }
+                Err(_) => {
+                    // Connection failed - this is also acceptable behavior
+                    println!("✅ Connection fails gracefully on invalid database");
+                }
+            }
         }
     }
 }
