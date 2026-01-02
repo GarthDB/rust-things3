@@ -772,6 +772,134 @@ async fn test_update_nonexistent_task() {
     );
 }
 
+#[tokio::test]
+#[cfg(feature = "test-utils")]
+async fn test_update_task_with_no_fields() {
+    let temp_file = NamedTempFile::new().unwrap();
+    let db_path = temp_file.path();
+    create_test_database(db_path).await.unwrap();
+    let db = ThingsDatabase::new(db_path).await.unwrap();
+
+    // Create a task first
+    let create_request = CreateTaskRequest {
+        title: "Task to Update".to_string(),
+        task_type: None,
+        notes: None,
+        start_date: None,
+        deadline: None,
+        project_uuid: None,
+        area_uuid: None,
+        parent_uuid: None,
+        tags: None,
+        status: None,
+    };
+    let task_uuid = db.create_task(create_request).await.unwrap();
+
+    // Try to update with no fields (all None)
+    let update_request = UpdateTaskRequest {
+        uuid: task_uuid,
+        title: None,
+        notes: None,
+        start_date: None,
+        deadline: None,
+        status: None,
+        project_uuid: None,
+        area_uuid: None,
+        tags: None,
+    };
+
+    let result = db.update_task(update_request).await;
+    assert!(result.is_ok(), "Should succeed with no fields to update");
+}
+
+#[tokio::test]
+#[cfg(feature = "test-utils")]
+async fn test_update_task_with_invalid_project_uuid() {
+    let temp_file = NamedTempFile::new().unwrap();
+    let db_path = temp_file.path();
+    create_test_database(db_path).await.unwrap();
+    let db = ThingsDatabase::new(db_path).await.unwrap();
+
+    // Create a task first
+    let create_request = CreateTaskRequest {
+        title: "Task to Update".to_string(),
+        task_type: None,
+        notes: None,
+        start_date: None,
+        deadline: None,
+        project_uuid: None,
+        area_uuid: None,
+        parent_uuid: None,
+        tags: None,
+        status: None,
+    };
+    let task_uuid = db.create_task(create_request).await.unwrap();
+
+    // Try to update with an invalid project UUID
+    let invalid_project_uuid = Uuid::new_v4();
+    let update_request = UpdateTaskRequest {
+        uuid: task_uuid,
+        title: None,
+        notes: None,
+        start_date: None,
+        deadline: None,
+        status: None,
+        project_uuid: Some(invalid_project_uuid),
+        area_uuid: None,
+        tags: None,
+    };
+
+    let result = db.update_task(update_request).await;
+    assert!(
+        result.is_err(),
+        "Should fail when updating with invalid project UUID"
+    );
+}
+
+#[tokio::test]
+#[cfg(feature = "test-utils")]
+async fn test_update_task_with_invalid_area_uuid() {
+    let temp_file = NamedTempFile::new().unwrap();
+    let db_path = temp_file.path();
+    create_test_database(db_path).await.unwrap();
+    let db = ThingsDatabase::new(db_path).await.unwrap();
+
+    // Create a task first
+    let create_request = CreateTaskRequest {
+        title: "Task to Update".to_string(),
+        task_type: None,
+        notes: None,
+        start_date: None,
+        deadline: None,
+        project_uuid: None,
+        area_uuid: None,
+        parent_uuid: None,
+        tags: None,
+        status: None,
+    };
+    let task_uuid = db.create_task(create_request).await.unwrap();
+
+    // Try to update with an invalid area UUID
+    let invalid_area_uuid = Uuid::new_v4();
+    let update_request = UpdateTaskRequest {
+        uuid: task_uuid,
+        title: None,
+        notes: None,
+        start_date: None,
+        deadline: None,
+        status: None,
+        project_uuid: None,
+        area_uuid: Some(invalid_area_uuid),
+        tags: None,
+    };
+
+    let result = db.update_task(update_request).await;
+    assert!(
+        result.is_err(),
+        "Should fail when updating with invalid area UUID"
+    );
+}
+
 // ============================================================================
 // Edge Cases (7 tests)
 // ============================================================================
