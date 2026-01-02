@@ -1,4 +1,5 @@
 use crate::{
+    database::mappers::map_task_row,
     error::{Result as ThingsResult, ThingsError},
     models::{
         Area, CreateTaskRequest, DeleteChildHandling, Project, Task, TaskStatus, TaskType,
@@ -813,7 +814,7 @@ impl ThingsDatabase {
             SELECT 
                 uuid, title, status, type, 
                 startDate, deadline, stopDate,
-                project, area,
+                project, area, heading,
                 notes, cachedTags, 
                 creationDate, userModificationDate
             FROM TMTask
@@ -827,51 +828,10 @@ impl ThingsDatabase {
         .await
         .map_err(|e| ThingsError::unknown(format!("Failed to search tasks: {e}")))?;
 
-        let mut tasks = Vec::new();
-        for row in rows {
-            let task = Task {
-                uuid: things_uuid_to_uuid(&row.get::<String, _>("uuid")),
-                title: row.get("title"),
-                status: TaskStatus::from_i32(row.get("status")).unwrap_or(TaskStatus::Incomplete),
-                task_type: TaskType::from_i32(row.get("type")).unwrap_or(TaskType::Todo),
-                start_date: row
-                    .get::<Option<i64>, _>("startDate")
-                    .and_then(|ts| DateTime::from_timestamp(ts, 0))
-                    .map(|dt| dt.date_naive()),
-                deadline: row
-                    .get::<Option<i64>, _>("deadline")
-                    .and_then(|ts| DateTime::from_timestamp(ts, 0))
-                    .map(|dt| dt.date_naive()),
-                project_uuid: row
-                    .get::<Option<String>, _>("project")
-                    .map(|s| things_uuid_to_uuid(&s)),
-                area_uuid: row
-                    .get::<Option<String>, _>("area")
-                    .map(|s| things_uuid_to_uuid(&s)),
-                parent_uuid: None, // No parent column in real schema
-                notes: row.get("notes"),
-                tags: row
-                    .get::<Option<Vec<u8>>, _>("cachedTags")
-                    .map(|_| Vec::new()) // TODO: Parse binary tag data
-                    .unwrap_or_default(),
-                children: Vec::new(), // Not available in this query
-                created: {
-                    let ts_f64 = row.get::<f64, _>("creationDate");
-                    let ts = safe_timestamp_convert(ts_f64);
-                    DateTime::from_timestamp(ts, 0).unwrap_or_else(Utc::now)
-                },
-                modified: {
-                    let ts_f64 = row.get::<f64, _>("userModificationDate");
-                    let ts = safe_timestamp_convert(ts_f64);
-                    DateTime::from_timestamp(ts, 0).unwrap_or_else(Utc::now)
-                },
-                stop_date: row.get::<Option<f64>, _>("stopDate").and_then(|ts| {
-                    let ts_i64 = safe_timestamp_convert(ts);
-                    DateTime::from_timestamp(ts_i64, 0)
-                }),
-            };
-            tasks.push(task);
-        }
+        let tasks = rows
+            .iter()
+            .map(map_task_row)
+            .collect::<ThingsResult<Vec<Task>>>()?;
 
         debug!("Found {} tasks matching query: {}", tasks.len(), query);
         Ok(tasks)
@@ -897,51 +857,8 @@ impl ThingsDatabase {
             .map_err(|e| ThingsError::unknown(format!("Failed to fetch inbox tasks: {e}")))?;
 
         let tasks = rows
-            .into_iter()
-            .map(|row| {
-                Ok(Task {
-                    uuid: things_uuid_to_uuid(&row.get::<String, _>("uuid")),
-                    title: row.get("title"),
-                    task_type: TaskType::from_i32(row.get("type")).unwrap_or(TaskType::Todo),
-                    status: TaskStatus::from_i32(row.get("status"))
-                        .unwrap_or(TaskStatus::Incomplete),
-                    notes: row.get("notes"),
-                    start_date: row
-                        .get::<Option<i64>, _>("startDate")
-                        .and_then(things_date_to_naive_date),
-                    deadline: row
-                        .get::<Option<i64>, _>("deadline")
-                        .and_then(things_date_to_naive_date),
-                    created: {
-                        let ts_f64 = row.get::<f64, _>("creationDate");
-                        let ts = safe_timestamp_convert(ts_f64);
-                        DateTime::from_timestamp(ts, 0).unwrap_or_else(Utc::now)
-                    },
-                    modified: {
-                        let ts_f64 = row.get::<f64, _>("userModificationDate");
-                        let ts = safe_timestamp_convert(ts_f64);
-                        DateTime::from_timestamp(ts, 0).unwrap_or_else(Utc::now)
-                    },
-                    stop_date: row.get::<Option<f64>, _>("stopDate").and_then(|ts| {
-                        let ts_i64 = safe_timestamp_convert(ts);
-                        DateTime::from_timestamp(ts_i64, 0)
-                    }),
-                    project_uuid: row
-                        .get::<Option<String>, _>("project")
-                        .map(|s| things_uuid_to_uuid(&s)),
-                    area_uuid: row
-                        .get::<Option<String>, _>("area")
-                        .map(|s| things_uuid_to_uuid(&s)),
-                    parent_uuid: row
-                        .get::<Option<String>, _>("heading")
-                        .map(|s| things_uuid_to_uuid(&s)),
-                    tags: row
-                        .get::<Option<Vec<u8>>, _>("cachedTags")
-                        .map(|_| Vec::new()) // TODO: Parse binary tag data
-                        .unwrap_or_default(),
-                    children: Vec::new(),
-                })
-            })
+            .iter()
+            .map(map_task_row)
             .collect::<ThingsResult<Vec<Task>>>()?;
 
         Ok(tasks)
@@ -974,51 +891,8 @@ impl ThingsDatabase {
             .map_err(|e| ThingsError::unknown(format!("Failed to fetch today's tasks: {e}")))?;
 
         let tasks = rows
-            .into_iter()
-            .map(|row| {
-                Ok(Task {
-                    uuid: things_uuid_to_uuid(&row.get::<String, _>("uuid")),
-                    title: row.get("title"),
-                    task_type: TaskType::from_i32(row.get("type")).unwrap_or(TaskType::Todo),
-                    status: TaskStatus::from_i32(row.get("status"))
-                        .unwrap_or(TaskStatus::Incomplete),
-                    notes: row.get("notes"),
-                    start_date: row
-                        .get::<Option<i64>, _>("startDate")
-                        .and_then(things_date_to_naive_date),
-                    deadline: row
-                        .get::<Option<i64>, _>("deadline")
-                        .and_then(things_date_to_naive_date),
-                    created: {
-                        let ts_f64 = row.get::<f64, _>("creationDate");
-                        let ts = safe_timestamp_convert(ts_f64);
-                        DateTime::from_timestamp(ts, 0).unwrap_or_else(Utc::now)
-                    },
-                    modified: {
-                        let ts_f64 = row.get::<f64, _>("userModificationDate");
-                        let ts = safe_timestamp_convert(ts_f64);
-                        DateTime::from_timestamp(ts, 0).unwrap_or_else(Utc::now)
-                    },
-                    stop_date: row.get::<Option<f64>, _>("stopDate").and_then(|ts| {
-                        let ts_i64 = safe_timestamp_convert(ts);
-                        DateTime::from_timestamp(ts_i64, 0)
-                    }),
-                    project_uuid: row
-                        .get::<Option<String>, _>("project")
-                        .map(|s| things_uuid_to_uuid(&s)),
-                    area_uuid: row
-                        .get::<Option<String>, _>("area")
-                        .map(|s| things_uuid_to_uuid(&s)),
-                    parent_uuid: row
-                        .get::<Option<String>, _>("heading")
-                        .map(|s| things_uuid_to_uuid(&s)),
-                    tags: row
-                        .get::<Option<Vec<u8>>, _>("cachedTags")
-                        .map(|_| Vec::new()) // TODO: Parse binary tag data
-                        .unwrap_or_default(),
-                    children: Vec::new(),
-                })
-            })
+            .iter()
+            .map(map_task_row)
             .collect::<ThingsResult<Vec<Task>>>()?;
 
         Ok(tasks)
@@ -1329,58 +1203,8 @@ impl ThingsDatabase {
                 return Ok(None); // Return None for trashed tasks
             }
 
-            let uuid_str = row.get::<String, _>("uuid");
-            // Try to parse as standard UUID first, fall back to Things UUID conversion
-            let uuid =
-                Uuid::parse_str(&uuid_str).unwrap_or_else(|_| things_uuid_to_uuid(&uuid_str));
-
-            let task = Task {
-                uuid,
-                title: row.get("title"),
-                status: TaskStatus::from_i32(row.get("status")).unwrap_or(TaskStatus::Incomplete),
-                task_type: TaskType::from_i32(row.get("type")).unwrap_or(TaskType::Todo),
-                notes: row.get("notes"),
-                start_date: row
-                    .get::<Option<i64>, _>("startDate")
-                    .and_then(things_date_to_naive_date),
-                deadline: row
-                    .get::<Option<i64>, _>("deadline")
-                    .and_then(things_date_to_naive_date),
-                created: {
-                    let ts_f64 = row.get::<f64, _>("creationDate");
-                    let ts = safe_timestamp_convert(ts_f64);
-                    DateTime::from_timestamp(ts, 0).unwrap_or_else(Utc::now)
-                },
-                modified: {
-                    let ts_f64 = row.get::<f64, _>("userModificationDate");
-                    let ts = safe_timestamp_convert(ts_f64);
-                    DateTime::from_timestamp(ts, 0).unwrap_or_else(Utc::now)
-                },
-                stop_date: row.get::<Option<f64>, _>("stopDate").and_then(|ts| {
-                    let ts_i64 = safe_timestamp_convert(ts);
-                    DateTime::from_timestamp(ts_i64, 0)
-                }),
-                project_uuid: row.get::<Option<String>, _>("project").and_then(|s| {
-                    Uuid::parse_str(&s)
-                        .ok()
-                        .or_else(|| Some(things_uuid_to_uuid(&s)))
-                }),
-                area_uuid: row.get::<Option<String>, _>("area").and_then(|s| {
-                    Uuid::parse_str(&s)
-                        .ok()
-                        .or_else(|| Some(things_uuid_to_uuid(&s)))
-                }),
-                parent_uuid: row.get::<Option<String>, _>("heading").and_then(|s| {
-                    Uuid::parse_str(&s)
-                        .ok()
-                        .or_else(|| Some(things_uuid_to_uuid(&s)))
-                }),
-                tags: row
-                    .get::<Option<String>, _>("cachedTags")
-                    .map(|_| Vec::new()) // TODO: Parse binary tag data
-                    .unwrap_or_default(),
-                children: Vec::new(),
-            };
+            // Use the centralized mapper
+            let task = map_task_row(&row)?;
             Ok(Some(task))
         } else {
             Ok(None)
