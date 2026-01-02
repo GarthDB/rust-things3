@@ -1508,7 +1508,7 @@ mod tests {
     #[test]
     fn test_things_date_one_day() {
         use chrono::Datelike;
-        // 86400 seconds = 1 day, should be 2001-01-02
+        // 86400 seconds = 1 day (60 * 60 * 24), should be 2001-01-02
         let seconds_per_day = 86400i64;
         let result = things_date_to_naive_date(seconds_per_day);
         assert!(result.is_some());
@@ -1522,7 +1522,7 @@ mod tests {
     #[test]
     fn test_things_date_one_year() {
         use chrono::Datelike;
-        // ~365 days should be around 2002-01-01
+        // ~365 days should be around 2002-01-01 (365 days * 86400 seconds/day)
         let seconds_per_year = 365 * 86400i64;
         let result = things_date_to_naive_date(seconds_per_year);
         assert!(result.is_some());
@@ -1536,6 +1536,7 @@ mod tests {
         use chrono::Datelike;
         // Test a date in the current era (2024)
         // Days from 2001-01-01 to 2024-01-01 = ~8401 days
+        // Calculation: (2024-2001) * 365 + leap days (2004, 2008, 2012, 2016, 2020) = 23 * 365 + 5 = 8400
         let days_to_2024 = 8401i64;
         let seconds_to_2024 = days_to_2024 * 86400;
 
@@ -1652,6 +1653,8 @@ mod tests {
     fn test_date_roundtrip_known_dates() {
         use chrono::{Datelike, TimeZone, Utc};
         // Test roundtrip conversion for known dates
+        // Note: Starting from 2001-01-02 because 2001-01-01 is the base date (0 seconds)
+        // and things_date_to_naive_date returns None for values <= 0
         let test_cases = vec![
             (2001, 1, 2), // Start from day 2 since day 1 is the base (0 seconds)
             (2010, 6, 15),
