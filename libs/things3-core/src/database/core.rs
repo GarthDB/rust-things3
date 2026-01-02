@@ -1661,6 +1661,1132 @@ impl ThingsDatabase {
         info!("Deleted area with UUID: {}", uuid);
         Ok(())
     }
+
+    // ========================================================================
+    // TAG OPERATIONS (with smart duplicate prevention)
+    // ========================================================================
+
+    /// Find a tag by normalized title (exact match, case-insensitive)
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database query fails
+    #[instrument(skip(self))]
+    pub async fn find_tag_by_normalized_title(
+        &self,
+        normalized: &str,
+    ) -> ThingsResult<Option<crate::models::Tag>> {
+        let row = sqlx::query(
+            "SELECT uuid, title, shortcut, parent, creationDate, userModificationDate, usedDate 
+             FROM TMTag 
+             WHERE LOWER(title) = LOWER(?)",
+        )
+        .bind(normalized)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|e| ThingsError::unknown(format!("Failed to find tag by title: {e}")))?;
+
+        if let Some(row) = row {
+            let uuid_str: String = row.get("uuid");
+            let uuid =
+                Uuid::parse_str(&uuid_str).unwrap_or_else(|_| things_uuid_to_uuid(&uuid_str));
+            let title: String = row.get("title");
+            let shortcut: Option<String> = row.get("shortcut");
+            let parent_str: Option<String> = row.get("parent");
+            let parent_uuid =
+                parent_str.map(|s| Uuid::parse_str(&s).unwrap_or_else(|_| things_uuid_to_uuid(&s)));
+
+            let creation_ts: f64 = row.get("creationDate");
+            let created = {
+                let ts = safe_timestamp_convert(creation_ts);
+                DateTime::from_timestamp(ts, 0).unwrap_or_else(Utc::now)
+            };
+
+            let modification_ts: f64 = row.get("userModificationDate");
+            let modified = {
+                let ts = safe_timestamp_convert(modification_ts);
+                DateTime::from_timestamp(ts, 0).unwrap_or_else(Utc::now)
+            };
+
+            let used_ts: Option<f64> = row.get("usedDate");
+            let last_used = used_ts.and_then(|ts| {
+                let ts_i64 = safe_timestamp_convert(ts);
+                DateTime::from_timestamp(ts_i64, 0)
+            });
+
+            // Count usage by querying tasks with this tag
+            let usage_count: i64 = sqlx::query_scalar(
+                "SELECT COUNT(*) FROM TMTask 
+                 WHERE cachedTags IS NOT NULL 
+                 AND json_extract(cachedTags, '$') LIKE ?
+                 AND trashed = 0",
+            )
+            .bind(format!("%\"{}\"%", title))
+            .fetch_one(&self.pool)
+            .await
+            .unwrap_or(0);
+
+            Ok(Some(crate::models::Tag {
+                uuid,
+                title,
+                shortcut,
+                parent_uuid,
+                created,
+                modified,
+                usage_count: usage_count as u32,
+                last_used,
+            }))
+        } else {
+            Ok(None)
+        }
+    }
+
+    /// Find tags similar to the given title using fuzzy matching
+    ///
+    /// Returns tags sorted by similarity score (highest first)
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database query fails
+    #[instrument(skip(self))]
+    pub async fn find_similar_tags(
+        &self,
+        title: &str,
+        min_similarity: f32,
+    ) -> ThingsResult<Vec<crate::models::TagMatch>> {
+        use crate::database::tag_utils::{calculate_similarity, get_match_type};
+
+        // Get all tags
+        let all_tags = self.get_all_tags().await?;
+
+        // Calculate similarity for each tag
+        let mut matches: Vec<crate::models::TagMatch> = all_tags
+            .into_iter()
+            .filter_map(|tag| {
+                let similarity = calculate_similarity(title, &tag.title);
+                if similarity >= min_similarity {
+                    let match_type = get_match_type(title, &tag.title, min_similarity);
+                    Some(crate::models::TagMatch {
+                        tag,
+                        similarity_score: similarity,
+                        match_type,
+                    })
+                } else {
+                    None
+                }
+            })
+            .collect();
+
+        // Sort by similarity score (highest first)
+        matches.sort_by(|a, b| {
+            b.similarity_score
+                .partial_cmp(&a.similarity_score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+
+        Ok(matches)
+    }
+
+    /// Search tags by partial title match
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database query fails
+    #[instrument(skip(self))]
+    pub async fn search_tags(&self, query: &str) -> ThingsResult<Vec<crate::models::Tag>> {
+        let rows = sqlx::query(
+            "SELECT uuid, title, shortcut, parent, creationDate, userModificationDate, usedDate 
+             FROM TMTag 
+             WHERE title LIKE ? 
+             ORDER BY title",
+        )
+        .bind(format!("%{}%", query))
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| ThingsError::unknown(format!("Failed to search tags: {e}")))?;
+
+        let mut tags = Vec::new();
+        for row in rows {
+            let uuid_str: String = row.get("uuid");
+            let uuid =
+                Uuid::parse_str(&uuid_str).unwrap_or_else(|_| things_uuid_to_uuid(&uuid_str));
+            let title: String = row.get("title");
+            let shortcut: Option<String> = row.get("shortcut");
+            let parent_str: Option<String> = row.get("parent");
+            let parent_uuid =
+                parent_str.map(|s| Uuid::parse_str(&s).unwrap_or_else(|_| things_uuid_to_uuid(&s)));
+
+            let creation_ts: f64 = row.get("creationDate");
+            let created = {
+                let ts = safe_timestamp_convert(creation_ts);
+                DateTime::from_timestamp(ts, 0).unwrap_or_else(Utc::now)
+            };
+
+            let modification_ts: f64 = row.get("userModificationDate");
+            let modified = {
+                let ts = safe_timestamp_convert(modification_ts);
+                DateTime::from_timestamp(ts, 0).unwrap_or_else(Utc::now)
+            };
+
+            let used_ts: Option<f64> = row.get("usedDate");
+            let last_used = used_ts.and_then(|ts| {
+                let ts_i64 = safe_timestamp_convert(ts);
+                DateTime::from_timestamp(ts_i64, 0)
+            });
+
+            // Count usage
+            let usage_count: i64 = sqlx::query_scalar(
+                "SELECT COUNT(*) FROM TMTask 
+                 WHERE cachedTags IS NOT NULL 
+                 AND json_extract(cachedTags, '$') LIKE ?
+                 AND trashed = 0",
+            )
+            .bind(format!("%\"{}\"%", title))
+            .fetch_one(&self.pool)
+            .await
+            .unwrap_or(0);
+
+            tags.push(crate::models::Tag {
+                uuid,
+                title,
+                shortcut,
+                parent_uuid,
+                created,
+                modified,
+                usage_count: usage_count as u32,
+                last_used,
+            });
+        }
+
+        Ok(tags)
+    }
+
+    /// Get all tags ordered by title
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database query fails
+    #[instrument(skip(self))]
+    pub async fn get_all_tags(&self) -> ThingsResult<Vec<crate::models::Tag>> {
+        let rows = sqlx::query(
+            "SELECT uuid, title, shortcut, parent, creationDate, userModificationDate, usedDate 
+             FROM TMTag 
+             ORDER BY title",
+        )
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| ThingsError::unknown(format!("Failed to get all tags: {e}")))?;
+
+        let mut tags = Vec::new();
+        for row in rows {
+            let uuid_str: String = row.get("uuid");
+            let uuid =
+                Uuid::parse_str(&uuid_str).unwrap_or_else(|_| things_uuid_to_uuid(&uuid_str));
+            let title: String = row.get("title");
+            let shortcut: Option<String> = row.get("shortcut");
+            let parent_str: Option<String> = row.get("parent");
+            let parent_uuid =
+                parent_str.map(|s| Uuid::parse_str(&s).unwrap_or_else(|_| things_uuid_to_uuid(&s)));
+
+            let creation_ts: f64 = row.get("creationDate");
+            let created = {
+                let ts = safe_timestamp_convert(creation_ts);
+                DateTime::from_timestamp(ts, 0).unwrap_or_else(Utc::now)
+            };
+
+            let modification_ts: f64 = row.get("userModificationDate");
+            let modified = {
+                let ts = safe_timestamp_convert(modification_ts);
+                DateTime::from_timestamp(ts, 0).unwrap_or_else(Utc::now)
+            };
+
+            let used_ts: Option<f64> = row.get("usedDate");
+            let last_used = used_ts.and_then(|ts| {
+                let ts_i64 = safe_timestamp_convert(ts);
+                DateTime::from_timestamp(ts_i64, 0)
+            });
+
+            // Count usage
+            let usage_count: i64 = sqlx::query_scalar(
+                "SELECT COUNT(*) FROM TMTask 
+                 WHERE cachedTags IS NOT NULL 
+                 AND json_extract(cachedTags, '$') LIKE ?
+                 AND trashed = 0",
+            )
+            .bind(format!("%\"{}\"%", title))
+            .fetch_one(&self.pool)
+            .await
+            .unwrap_or(0);
+
+            tags.push(crate::models::Tag {
+                uuid,
+                title,
+                shortcut,
+                parent_uuid,
+                created,
+                modified,
+                usage_count: usage_count as u32,
+                last_used,
+            });
+        }
+
+        Ok(tags)
+    }
+
+    /// Get most frequently used tags
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database query fails
+    #[instrument(skip(self))]
+    pub async fn get_popular_tags(&self, limit: usize) -> ThingsResult<Vec<crate::models::Tag>> {
+        let mut all_tags = self.get_all_tags().await?;
+
+        // Sort by usage count (highest first)
+        all_tags.sort_by(|a, b| b.usage_count.cmp(&a.usage_count));
+
+        // Take the top N
+        all_tags.truncate(limit);
+
+        Ok(all_tags)
+    }
+
+    /// Get recently used tags
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database query fails
+    #[instrument(skip(self))]
+    pub async fn get_recent_tags(&self, limit: usize) -> ThingsResult<Vec<crate::models::Tag>> {
+        let rows = sqlx::query(
+            "SELECT uuid, title, shortcut, parent, creationDate, userModificationDate, usedDate 
+             FROM TMTag 
+             WHERE usedDate IS NOT NULL 
+             ORDER BY usedDate DESC 
+             LIMIT ?",
+        )
+        .bind(limit as i64)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| ThingsError::unknown(format!("Failed to get recent tags: {e}")))?;
+
+        let mut tags = Vec::new();
+        for row in rows {
+            let uuid_str: String = row.get("uuid");
+            let uuid =
+                Uuid::parse_str(&uuid_str).unwrap_or_else(|_| things_uuid_to_uuid(&uuid_str));
+            let title: String = row.get("title");
+            let shortcut: Option<String> = row.get("shortcut");
+            let parent_str: Option<String> = row.get("parent");
+            let parent_uuid =
+                parent_str.map(|s| Uuid::parse_str(&s).unwrap_or_else(|_| things_uuid_to_uuid(&s)));
+
+            let creation_ts: f64 = row.get("creationDate");
+            let created = {
+                let ts = safe_timestamp_convert(creation_ts);
+                DateTime::from_timestamp(ts, 0).unwrap_or_else(Utc::now)
+            };
+
+            let modification_ts: f64 = row.get("userModificationDate");
+            let modified = {
+                let ts = safe_timestamp_convert(modification_ts);
+                DateTime::from_timestamp(ts, 0).unwrap_or_else(Utc::now)
+            };
+
+            let used_ts: Option<f64> = row.get("usedDate");
+            let last_used = used_ts.and_then(|ts| {
+                let ts_i64 = safe_timestamp_convert(ts);
+                DateTime::from_timestamp(ts_i64, 0)
+            });
+
+            // Count usage
+            let usage_count: i64 = sqlx::query_scalar(
+                "SELECT COUNT(*) FROM TMTask 
+                 WHERE cachedTags IS NOT NULL 
+                 AND json_extract(cachedTags, '$') LIKE ?
+                 AND trashed = 0",
+            )
+            .bind(format!("%\"{}\"%", title))
+            .fetch_one(&self.pool)
+            .await
+            .unwrap_or(0);
+
+            tags.push(crate::models::Tag {
+                uuid,
+                title,
+                shortcut,
+                parent_uuid,
+                created,
+                modified,
+                usage_count: usage_count as u32,
+                last_used,
+            });
+        }
+
+        Ok(tags)
+    }
+
+    /// Create a tag with smart duplicate detection
+    ///
+    /// Returns:
+    /// - `Created`: New tag was created
+    /// - `Existing`: Exact match found (case-insensitive)
+    /// - `SimilarFound`: Similar tags found (user decision needed)
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database operation fails
+    #[instrument(skip(self))]
+    pub async fn create_tag_smart(
+        &self,
+        request: crate::models::CreateTagRequest,
+    ) -> ThingsResult<crate::models::TagCreationResult> {
+        use crate::database::tag_utils::normalize_tag_title;
+        use crate::models::TagCreationResult;
+
+        // 1. Normalize the title
+        let normalized = normalize_tag_title(&request.title);
+
+        // 2. Check for exact match (case-insensitive)
+        if let Some(existing) = self.find_tag_by_normalized_title(&normalized).await? {
+            return Ok(TagCreationResult::Existing {
+                tag: existing,
+                is_new: false,
+            });
+        }
+
+        // 3. Find similar tags (fuzzy matching with 80% threshold)
+        let similar_tags = self.find_similar_tags(&normalized, 0.8).await?;
+
+        // 4. If similar tags found, return them for user decision
+        if !similar_tags.is_empty() {
+            return Ok(TagCreationResult::SimilarFound {
+                similar_tags,
+                requested_title: request.title,
+            });
+        }
+
+        // 5. No duplicates, safe to create
+        let uuid = Uuid::new_v4();
+        let now = Utc::now().timestamp() as f64;
+
+        sqlx::query(
+            "INSERT INTO TMTag (uuid, title, shortcut, parent, creationDate, userModificationDate, usedDate, `index`) 
+             VALUES (?, ?, ?, ?, ?, ?, NULL, 0)"
+        )
+        .bind(uuid.to_string())
+        .bind(&request.title)
+        .bind(request.shortcut.as_ref())
+        .bind(request.parent_uuid.map(|u| u.to_string()))
+        .bind(now)
+        .bind(now)
+        .execute(&self.pool)
+        .await
+        .map_err(|e| ThingsError::unknown(format!("Failed to create tag: {e}")))?;
+
+        info!("Created tag with UUID: {}", uuid);
+        Ok(TagCreationResult::Created { uuid, is_new: true })
+    }
+
+    /// Create tag forcefully (skip duplicate check)
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database operation fails
+    #[instrument(skip(self))]
+    pub async fn create_tag_force(
+        &self,
+        request: crate::models::CreateTagRequest,
+    ) -> ThingsResult<Uuid> {
+        let uuid = Uuid::new_v4();
+        let now = Utc::now().timestamp() as f64;
+
+        sqlx::query(
+            "INSERT INTO TMTag (uuid, title, shortcut, parent, creationDate, userModificationDate, usedDate, `index`) 
+             VALUES (?, ?, ?, ?, ?, ?, NULL, 0)"
+        )
+        .bind(uuid.to_string())
+        .bind(&request.title)
+        .bind(request.shortcut.as_ref())
+        .bind(request.parent_uuid.map(|u| u.to_string()))
+        .bind(now)
+        .bind(now)
+        .execute(&self.pool)
+        .await
+        .map_err(|e| ThingsError::unknown(format!("Failed to create tag: {e}")))?;
+
+        info!("Forcefully created tag with UUID: {}", uuid);
+        Ok(uuid)
+    }
+
+    /// Update a tag
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the tag doesn't exist or database operation fails
+    #[instrument(skip(self))]
+    pub async fn update_tag(&self, request: crate::models::UpdateTagRequest) -> ThingsResult<()> {
+        use crate::database::tag_utils::normalize_tag_title;
+
+        // Verify tag exists
+        let existing = self
+            .find_tag_by_normalized_title(&request.uuid.to_string())
+            .await?;
+        if existing.is_none() {
+            // Try by UUID
+            let row = sqlx::query("SELECT 1 FROM TMTag WHERE uuid = ?")
+                .bind(request.uuid.to_string())
+                .fetch_optional(&self.pool)
+                .await
+                .map_err(|e| ThingsError::unknown(format!("Failed to validate tag: {e}")))?;
+
+            if row.is_none() {
+                return Err(ThingsError::unknown(format!(
+                    "Tag not found: {}",
+                    request.uuid
+                )));
+            }
+        }
+
+        // If renaming, check for duplicates with new name
+        if let Some(new_title) = &request.title {
+            let normalized = normalize_tag_title(new_title);
+            if let Some(duplicate) = self.find_tag_by_normalized_title(&normalized).await? {
+                if duplicate.uuid != request.uuid {
+                    return Err(ThingsError::unknown(format!(
+                        "Tag with title '{}' already exists",
+                        new_title
+                    )));
+                }
+            }
+        }
+
+        let now = Utc::now().timestamp() as f64;
+
+        // Build dynamic UPDATE query
+        let mut updates = Vec::new();
+        let mut params: Vec<String> = Vec::new();
+
+        if let Some(title) = &request.title {
+            updates.push("title = ?");
+            params.push(title.clone());
+        }
+        if let Some(shortcut) = &request.shortcut {
+            updates.push("shortcut = ?");
+            params.push(shortcut.clone());
+        }
+        if let Some(parent_uuid) = request.parent_uuid {
+            updates.push("parent = ?");
+            params.push(parent_uuid.to_string());
+        }
+
+        if updates.is_empty() {
+            return Ok(()); // Nothing to update
+        }
+
+        updates.push("userModificationDate = ?");
+        params.push(now.to_string());
+
+        let sql = format!("UPDATE TMTag SET {} WHERE uuid = ?", updates.join(", "));
+        params.push(request.uuid.to_string());
+
+        let mut query = sqlx::query(&sql);
+        for param in params {
+            query = query.bind(param);
+        }
+
+        query
+            .execute(&self.pool)
+            .await
+            .map_err(|e| ThingsError::unknown(format!("Failed to update tag: {e}")))?;
+
+        info!("Updated tag with UUID: {}", request.uuid);
+        Ok(())
+    }
+
+    /// Delete a tag
+    ///
+    /// # Arguments
+    ///
+    /// * `uuid` - UUID of the tag to delete
+    /// * `remove_from_tasks` - If true, removes tag from all tasks' cachedTags
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database operation fails
+    #[instrument(skip(self))]
+    pub async fn delete_tag(&self, uuid: &Uuid, remove_from_tasks: bool) -> ThingsResult<()> {
+        // Get the tag title before deletion
+        let tag = self.find_tag_by_normalized_title(&uuid.to_string()).await?;
+
+        if tag.is_none() {
+            // Try by UUID directly
+            let row = sqlx::query("SELECT title FROM TMTag WHERE uuid = ?")
+                .bind(uuid.to_string())
+                .fetch_optional(&self.pool)
+                .await
+                .map_err(|e| ThingsError::unknown(format!("Failed to find tag: {e}")))?;
+
+            if row.is_none() {
+                return Err(ThingsError::unknown(format!("Tag not found: {}", uuid)));
+            }
+        }
+
+        if remove_from_tasks {
+            // TODO: Implement updating all tasks' cachedTags to remove this tag
+            // This requires parsing and re-serializing the JSON arrays
+            info!("Removing tag {} from all tasks (not yet implemented)", uuid);
+        }
+
+        // Delete the tag
+        sqlx::query("DELETE FROM TMTag WHERE uuid = ?")
+            .bind(uuid.to_string())
+            .execute(&self.pool)
+            .await
+            .map_err(|e| ThingsError::unknown(format!("Failed to delete tag: {e}")))?;
+
+        info!("Deleted tag with UUID: {}", uuid);
+        Ok(())
+    }
+
+    /// Merge two tags (combine source into target)
+    ///
+    /// # Arguments
+    ///
+    /// * `source_uuid` - UUID of tag to merge from (will be deleted)
+    /// * `target_uuid` - UUID of tag to merge into (will remain)
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if either tag doesn't exist or database operation fails
+    #[instrument(skip(self))]
+    pub async fn merge_tags(&self, source_uuid: &Uuid, target_uuid: &Uuid) -> ThingsResult<()> {
+        // Verify both tags exist
+        let source_row = sqlx::query("SELECT title FROM TMTag WHERE uuid = ?")
+            .bind(source_uuid.to_string())
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(|e| ThingsError::unknown(format!("Failed to find source tag: {e}")))?;
+
+        if source_row.is_none() {
+            return Err(ThingsError::unknown(format!(
+                "Source tag not found: {}",
+                source_uuid
+            )));
+        }
+
+        let target_row = sqlx::query("SELECT title FROM TMTag WHERE uuid = ?")
+            .bind(target_uuid.to_string())
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(|e| ThingsError::unknown(format!("Failed to find target tag: {e}")))?;
+
+        if target_row.is_none() {
+            return Err(ThingsError::unknown(format!(
+                "Target tag not found: {}",
+                target_uuid
+            )));
+        }
+
+        // TODO: Implement updating all tasks' cachedTags to replace source tag with target tag
+        // This requires parsing and re-serializing the JSON arrays
+        info!(
+            "Merging tag {} into {} (tag replacement in tasks not yet fully implemented)",
+            source_uuid, target_uuid
+        );
+
+        // Update usedDate on target if source was used more recently
+        let now = Utc::now().timestamp() as f64;
+        sqlx::query("UPDATE TMTag SET userModificationDate = ?, usedDate = ? WHERE uuid = ?")
+            .bind(now)
+            .bind(now)
+            .bind(target_uuid.to_string())
+            .execute(&self.pool)
+            .await
+            .map_err(|e| ThingsError::unknown(format!("Failed to update target tag: {e}")))?;
+
+        // Delete source tag
+        sqlx::query("DELETE FROM TMTag WHERE uuid = ?")
+            .bind(source_uuid.to_string())
+            .execute(&self.pool)
+            .await
+            .map_err(|e| ThingsError::unknown(format!("Failed to delete source tag: {e}")))?;
+
+        info!("Merged tag {} into {}", source_uuid, target_uuid);
+        Ok(())
+    }
+
+    // ========================================================================
+    // TAG ASSIGNMENT OPERATIONS
+    // ========================================================================
+
+    /// Add a tag to a task (with duplicate prevention)
+    ///
+    /// Returns:
+    /// - `Assigned`: Tag was successfully assigned
+    /// - `Suggestions`: Similar tags found (user decision needed)
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the task doesn't exist or database operation fails
+    #[instrument(skip(self))]
+    pub async fn add_tag_to_task(
+        &self,
+        task_uuid: &Uuid,
+        tag_title: &str,
+    ) -> ThingsResult<crate::models::TagAssignmentResult> {
+        use crate::database::tag_utils::normalize_tag_title;
+        use crate::models::TagAssignmentResult;
+
+        // 1. Verify task exists
+        validators::validate_task_exists(&self.pool, task_uuid).await?;
+
+        // 2. Normalize and find tag
+        let normalized = normalize_tag_title(tag_title);
+
+        // 3. Check for exact match first
+        let tag = if let Some(existing_tag) = self.find_tag_by_normalized_title(&normalized).await?
+        {
+            existing_tag
+        } else {
+            // 4. Find similar tags
+            let similar_tags = self.find_similar_tags(&normalized, 0.8).await?;
+
+            if !similar_tags.is_empty() {
+                return Ok(TagAssignmentResult::Suggestions { similar_tags });
+            }
+
+            // 5. No existing tag found, create new one
+            let request = crate::models::CreateTagRequest {
+                title: tag_title.to_string(),
+                shortcut: None,
+                parent_uuid: None,
+            };
+            let _uuid = self.create_tag_force(request).await?;
+
+            // Fetch the newly created tag
+            self.find_tag_by_normalized_title(&normalized)
+                .await?
+                .ok_or_else(|| ThingsError::unknown("Failed to retrieve newly created tag"))?
+        };
+
+        // 6. Get current tags from task
+        let row = sqlx::query("SELECT cachedTags FROM TMTask WHERE uuid = ?")
+            .bind(task_uuid.to_string())
+            .fetch_one(&self.pool)
+            .await
+            .map_err(|e| ThingsError::unknown(format!("Failed to fetch task tags: {e}")))?;
+
+        let cached_tags_blob: Option<Vec<u8>> = row.get("cachedTags");
+        let mut tags: Vec<String> = if let Some(blob) = cached_tags_blob {
+            deserialize_tags_from_blob(&blob)?
+        } else {
+            Vec::new()
+        };
+
+        // 7. Add tag if not already present
+        if !tags.contains(&tag.title) {
+            tags.push(tag.title.clone());
+
+            // 8. Serialize and update
+            let cached_tags = serialize_tags_to_blob(&tags)?;
+            let now = Utc::now().timestamp() as f64;
+
+            sqlx::query(
+                "UPDATE TMTask SET cachedTags = ?, userModificationDate = ? WHERE uuid = ?",
+            )
+            .bind(cached_tags)
+            .bind(now)
+            .bind(task_uuid.to_string())
+            .execute(&self.pool)
+            .await
+            .map_err(|e| ThingsError::unknown(format!("Failed to update task tags: {e}")))?;
+
+            // 9. Update tag's usedDate
+            sqlx::query("UPDATE TMTag SET usedDate = ?, userModificationDate = ? WHERE uuid = ?")
+                .bind(now)
+                .bind(now)
+                .bind(tag.uuid.to_string())
+                .execute(&self.pool)
+                .await
+                .map_err(|e| ThingsError::unknown(format!("Failed to update tag usedDate: {e}")))?;
+
+            info!("Added tag '{}' to task {}", tag.title, task_uuid);
+        }
+
+        Ok(TagAssignmentResult::Assigned { tag_uuid: tag.uuid })
+    }
+
+    /// Remove a tag from a task
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the task doesn't exist or database operation fails
+    #[instrument(skip(self))]
+    pub async fn remove_tag_from_task(
+        &self,
+        task_uuid: &Uuid,
+        tag_title: &str,
+    ) -> ThingsResult<()> {
+        use crate::database::tag_utils::normalize_tag_title;
+
+        // 1. Verify task exists
+        validators::validate_task_exists(&self.pool, task_uuid).await?;
+
+        // 2. Get current tags from task
+        let row = sqlx::query("SELECT cachedTags FROM TMTask WHERE uuid = ?")
+            .bind(task_uuid.to_string())
+            .fetch_one(&self.pool)
+            .await
+            .map_err(|e| ThingsError::unknown(format!("Failed to fetch task tags: {e}")))?;
+
+        let cached_tags_blob: Option<Vec<u8>> = row.get("cachedTags");
+        let mut tags: Vec<String> = if let Some(blob) = cached_tags_blob {
+            deserialize_tags_from_blob(&blob)?
+        } else {
+            return Ok(()); // No tags to remove
+        };
+
+        // 3. Normalize and find the tag to remove (case-insensitive)
+        let normalized = normalize_tag_title(tag_title);
+        let original_len = tags.len();
+        tags.retain(|t| normalize_tag_title(t) != normalized);
+
+        // 4. If tags were actually removed, update the task
+        if tags.len() < original_len {
+            let cached_tags = if tags.is_empty() {
+                None
+            } else {
+                Some(serialize_tags_to_blob(&tags)?)
+            };
+
+            let now = Utc::now().timestamp() as f64;
+
+            if let Some(cached_tags_val) = cached_tags {
+                sqlx::query(
+                    "UPDATE TMTask SET cachedTags = ?, userModificationDate = ? WHERE uuid = ?",
+                )
+                .bind(cached_tags_val)
+                .bind(now)
+                .bind(task_uuid.to_string())
+                .execute(&self.pool)
+                .await
+                .map_err(|e| ThingsError::unknown(format!("Failed to update task tags: {e}")))?;
+            } else {
+                // Set cachedTags to NULL if no tags remain
+                sqlx::query(
+                    "UPDATE TMTask SET cachedTags = NULL, userModificationDate = ? WHERE uuid = ?",
+                )
+                .bind(now)
+                .bind(task_uuid.to_string())
+                .execute(&self.pool)
+                .await
+                .map_err(|e| ThingsError::unknown(format!("Failed to update task tags: {e}")))?;
+            }
+
+            info!("Removed tag '{}' from task {}", tag_title, task_uuid);
+        }
+
+        Ok(())
+    }
+
+    /// Replace all tags on a task (with duplicate prevention)
+    ///
+    /// Returns any tag titles that had similar matches for user confirmation
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the task doesn't exist or database operation fails
+    #[instrument(skip(self))]
+    pub async fn set_task_tags(
+        &self,
+        task_uuid: &Uuid,
+        tag_titles: Vec<String>,
+    ) -> ThingsResult<Vec<crate::models::TagMatch>> {
+        use crate::database::tag_utils::normalize_tag_title;
+
+        // 1. Verify task exists
+        validators::validate_task_exists(&self.pool, task_uuid).await?;
+
+        let mut resolved_tags = Vec::new();
+        let mut suggestions = Vec::new();
+
+        // 2. Resolve each tag title
+        for title in tag_titles {
+            let normalized = normalize_tag_title(&title);
+
+            // Try to find exact match
+            if let Some(existing_tag) = self.find_tag_by_normalized_title(&normalized).await? {
+                resolved_tags.push(existing_tag.title);
+            } else {
+                // Check for similar tags
+                let similar_tags = self.find_similar_tags(&normalized, 0.8).await?;
+
+                if !similar_tags.is_empty() {
+                    suggestions.extend(similar_tags);
+                }
+
+                // Use the requested title anyway (will create if needed)
+                resolved_tags.push(title);
+            }
+        }
+
+        // 3. For any tags that don't exist yet, create them
+        for title in &resolved_tags {
+            let normalized = normalize_tag_title(title);
+            if self
+                .find_tag_by_normalized_title(&normalized)
+                .await?
+                .is_none()
+            {
+                let request = crate::models::CreateTagRequest {
+                    title: title.clone(),
+                    shortcut: None,
+                    parent_uuid: None,
+                };
+                self.create_tag_force(request).await?;
+            }
+        }
+
+        // 4. Update task's cachedTags
+        let cached_tags = if resolved_tags.is_empty() {
+            None
+        } else {
+            Some(serialize_tags_to_blob(&resolved_tags)?)
+        };
+
+        let now = Utc::now().timestamp() as f64;
+
+        if let Some(cached_tags_val) = cached_tags {
+            sqlx::query(
+                "UPDATE TMTask SET cachedTags = ?, userModificationDate = ? WHERE uuid = ?",
+            )
+            .bind(cached_tags_val)
+            .bind(now)
+            .bind(task_uuid.to_string())
+            .execute(&self.pool)
+            .await
+            .map_err(|e| ThingsError::unknown(format!("Failed to update task tags: {e}")))?;
+        } else {
+            sqlx::query(
+                "UPDATE TMTask SET cachedTags = NULL, userModificationDate = ? WHERE uuid = ?",
+            )
+            .bind(now)
+            .bind(task_uuid.to_string())
+            .execute(&self.pool)
+            .await
+            .map_err(|e| ThingsError::unknown(format!("Failed to update task tags: {e}")))?;
+        }
+
+        // 5. Update usedDate for all tags
+        for title in &resolved_tags {
+            let normalized = normalize_tag_title(title);
+            if let Some(tag) = self.find_tag_by_normalized_title(&normalized).await? {
+                sqlx::query(
+                    "UPDATE TMTag SET usedDate = ?, userModificationDate = ? WHERE uuid = ?",
+                )
+                .bind(now)
+                .bind(now)
+                .bind(tag.uuid.to_string())
+                .execute(&self.pool)
+                .await
+                .map_err(|e| ThingsError::unknown(format!("Failed to update tag usedDate: {e}")))?;
+            }
+        }
+
+        info!("Set tags on task {} to: {:?}", task_uuid, resolved_tags);
+        Ok(suggestions)
+    }
+
+    // ========================================================================
+    // TAG AUTO-COMPLETION & ANALYTICS
+    // ========================================================================
+
+    /// Get tag completions for partial input
+    ///
+    /// Returns tags sorted by:
+    /// 1. Exact prefix matches (prioritized)
+    /// 2. Contains matches
+    /// 3. Fuzzy matches
+    /// Within each category, sorted by usage frequency
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database query fails
+    #[instrument(skip(self))]
+    pub async fn get_tag_completions(
+        &self,
+        partial_input: &str,
+        limit: usize,
+    ) -> ThingsResult<Vec<crate::models::TagCompletion>> {
+        use crate::database::tag_utils::{calculate_similarity, normalize_tag_title};
+
+        let normalized_input = normalize_tag_title(partial_input);
+        let all_tags = self.get_all_tags().await?;
+
+        let mut completions: Vec<crate::models::TagCompletion> = all_tags
+            .into_iter()
+            .filter_map(|tag| {
+                let normalized_tag = normalize_tag_title(&tag.title);
+
+                // Calculate score based on match type
+                let score = if normalized_tag.starts_with(&normalized_input) {
+                    // Exact prefix match: highest priority
+                    3.0 + (tag.usage_count as f32 / 100.0)
+                } else if normalized_tag.contains(&normalized_input) {
+                    // Contains match: medium priority
+                    2.0 + (tag.usage_count as f32 / 100.0)
+                } else {
+                    // Fuzzy match: lower priority
+                    let similarity = calculate_similarity(partial_input, &tag.title);
+                    if similarity >= 0.6 {
+                        similarity + (tag.usage_count as f32 / 1000.0)
+                    } else {
+                        return None; // Not similar enough
+                    }
+                };
+
+                Some(crate::models::TagCompletion { tag, score })
+            })
+            .collect();
+
+        // Sort by score (highest first)
+        completions.sort_by(|a, b| {
+            b.score
+                .partial_cmp(&a.score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+
+        // Take the top N
+        completions.truncate(limit);
+
+        Ok(completions)
+    }
+
+    /// Get detailed statistics for a tag
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the tag doesn't exist or database query fails
+    #[instrument(skip(self))]
+    pub async fn get_tag_statistics(
+        &self,
+        uuid: &Uuid,
+    ) -> ThingsResult<crate::models::TagStatistics> {
+        // Get the tag
+        let tag_row = sqlx::query("SELECT title FROM TMTag WHERE uuid = ?")
+            .bind(uuid.to_string())
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(|e| ThingsError::unknown(format!("Failed to find tag: {e}")))?;
+
+        let title: String = tag_row
+            .ok_or_else(|| ThingsError::unknown(format!("Tag not found: {}", uuid)))?
+            .get("title");
+
+        // Get all tasks using this tag
+        let task_rows = sqlx::query(
+            "SELECT uuid FROM TMTask 
+             WHERE cachedTags IS NOT NULL 
+             AND json_extract(cachedTags, '$') LIKE ?
+             AND trashed = 0",
+        )
+        .bind(format!("%\"{}\"%", title))
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| ThingsError::unknown(format!("Failed to query tasks with tag: {e}")))?;
+
+        let mut task_uuids = Vec::new();
+        for row in task_rows {
+            let uuid_str: String = row.get("uuid");
+            let task_uuid =
+                Uuid::parse_str(&uuid_str).unwrap_or_else(|_| things_uuid_to_uuid(&uuid_str));
+            task_uuids.push(task_uuid);
+        }
+
+        let usage_count = task_uuids.len() as u32;
+
+        // Find related tags (tags that frequently appear with this tag)
+        let mut related_tags: std::collections::HashMap<String, u32> =
+            std::collections::HashMap::new();
+
+        for task_uuid in &task_uuids {
+            let row = sqlx::query("SELECT cachedTags FROM TMTask WHERE uuid = ?")
+                .bind(task_uuid.to_string())
+                .fetch_optional(&self.pool)
+                .await
+                .map_err(|e| ThingsError::unknown(format!("Failed to fetch task tags: {e}")))?;
+
+            if let Some(row) = row {
+                let cached_tags_blob: Option<Vec<u8>> = row.get("cachedTags");
+                if let Some(blob) = cached_tags_blob {
+                    let tags: Vec<String> = deserialize_tags_from_blob(&blob)?;
+                    for tag in tags {
+                        if tag != title {
+                            *related_tags.entry(tag).or_insert(0) += 1;
+                        }
+                    }
+                }
+            }
+        }
+
+        // Sort related tags by co-occurrence count
+        let mut related_vec: Vec<(String, u32)> = related_tags.into_iter().collect();
+        related_vec.sort_by(|a, b| b.1.cmp(&a.1));
+
+        Ok(crate::models::TagStatistics {
+            uuid: *uuid,
+            title,
+            usage_count,
+            task_uuids,
+            related_tags: related_vec,
+        })
+    }
+
+    /// Find duplicate or highly similar tags
+    ///
+    /// Returns pairs of tags that are similar above the threshold
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database query fails
+    #[instrument(skip(self))]
+    pub async fn find_duplicate_tags(
+        &self,
+        min_similarity: f32,
+    ) -> ThingsResult<Vec<crate::models::TagPair>> {
+        use crate::database::tag_utils::calculate_similarity;
+
+        let all_tags = self.get_all_tags().await?;
+        let mut pairs = Vec::new();
+
+        // Compare each tag with every other tag
+        for i in 0..all_tags.len() {
+            for j in (i + 1)..all_tags.len() {
+                let tag1 = &all_tags[i];
+                let tag2 = &all_tags[j];
+
+                let similarity = calculate_similarity(&tag1.title, &tag2.title);
+
+                if similarity >= min_similarity {
+                    pairs.push(crate::models::TagPair {
+                        tag1: tag1.clone(),
+                        tag2: tag2.clone(),
+                        similarity,
+                    });
+                }
+            }
+        }
+
+        // Sort by similarity (highest first)
+        pairs.sort_by(|a, b| {
+            b.similarity
+                .partial_cmp(&a.similarity)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+
+        Ok(pairs)
+    }
 }
 
 /// Database statistics

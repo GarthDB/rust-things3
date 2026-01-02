@@ -9,6 +9,7 @@ use things3_core::{
 };
 use thiserror::Error;
 use tokio::sync::Mutex;
+use uuid::Uuid;
 
 pub mod io_wrapper;
 pub mod middleware;
@@ -904,6 +905,7 @@ impl ThingsMcpServer {
         let mut tools = Vec::new();
         tools.extend(Self::get_data_retrieval_tools());
         tools.extend(Self::get_task_management_tools());
+        tools.extend(Self::get_tag_management_tools());
         tools.extend(Self::get_analytics_tools());
         tools.extend(Self::get_backup_tools());
         tools.extend(Self::get_system_tools());
@@ -1478,6 +1480,276 @@ impl ThingsMcpServer {
         ]
     }
 
+    fn get_tag_management_tools() -> Vec<Tool> {
+        vec![
+            // Tag Discovery Tools
+            Tool {
+                name: "search_tags".to_string(),
+                description: "Search for existing tags (finds exact and similar matches)"
+                    .to_string(),
+                input_schema: serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "query": {
+                            "type": "string",
+                            "description": "Search query for tag titles"
+                        },
+                        "include_similar": {
+                            "type": "boolean",
+                            "description": "Include fuzzy matches (default: true)"
+                        },
+                        "min_similarity": {
+                            "type": "number",
+                            "description": "Minimum similarity score 0.0-1.0 (default: 0.7)"
+                        }
+                    },
+                    "required": ["query"]
+                }),
+            },
+            Tool {
+                name: "get_tag_suggestions".to_string(),
+                description: "Get tag suggestions for a title (prevents duplicates)".to_string(),
+                input_schema: serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "title": {
+                            "type": "string",
+                            "description": "Proposed tag title"
+                        }
+                    },
+                    "required": ["title"]
+                }),
+            },
+            Tool {
+                name: "get_popular_tags".to_string(),
+                description: "Get most frequently used tags".to_string(),
+                input_schema: serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "limit": {
+                            "type": "integer",
+                            "description": "Maximum number of tags to return (default: 20)"
+                        }
+                    }
+                }),
+            },
+            Tool {
+                name: "get_recent_tags".to_string(),
+                description: "Get recently used tags".to_string(),
+                input_schema: serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "limit": {
+                            "type": "integer",
+                            "description": "Maximum number of tags to return (default: 20)"
+                        }
+                    }
+                }),
+            },
+            // Tag CRUD Operations
+            Tool {
+                name: "create_tag".to_string(),
+                description: "Create a new tag (checks for duplicates first)".to_string(),
+                input_schema: serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "title": {
+                            "type": "string",
+                            "description": "Tag title (required)"
+                        },
+                        "shortcut": {
+                            "type": "string",
+                            "description": "Keyboard shortcut"
+                        },
+                        "parent_uuid": {
+                            "type": "string",
+                            "format": "uuid",
+                            "description": "Parent tag UUID for nesting"
+                        },
+                        "force": {
+                            "type": "boolean",
+                            "description": "Skip duplicate check (default: false)"
+                        }
+                    },
+                    "required": ["title"]
+                }),
+            },
+            Tool {
+                name: "update_tag".to_string(),
+                description: "Update an existing tag".to_string(),
+                input_schema: serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "uuid": {
+                            "type": "string",
+                            "format": "uuid",
+                            "description": "Tag UUID (required)"
+                        },
+                        "title": {
+                            "type": "string",
+                            "description": "New title"
+                        },
+                        "shortcut": {
+                            "type": "string",
+                            "description": "New shortcut"
+                        },
+                        "parent_uuid": {
+                            "type": "string",
+                            "format": "uuid",
+                            "description": "New parent UUID"
+                        }
+                    },
+                    "required": ["uuid"]
+                }),
+            },
+            Tool {
+                name: "delete_tag".to_string(),
+                description: "Delete a tag".to_string(),
+                input_schema: serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "uuid": {
+                            "type": "string",
+                            "format": "uuid",
+                            "description": "Tag UUID (required)"
+                        },
+                        "remove_from_tasks": {
+                            "type": "boolean",
+                            "description": "Remove tag from all tasks (default: false)"
+                        }
+                    },
+                    "required": ["uuid"]
+                }),
+            },
+            Tool {
+                name: "merge_tags".to_string(),
+                description: "Merge two tags (combine source into target)".to_string(),
+                input_schema: serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "source_uuid": {
+                            "type": "string",
+                            "format": "uuid",
+                            "description": "UUID of tag to merge from (will be deleted)"
+                        },
+                        "target_uuid": {
+                            "type": "string",
+                            "format": "uuid",
+                            "description": "UUID of tag to merge into (will remain)"
+                        }
+                    },
+                    "required": ["source_uuid", "target_uuid"]
+                }),
+            },
+            // Tag Assignment Tools
+            Tool {
+                name: "add_tag_to_task".to_string(),
+                description: "Add a tag to a task (suggests existing tags)".to_string(),
+                input_schema: serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "task_uuid": {
+                            "type": "string",
+                            "format": "uuid",
+                            "description": "Task UUID (required)"
+                        },
+                        "tag_title": {
+                            "type": "string",
+                            "description": "Tag title (required)"
+                        }
+                    },
+                    "required": ["task_uuid", "tag_title"]
+                }),
+            },
+            Tool {
+                name: "remove_tag_from_task".to_string(),
+                description: "Remove a tag from a task".to_string(),
+                input_schema: serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "task_uuid": {
+                            "type": "string",
+                            "format": "uuid",
+                            "description": "Task UUID (required)"
+                        },
+                        "tag_title": {
+                            "type": "string",
+                            "description": "Tag title (required)"
+                        }
+                    },
+                    "required": ["task_uuid", "tag_title"]
+                }),
+            },
+            Tool {
+                name: "set_task_tags".to_string(),
+                description: "Replace all tags on a task".to_string(),
+                input_schema: serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "task_uuid": {
+                            "type": "string",
+                            "format": "uuid",
+                            "description": "Task UUID (required)"
+                        },
+                        "tag_titles": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                            "description": "Array of tag titles"
+                        }
+                    },
+                    "required": ["task_uuid", "tag_titles"]
+                }),
+            },
+            // Tag Analytics
+            Tool {
+                name: "get_tag_statistics".to_string(),
+                description: "Get detailed statistics for a tag".to_string(),
+                input_schema: serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "uuid": {
+                            "type": "string",
+                            "format": "uuid",
+                            "description": "Tag UUID (required)"
+                        }
+                    },
+                    "required": ["uuid"]
+                }),
+            },
+            Tool {
+                name: "find_duplicate_tags".to_string(),
+                description: "Find duplicate or highly similar tags".to_string(),
+                input_schema: serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "min_similarity": {
+                            "type": "number",
+                            "description": "Minimum similarity score 0.0-1.0 (default: 0.85)"
+                        }
+                    }
+                }),
+            },
+            Tool {
+                name: "get_tag_completions".to_string(),
+                description: "Get tag auto-completions for partial input".to_string(),
+                input_schema: serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "partial_input": {
+                            "type": "string",
+                            "description": "Partial tag input (required)"
+                        },
+                        "limit": {
+                            "type": "integer",
+                            "description": "Maximum completions to return (default: 10)"
+                        }
+                    },
+                    "required": ["partial_input"]
+                }),
+            },
+        ]
+    }
+
     /// Handle tool call
     async fn handle_tool_call(&self, request: CallToolRequest) -> McpResult<CallToolResult> {
         let tool_name = &request.name;
@@ -1511,6 +1783,24 @@ impl ThingsMcpServer {
             "get_performance_stats" => self.handle_get_performance_stats(arguments).await,
             "get_system_metrics" => self.handle_get_system_metrics(arguments).await,
             "get_cache_stats" => self.handle_get_cache_stats(arguments).await,
+            // Tag discovery tools
+            "search_tags" => self.handle_search_tags_tool(arguments).await,
+            "get_tag_suggestions" => self.handle_get_tag_suggestions(arguments).await,
+            "get_popular_tags" => self.handle_get_popular_tags(arguments).await,
+            "get_recent_tags" => self.handle_get_recent_tags(arguments).await,
+            // Tag CRUD
+            "create_tag" => self.handle_create_tag(arguments).await,
+            "update_tag" => self.handle_update_tag(arguments).await,
+            "delete_tag" => self.handle_delete_tag(arguments).await,
+            "merge_tags" => self.handle_merge_tags(arguments).await,
+            // Tag assignment
+            "add_tag_to_task" => self.handle_add_tag_to_task(arguments).await,
+            "remove_tag_from_task" => self.handle_remove_tag_from_task(arguments).await,
+            "set_task_tags" => self.handle_set_task_tags(arguments).await,
+            // Tag analytics
+            "get_tag_statistics" => self.handle_get_tag_statistics(arguments).await,
+            "find_duplicate_tags" => self.handle_find_duplicate_tags(arguments).await,
+            "get_tag_completions" => self.handle_get_tag_completions(arguments).await,
             _ => {
                 return Err(McpError::tool_not_found(tool_name));
             }
@@ -2440,6 +2730,540 @@ impl ThingsMcpServer {
             content: vec![Content::Text {
                 text: serde_json::to_string_pretty(&stats)
                     .map_err(|e| McpError::serialization_failed("cache_stats response", e))?,
+            }],
+            is_error: false,
+        })
+    }
+
+    // ========================================================================
+    // TAG TOOL HANDLERS
+    // ========================================================================
+
+    async fn handle_search_tags_tool(&self, args: Value) -> McpResult<CallToolResult> {
+        let query: String = args
+            .get("query")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| McpError::invalid_parameter("query", "Missing 'query' parameter"))?
+            .to_string();
+
+        let include_similar = args
+            .get("include_similar")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(true);
+
+        let min_similarity = args
+            .get("min_similarity")
+            .and_then(|v| v.as_f64())
+            .unwrap_or(0.7) as f32;
+
+        let tags = if include_similar {
+            self.db
+                .find_similar_tags(&query, min_similarity)
+                .await
+                .map_err(|e| McpError::database_operation_failed("search_tags", e))?
+                .into_iter()
+                .map(|tm| tm.tag)
+                .collect()
+        } else {
+            self.db
+                .search_tags(&query)
+                .await
+                .map_err(|e| McpError::database_operation_failed("search_tags", e))?
+        };
+
+        Ok(CallToolResult {
+            content: vec![Content::Text {
+                text: serde_json::to_string_pretty(&tags)
+                    .map_err(|e| McpError::serialization_failed("tags", e))?,
+            }],
+            is_error: false,
+        })
+    }
+
+    async fn handle_get_tag_suggestions(&self, args: Value) -> McpResult<CallToolResult> {
+        let title: String = args
+            .get("title")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| McpError::invalid_parameter("title", "Missing 'title' parameter"))?
+            .to_string();
+
+        use things3_core::database::tag_utils::normalize_tag_title;
+        let normalized = normalize_tag_title(&title);
+
+        // Check for exact match
+        let exact_match = self
+            .db
+            .find_tag_by_normalized_title(&normalized)
+            .await
+            .map_err(|e| McpError::database_operation_failed("get_tag_suggestions", e))?;
+
+        // Find similar tags
+        let similar_tags = self
+            .db
+            .find_similar_tags(&normalized, 0.7)
+            .await
+            .map_err(|e| McpError::database_operation_failed("get_tag_suggestions", e))?;
+
+        let recommendation = if exact_match.is_some() {
+            "use_existing"
+        } else if !similar_tags.is_empty() {
+            "consider_similar"
+        } else {
+            "create_new"
+        };
+
+        let response = serde_json::json!({
+            "exact_match": exact_match,
+            "similar_tags": similar_tags,
+            "recommendation": recommendation
+        });
+
+        Ok(CallToolResult {
+            content: vec![Content::Text {
+                text: serde_json::to_string_pretty(&response)
+                    .map_err(|e| McpError::serialization_failed("tag_suggestions", e))?,
+            }],
+            is_error: false,
+        })
+    }
+
+    async fn handle_get_popular_tags(&self, args: Value) -> McpResult<CallToolResult> {
+        let limit = args.get("limit").and_then(|v| v.as_u64()).unwrap_or(20) as usize;
+
+        let tags = self
+            .db
+            .get_popular_tags(limit)
+            .await
+            .map_err(|e| McpError::database_operation_failed("get_popular_tags", e))?;
+
+        Ok(CallToolResult {
+            content: vec![Content::Text {
+                text: serde_json::to_string_pretty(&tags)
+                    .map_err(|e| McpError::serialization_failed("popular_tags", e))?,
+            }],
+            is_error: false,
+        })
+    }
+
+    async fn handle_get_recent_tags(&self, args: Value) -> McpResult<CallToolResult> {
+        let limit = args.get("limit").and_then(|v| v.as_u64()).unwrap_or(20) as usize;
+
+        let tags = self
+            .db
+            .get_recent_tags(limit)
+            .await
+            .map_err(|e| McpError::database_operation_failed("get_recent_tags", e))?;
+
+        Ok(CallToolResult {
+            content: vec![Content::Text {
+                text: serde_json::to_string_pretty(&tags)
+                    .map_err(|e| McpError::serialization_failed("recent_tags", e))?,
+            }],
+            is_error: false,
+        })
+    }
+
+    async fn handle_create_tag(&self, args: Value) -> McpResult<CallToolResult> {
+        let title: String = args
+            .get("title")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| McpError::invalid_parameter("title", "Missing 'title' parameter"))?
+            .to_string();
+
+        let shortcut: Option<String> = args
+            .get("shortcut")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string());
+
+        let parent_uuid: Option<Uuid> = args
+            .get("parent_uuid")
+            .and_then(|v| v.as_str())
+            .and_then(|s| Uuid::parse_str(s).ok());
+
+        let force = args.get("force").and_then(|v| v.as_bool()).unwrap_or(false);
+
+        let request = things3_core::models::CreateTagRequest {
+            title,
+            shortcut,
+            parent_uuid,
+        };
+
+        let result = if force {
+            let uuid = self
+                .db
+                .create_tag_force(request)
+                .await
+                .map_err(|e| McpError::database_operation_failed("create_tag", e))?;
+            serde_json::json!({
+                "status": "created",
+                "uuid": uuid,
+                "message": "Tag created successfully (duplicate check skipped)"
+            })
+        } else {
+            match self
+                .db
+                .create_tag_smart(request)
+                .await
+                .map_err(|e| McpError::database_operation_failed("create_tag", e))?
+            {
+                things3_core::models::TagCreationResult::Created { uuid, .. } => {
+                    serde_json::json!({
+                        "status": "created",
+                        "uuid": uuid,
+                        "message": "Tag created successfully"
+                    })
+                }
+                things3_core::models::TagCreationResult::Existing { tag, .. } => {
+                    serde_json::json!({
+                        "status": "existing",
+                        "uuid": tag.uuid,
+                        "tag": tag,
+                        "message": "Tag already exists"
+                    })
+                }
+                things3_core::models::TagCreationResult::SimilarFound {
+                    similar_tags,
+                    requested_title,
+                } => {
+                    serde_json::json!({
+                        "status": "similar_found",
+                        "similar_tags": similar_tags,
+                        "requested_title": requested_title,
+                        "message": "Similar tags found. Use force=true to create anyway."
+                    })
+                }
+            }
+        };
+
+        Ok(CallToolResult {
+            content: vec![Content::Text {
+                text: serde_json::to_string_pretty(&result)
+                    .map_err(|e| McpError::serialization_failed("create_tag_response", e))?,
+            }],
+            is_error: false,
+        })
+    }
+
+    async fn handle_update_tag(&self, args: Value) -> McpResult<CallToolResult> {
+        let uuid: Uuid = args
+            .get("uuid")
+            .and_then(|v| v.as_str())
+            .and_then(|s| Uuid::parse_str(s).ok())
+            .ok_or_else(|| {
+                McpError::invalid_parameter("uuid", "Missing or invalid 'uuid' parameter")
+            })?;
+
+        let title: Option<String> = args
+            .get("title")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string());
+
+        let shortcut: Option<String> = args
+            .get("shortcut")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string());
+
+        let parent_uuid: Option<Uuid> = args
+            .get("parent_uuid")
+            .and_then(|v| v.as_str())
+            .and_then(|s| Uuid::parse_str(s).ok());
+
+        let request = things3_core::models::UpdateTagRequest {
+            uuid,
+            title,
+            shortcut,
+            parent_uuid,
+        };
+
+        self.db
+            .update_tag(request)
+            .await
+            .map_err(|e| McpError::database_operation_failed("update_tag", e))?;
+
+        let response = serde_json::json!({
+            "message": "Tag updated successfully",
+            "uuid": uuid
+        });
+
+        Ok(CallToolResult {
+            content: vec![Content::Text {
+                text: serde_json::to_string_pretty(&response)
+                    .map_err(|e| McpError::serialization_failed("update_tag_response", e))?,
+            }],
+            is_error: false,
+        })
+    }
+
+    async fn handle_delete_tag(&self, args: Value) -> McpResult<CallToolResult> {
+        let uuid: Uuid = args
+            .get("uuid")
+            .and_then(|v| v.as_str())
+            .and_then(|s| Uuid::parse_str(s).ok())
+            .ok_or_else(|| {
+                McpError::invalid_parameter("uuid", "Missing or invalid 'uuid' parameter")
+            })?;
+
+        let remove_from_tasks = args
+            .get("remove_from_tasks")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
+
+        self.db
+            .delete_tag(&uuid, remove_from_tasks)
+            .await
+            .map_err(|e| McpError::database_operation_failed("delete_tag", e))?;
+
+        let response = serde_json::json!({
+            "message": "Tag deleted successfully",
+            "uuid": uuid
+        });
+
+        Ok(CallToolResult {
+            content: vec![Content::Text {
+                text: serde_json::to_string_pretty(&response)
+                    .map_err(|e| McpError::serialization_failed("delete_tag_response", e))?,
+            }],
+            is_error: false,
+        })
+    }
+
+    async fn handle_merge_tags(&self, args: Value) -> McpResult<CallToolResult> {
+        let source_uuid: Uuid = args
+            .get("source_uuid")
+            .and_then(|v| v.as_str())
+            .and_then(|s| Uuid::parse_str(s).ok())
+            .ok_or_else(|| {
+                McpError::invalid_parameter(
+                    "source_uuid",
+                    "Missing or invalid 'source_uuid' parameter",
+                )
+            })?;
+
+        let target_uuid: Uuid = args
+            .get("target_uuid")
+            .and_then(|v| v.as_str())
+            .and_then(|s| Uuid::parse_str(s).ok())
+            .ok_or_else(|| {
+                McpError::invalid_parameter(
+                    "target_uuid",
+                    "Missing or invalid 'target_uuid' parameter",
+                )
+            })?;
+
+        self.db
+            .merge_tags(&source_uuid, &target_uuid)
+            .await
+            .map_err(|e| McpError::database_operation_failed("merge_tags", e))?;
+
+        let response = serde_json::json!({
+            "message": "Tags merged successfully",
+            "source_uuid": source_uuid,
+            "target_uuid": target_uuid
+        });
+
+        Ok(CallToolResult {
+            content: vec![Content::Text {
+                text: serde_json::to_string_pretty(&response)
+                    .map_err(|e| McpError::serialization_failed("merge_tags_response", e))?,
+            }],
+            is_error: false,
+        })
+    }
+
+    async fn handle_add_tag_to_task(&self, args: Value) -> McpResult<CallToolResult> {
+        let task_uuid: Uuid = args
+            .get("task_uuid")
+            .and_then(|v| v.as_str())
+            .and_then(|s| Uuid::parse_str(s).ok())
+            .ok_or_else(|| {
+                McpError::invalid_parameter("task_uuid", "Missing or invalid 'task_uuid' parameter")
+            })?;
+
+        let tag_title: String = args
+            .get("tag_title")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| {
+                McpError::invalid_parameter("tag_title", "Missing 'tag_title' parameter")
+            })?
+            .to_string();
+
+        let result = self
+            .db
+            .add_tag_to_task(&task_uuid, &tag_title)
+            .await
+            .map_err(|e| McpError::database_operation_failed("add_tag_to_task", e))?;
+
+        let response = match result {
+            things3_core::models::TagAssignmentResult::Assigned { tag_uuid } => {
+                serde_json::json!({
+                    "status": "assigned",
+                    "tag_uuid": tag_uuid,
+                    "message": "Tag added to task successfully"
+                })
+            }
+            things3_core::models::TagAssignmentResult::Suggestions { similar_tags } => {
+                serde_json::json!({
+                    "status": "suggestions",
+                    "similar_tags": similar_tags,
+                    "message": "Similar tags found. Please confirm or use a different tag."
+                })
+            }
+        };
+
+        Ok(CallToolResult {
+            content: vec![Content::Text {
+                text: serde_json::to_string_pretty(&response)
+                    .map_err(|e| McpError::serialization_failed("add_tag_to_task_response", e))?,
+            }],
+            is_error: false,
+        })
+    }
+
+    async fn handle_remove_tag_from_task(&self, args: Value) -> McpResult<CallToolResult> {
+        let task_uuid: Uuid = args
+            .get("task_uuid")
+            .and_then(|v| v.as_str())
+            .and_then(|s| Uuid::parse_str(s).ok())
+            .ok_or_else(|| {
+                McpError::invalid_parameter("task_uuid", "Missing or invalid 'task_uuid' parameter")
+            })?;
+
+        let tag_title: String = args
+            .get("tag_title")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| {
+                McpError::invalid_parameter("tag_title", "Missing 'tag_title' parameter")
+            })?
+            .to_string();
+
+        self.db
+            .remove_tag_from_task(&task_uuid, &tag_title)
+            .await
+            .map_err(|e| McpError::database_operation_failed("remove_tag_from_task", e))?;
+
+        let response = serde_json::json!({
+            "message": "Tag removed from task successfully",
+            "task_uuid": task_uuid,
+            "tag_title": tag_title
+        });
+
+        Ok(CallToolResult {
+            content: vec![Content::Text {
+                text: serde_json::to_string_pretty(&response).map_err(|e| {
+                    McpError::serialization_failed("remove_tag_from_task_response", e)
+                })?,
+            }],
+            is_error: false,
+        })
+    }
+
+    async fn handle_set_task_tags(&self, args: Value) -> McpResult<CallToolResult> {
+        let task_uuid: Uuid = args
+            .get("task_uuid")
+            .and_then(|v| v.as_str())
+            .and_then(|s| Uuid::parse_str(s).ok())
+            .ok_or_else(|| {
+                McpError::invalid_parameter("task_uuid", "Missing or invalid 'task_uuid' parameter")
+            })?;
+
+        let tag_titles: Vec<String> = args
+            .get("tag_titles")
+            .and_then(|v| v.as_array())
+            .ok_or_else(|| {
+                McpError::invalid_parameter("tag_titles", "Missing 'tag_titles' parameter")
+            })?
+            .iter()
+            .filter_map(|v| v.as_str().map(|s| s.to_string()))
+            .collect();
+
+        let suggestions = self
+            .db
+            .set_task_tags(&task_uuid, tag_titles.clone())
+            .await
+            .map_err(|e| McpError::database_operation_failed("set_task_tags", e))?;
+
+        let response = serde_json::json!({
+            "message": "Task tags updated successfully",
+            "task_uuid": task_uuid,
+            "tags": tag_titles,
+            "suggestions": suggestions
+        });
+
+        Ok(CallToolResult {
+            content: vec![Content::Text {
+                text: serde_json::to_string_pretty(&response)
+                    .map_err(|e| McpError::serialization_failed("set_task_tags_response", e))?,
+            }],
+            is_error: false,
+        })
+    }
+
+    async fn handle_get_tag_statistics(&self, args: Value) -> McpResult<CallToolResult> {
+        let uuid: Uuid = args
+            .get("uuid")
+            .and_then(|v| v.as_str())
+            .and_then(|s| Uuid::parse_str(s).ok())
+            .ok_or_else(|| {
+                McpError::invalid_parameter("uuid", "Missing or invalid 'uuid' parameter")
+            })?;
+
+        let stats = self
+            .db
+            .get_tag_statistics(&uuid)
+            .await
+            .map_err(|e| McpError::database_operation_failed("get_tag_statistics", e))?;
+
+        Ok(CallToolResult {
+            content: vec![Content::Text {
+                text: serde_json::to_string_pretty(&stats)
+                    .map_err(|e| McpError::serialization_failed("tag_statistics", e))?,
+            }],
+            is_error: false,
+        })
+    }
+
+    async fn handle_find_duplicate_tags(&self, args: Value) -> McpResult<CallToolResult> {
+        let min_similarity = args
+            .get("min_similarity")
+            .and_then(|v| v.as_f64())
+            .unwrap_or(0.85) as f32;
+
+        let duplicates = self
+            .db
+            .find_duplicate_tags(min_similarity)
+            .await
+            .map_err(|e| McpError::database_operation_failed("find_duplicate_tags", e))?;
+
+        Ok(CallToolResult {
+            content: vec![Content::Text {
+                text: serde_json::to_string_pretty(&duplicates)
+                    .map_err(|e| McpError::serialization_failed("duplicate_tags", e))?,
+            }],
+            is_error: false,
+        })
+    }
+
+    async fn handle_get_tag_completions(&self, args: Value) -> McpResult<CallToolResult> {
+        let partial_input: String = args
+            .get("partial_input")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| {
+                McpError::invalid_parameter("partial_input", "Missing 'partial_input' parameter")
+            })?
+            .to_string();
+
+        let limit = args.get("limit").and_then(|v| v.as_u64()).unwrap_or(10) as usize;
+
+        let completions = self
+            .db
+            .get_tag_completions(&partial_input, limit)
+            .await
+            .map_err(|e| McpError::database_operation_failed("get_tag_completions", e))?;
+
+        Ok(CallToolResult {
+            content: vec![Content::Text {
+                text: serde_json::to_string_pretty(&completions)
+                    .map_err(|e| McpError::serialization_failed("tag_completions", e))?,
             }],
             is_error: false,
         })

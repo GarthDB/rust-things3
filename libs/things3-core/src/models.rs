@@ -125,17 +125,158 @@ pub struct Area {
     pub projects: Vec<Project>,
 }
 
-/// Tag entity
+/// Tag entity (enhanced with duplicate prevention support)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Tag {
     /// Unique identifier
     pub uuid: Uuid,
+    /// Tag title (display form, preserves case)
+    pub title: String,
+    /// Keyboard shortcut
+    pub shortcut: Option<String>,
+    /// Parent tag UUID (for nested tags)
+    pub parent_uuid: Option<Uuid>,
+    /// Creation timestamp
+    pub created: DateTime<Utc>,
+    /// Last modification timestamp
+    pub modified: DateTime<Utc>,
+    /// How many tasks use this tag
+    pub usage_count: u32,
+    /// Last time this tag was used
+    pub last_used: Option<DateTime<Utc>>,
+}
+
+/// Tag creation request
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CreateTagRequest {
+    /// Tag title (required)
+    pub title: String,
+    /// Keyboard shortcut
+    pub shortcut: Option<String>,
+    /// Parent tag UUID (for nested tags)
+    pub parent_uuid: Option<Uuid>,
+}
+
+/// Tag update request
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UpdateTagRequest {
+    /// Tag UUID
+    pub uuid: Uuid,
+    /// New title
+    pub title: Option<String>,
+    /// New shortcut
+    pub shortcut: Option<String>,
+    /// New parent UUID
+    pub parent_uuid: Option<Uuid>,
+}
+
+/// Tag match type classification
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum TagMatchType {
+    /// Exact match (case-insensitive)
+    #[serde(rename = "exact")]
+    Exact,
+    /// Same text, different case
+    #[serde(rename = "case_mismatch")]
+    CaseMismatch,
+    /// Fuzzy match (high similarity via Levenshtein distance)
+    #[serde(rename = "similar")]
+    Similar,
+    /// Substring/contains match
+    #[serde(rename = "partial")]
+    PartialMatch,
+}
+
+/// Tag search result with similarity scoring
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TagMatch {
+    /// The matched tag
+    pub tag: Tag,
+    /// Similarity score (0.0 to 1.0, higher is better)
+    pub similarity_score: f32,
+    /// Type of match
+    pub match_type: TagMatchType,
+}
+
+/// Result of tag creation with duplicate checking
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum TagCreationResult {
+    /// New tag was created
+    #[serde(rename = "created")]
+    Created {
+        /// UUID of created tag
+        uuid: Uuid,
+        /// Always true for this variant
+        is_new: bool,
+    },
+    /// Existing exact match found
+    #[serde(rename = "existing")]
+    Existing {
+        /// The existing tag
+        tag: Tag,
+        /// Always false for this variant
+        is_new: bool,
+    },
+    /// Similar tags found (user decision needed)
+    #[serde(rename = "similar_found")]
+    SimilarFound {
+        /// Tags similar to requested title
+        similar_tags: Vec<TagMatch>,
+        /// The title user requested
+        requested_title: String,
+    },
+}
+
+/// Result of tag assignment to task
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum TagAssignmentResult {
+    /// Tag assigned successfully
+    #[serde(rename = "assigned")]
+    Assigned {
+        /// UUID of the tag that was assigned
+        tag_uuid: Uuid,
+    },
+    /// Similar tags found (user decision needed)
+    #[serde(rename = "suggestions")]
+    Suggestions {
+        /// Suggested alternative tags
+        similar_tags: Vec<TagMatch>,
+    },
+}
+
+/// Tag auto-completion suggestion
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TagCompletion {
+    /// The tag
+    pub tag: Tag,
+    /// Priority score (based on usage, recency, match quality)
+    pub score: f32,
+}
+
+/// Tag statistics for analytics
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TagStatistics {
+    /// Tag UUID
+    pub uuid: Uuid,
     /// Tag title
     pub title: String,
-    /// Usage count
+    /// Total usage count
     pub usage_count: u32,
-    /// Associated tasks
-    pub tasks: Vec<Uuid>,
+    /// Task UUIDs using this tag
+    pub task_uuids: Vec<Uuid>,
+    /// Related tags (frequently used together)
+    pub related_tags: Vec<(String, u32)>, // (tag_title, co_occurrence_count)
+}
+
+/// Pair of similar tags (for duplicate detection)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TagPair {
+    /// First tag
+    pub tag1: Tag,
+    /// Second tag
+    pub tag2: Tag,
+    /// Similarity score between them
+    pub similarity: f32,
 }
 
 /// Task creation request
@@ -522,31 +663,42 @@ mod tests {
     #[test]
     fn test_tag_creation() {
         let uuid = Uuid::new_v4();
-        let task_uuid = Uuid::new_v4();
+        let parent_uuid = Uuid::new_v4();
+        let now = Utc::now();
 
         let tag = Tag {
             uuid,
             title: "work".to_string(),
+            shortcut: Some("w".to_string()),
+            parent_uuid: Some(parent_uuid),
+            created: now,
+            modified: now,
             usage_count: 5,
-            tasks: vec![task_uuid],
+            last_used: Some(now),
         };
 
         assert_eq!(tag.uuid, uuid);
         assert_eq!(tag.title, "work");
+        assert_eq!(tag.shortcut, Some("w".to_string()));
+        assert_eq!(tag.parent_uuid, Some(parent_uuid));
         assert_eq!(tag.usage_count, 5);
-        assert_eq!(tag.tasks.len(), 1);
-        assert_eq!(tag.tasks[0], task_uuid);
+        assert_eq!(tag.last_used, Some(now));
     }
 
     #[test]
     fn test_tag_serialization() {
         let uuid = Uuid::new_v4();
+        let now = Utc::now();
 
         let tag = Tag {
             uuid,
             title: "test".to_string(),
+            shortcut: None,
+            parent_uuid: None,
+            created: now,
+            modified: now,
             usage_count: 0,
-            tasks: vec![],
+            last_used: None,
         };
 
         let serialized = serde_json::to_string(&tag).unwrap();

@@ -3344,6 +3344,7 @@ dependencies = [
  "serde_json",
  "serde_yaml",
  "sqlx",
+ "strsim",
  "sysinfo",
  "tempfile",
  "thiserror 1.0.69",
