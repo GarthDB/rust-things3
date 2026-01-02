@@ -232,6 +232,63 @@ The MCP (Model Context Protocol) server provides 17 tools for AI/LLM integration
 }
 ```
 
+## Documentation
+
+### Core Documentation
+
+- **[Architecture](docs/ARCHITECTURE.md)** - System design and component overview
+- **[MCP Integration](docs/MCP_INTEGRATION.md)** - Complete MCP server guide
+- **[Database Schema](docs/DATABASE_SCHEMA.md)** - Things 3 database structure
+- **[Development Guide](docs/DEVELOPMENT.md)** - Setup and development workflow
+- **[Coverage Analysis](docs/COVERAGE_ANALYSIS.md)** - Test coverage report
+
+### Examples
+
+See the [`examples/`](examples/) directory for practical usage examples:
+- `basic_usage.rs` - Basic database operations
+- `search_tasks.rs` - Task search functionality
+- `export_data.rs` - Data export in multiple formats
+
+Run examples with:
+```bash
+cargo run --example basic_usage
+```
+
+### API Documentation
+
+Generate and view API documentation:
+```bash
+cargo doc --workspace --no-deps --open
+```
+
+## Testing
+
+### Test Coverage
+
+- **Total Tests**: 554 tests
+- **Coverage**: ~78% (target: 85%+)
+- **Test Categories**:
+  - Database operations (Phase 1)
+  - MCP I/O layer (Phase 2)
+  - Middleware chain (Phase 3)
+  - Observability system (Phase 4)
+
+### Running Tests
+
+```bash
+# All tests
+cargo test --workspace
+
+# Specific package
+cargo test --package things3-core
+
+# With coverage
+cargo llvm-cov --workspace --all-features --html
+open target/llvm-cov/html/index.html
+```
+
+See [Development Guide](docs/DEVELOPMENT.md) for more testing details.
+
 ## Development
 
 ### Prerequisites
@@ -239,6 +296,7 @@ The MCP (Model Context Protocol) server provides 17 tools for AI/LLM integration
 - Rust 1.70+
 - Moon (for workspace management)
 - Things 3 (for testing)
+- cargo-llvm-cov (for coverage)
 
 ### Setup
 
@@ -256,6 +314,24 @@ moon run :test-all
 # Run development pipeline
 moon run :dev-pipeline
 ```
+
+### Quick Commands
+
+```bash
+# Format code
+cargo fmt --all
+
+# Lint code
+cargo clippy --workspace -- -D warnings
+
+# Run coverage
+cargo llvm-cov --workspace --all-features --html
+
+# Generate docs
+cargo doc --workspace --no-deps
+```
+
+See [Development Guide](docs/DEVELOPMENT.md) for comprehensive development information.
 
 ### Project Structure
 
@@ -458,6 +534,57 @@ let truncated = truncate_string("Very long string", 10);
 println!("Truncated: {}", truncated);
 ```
 
+## Architecture
+
+The project is organized as a Moon-managed Rust workspace:
+
+```
+rust-things3/
+├── apps/things3-cli/      # CLI application with MCP server
+├── libs/things3-core/     # Core database and business logic
+├── libs/things3-common/   # Shared utilities
+├── examples/              # Usage examples
+├── docs/                  # Documentation
+└── tests/                 # Integration tests
+```
+
+Key features:
+- **Async-first**: Built on Tokio for concurrent operations
+- **Type-safe**: SQLx for compile-time SQL verification
+- **MCP Protocol**: Industry-standard AI agent communication
+- **Middleware**: Extensible request/response processing
+- **Observability**: Built-in metrics, logging, and tracing
+
+See [Architecture Documentation](docs/ARCHITECTURE.md) for detailed system design.
+
+## Troubleshooting
+
+### Database Not Found
+
+```bash
+# Find your Things 3 database
+find ~/Library/Group\ Containers -name "main.sqlite" 2>/dev/null
+
+# Set custom path
+export THINGS_DB_PATH="/path/to/main.sqlite"
+```
+
+### Permission Issues
+
+Ensure Things 3 is closed when running the CLI:
+```bash
+killall Things3
+```
+
+### Test Failures
+
+Run tests single-threaded if experiencing database lock issues:
+```bash
+cargo test -- --test-threads=1
+```
+
+See [Development Guide](docs/DEVELOPMENT.md) for more troubleshooting tips.
+
 ## Contributing
 
 We welcome contributions! Please see our [Contributing Guidelines](CONTRIBUTING.md) for detailed information on:
@@ -473,11 +600,11 @@ We welcome contributions! Please see our [Contributing Guidelines](CONTRIBUTING.
 1. Fork the repository
 2. Create a feature branch
 3. Make your changes
-4. Add tests
+4. Add tests (maintain 85%+ coverage)
 5. Run the development pipeline: `moon run :dev-pipeline`
 6. Submit a pull request
 
-For more details, see [CONTRIBUTING.md](CONTRIBUTING.md).
+For more details, see [CONTRIBUTING.md](CONTRIBUTING.md) and [Development Guide](docs/DEVELOPMENT.md).
 
 ## License
 
