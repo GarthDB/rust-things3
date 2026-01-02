@@ -93,7 +93,7 @@ async fn test_complete_task_tool_response_format() {
     assert!(response.is_object(), "Response should be a JSON object");
     assert!(response.get("message").is_some());
     assert!(response.get("uuid").is_some());
-    assert_eq!(response["message"].as_str().unwrap().len() > 0, true);
+    assert!(!response["message"].as_str().unwrap().is_empty());
 }
 
 #[tokio::test]
