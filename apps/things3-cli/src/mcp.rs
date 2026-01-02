@@ -1001,25 +1001,57 @@ impl ThingsMcpServer {
         vec![
             Tool {
                 name: "create_task".to_string(),
-                description: "Create a new task".to_string(),
+                description: "Create a new task in Things 3".to_string(),
                 input_schema: serde_json::json!({
                     "type": "object",
                     "properties": {
                         "title": {
                             "type": "string",
-                            "description": "Task title"
+                            "description": "Task title (required)"
+                        },
+                        "task_type": {
+                            "type": "string",
+                            "enum": ["to-do", "project", "heading"],
+                            "description": "Task type (default: to-do)"
                         },
                         "notes": {
                             "type": "string",
-                            "description": "Optional task notes"
+                            "description": "Task notes"
+                        },
+                        "start_date": {
+                            "type": "string",
+                            "format": "date",
+                            "description": "Start date (YYYY-MM-DD)"
+                        },
+                        "deadline": {
+                            "type": "string",
+                            "format": "date",
+                            "description": "Deadline (YYYY-MM-DD)"
                         },
                         "project_uuid": {
                             "type": "string",
-                            "description": "Optional project UUID"
+                            "format": "uuid",
+                            "description": "Project UUID"
                         },
                         "area_uuid": {
                             "type": "string",
-                            "description": "Optional area UUID"
+                            "format": "uuid",
+                            "description": "Area UUID"
+                        },
+                        "parent_uuid": {
+                            "type": "string",
+                            "format": "uuid",
+                            "description": "Parent task UUID (for subtasks)"
+                        },
+                        "tags": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                            "description": "Tag names"
+                        },
+                        "status": {
+                            "type": "string",
+                            "enum": ["incomplete", "completed", "canceled", "trashed"],
+                            "description": "Initial status (default: incomplete)"
                         }
                     },
                     "required": ["title"]
@@ -1027,13 +1059,15 @@ impl ThingsMcpServer {
             },
             Tool {
                 name: "update_task".to_string(),
-                description: "Update an existing task".to_string(),
+                description: "Update an existing task (only provided fields will be updated)"
+                    .to_string(),
                 input_schema: serde_json::json!({
                     "type": "object",
                     "properties": {
                         "uuid": {
                             "type": "string",
-                            "description": "Task UUID"
+                            "format": "uuid",
+                            "description": "Task UUID (required)"
                         },
                         "title": {
                             "type": "string",
@@ -1043,10 +1077,35 @@ impl ThingsMcpServer {
                             "type": "string",
                             "description": "New task notes"
                         },
+                        "start_date": {
+                            "type": "string",
+                            "format": "date",
+                            "description": "New start date (YYYY-MM-DD)"
+                        },
+                        "deadline": {
+                            "type": "string",
+                            "format": "date",
+                            "description": "New deadline (YYYY-MM-DD)"
+                        },
                         "status": {
                             "type": "string",
-                            "description": "New task status",
-                            "enum": ["incomplete", "completed", "canceled", "trashed"]
+                            "enum": ["incomplete", "completed", "canceled", "trashed"],
+                            "description": "New task status"
+                        },
+                        "project_uuid": {
+                            "type": "string",
+                            "format": "uuid",
+                            "description": "New project UUID"
+                        },
+                        "area_uuid": {
+                            "type": "string",
+                            "format": "uuid",
+                            "description": "New area UUID"
+                        },
+                        "tags": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                            "description": "New tag names"
                         }
                     },
                     "required": ["uuid"]
@@ -1208,8 +1267,8 @@ impl ThingsMcpServer {
             "get_projects" => self.handle_get_projects(arguments).await,
             "get_areas" => self.handle_get_areas(arguments).await,
             "search_tasks" => self.handle_search_tasks(arguments).await,
-            "create_task" => Self::handle_create_task(&arguments),
-            "update_task" => Self::handle_update_task(&arguments),
+            "create_task" => self.handle_create_task(arguments).await,
+            "update_task" => self.handle_update_task(arguments).await,
             "get_productivity_metrics" => self.handle_get_productivity_metrics(arguments).await,
             "export_data" => self.handle_export_data(arguments).await,
             "bulk_create_tasks" => Self::handle_bulk_create_tasks(&arguments),
@@ -1335,18 +1394,27 @@ impl ThingsMcpServer {
         })
     }
 
-    fn handle_create_task(args: &Value) -> McpResult<CallToolResult> {
-        // Note: This is a placeholder - actual task creation would need to be implemented
-        // in the things-core library
-        let title = args
-            .get("title")
-            .and_then(|v| v.as_str())
-            .ok_or_else(|| McpError::missing_parameter("title"))?;
+    async fn handle_create_task(&self, args: Value) -> McpResult<CallToolResult> {
+        // Parse request from JSON
+        let request: things3_core::CreateTaskRequest =
+            serde_json::from_value(args).map_err(|e| {
+                McpError::invalid_parameter(
+                    "request",
+                    format!("Failed to parse create task request: {e}"),
+                )
+            })?;
 
+        // Create task
+        let uuid = self
+            .db
+            .create_task(request)
+            .await
+            .map_err(|e| McpError::database_operation_failed("create_task", e))?;
+
+        // Return created task UUID
         let response = serde_json::json!({
-            "message": "Task creation not yet implemented",
-            "title": title,
-            "status": "placeholder"
+            "uuid": uuid,
+            "message": "Task created successfully"
         });
 
         Ok(CallToolResult {
@@ -1358,18 +1426,25 @@ impl ThingsMcpServer {
         })
     }
 
-    fn handle_update_task(args: &Value) -> McpResult<CallToolResult> {
-        // Note: This is a placeholder - actual task updating would need to be implemented
-        // in the things-core library
-        let uuid = args
-            .get("uuid")
-            .and_then(|v| v.as_str())
-            .ok_or_else(|| McpError::missing_parameter("uuid"))?;
+    async fn handle_update_task(&self, args: Value) -> McpResult<CallToolResult> {
+        // Parse request from JSON
+        let request: things3_core::UpdateTaskRequest =
+            serde_json::from_value(args).map_err(|e| {
+                McpError::invalid_parameter(
+                    "request",
+                    format!("Failed to parse update task request: {e}"),
+                )
+            })?;
 
+        // Update task
+        self.db
+            .update_task(request)
+            .await
+            .map_err(|e| McpError::database_operation_failed("update_task", e))?;
+
+        // Return success
         let response = serde_json::json!({
-            "message": "Task updating not yet implemented",
-            "uuid": uuid,
-            "status": "placeholder"
+            "message": "Task updated successfully"
         });
 
         Ok(CallToolResult {

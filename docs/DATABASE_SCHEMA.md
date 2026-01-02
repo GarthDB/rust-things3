@@ -300,6 +300,67 @@ SQLite uses INTEGER for booleans:
 **rt1_recurrenceRule**: Recurrence rule data
 **experimental**: Experimental features data
 
+## Write Operations
+
+### Task Creation
+
+When creating new tasks, the following fields are required:
+
+**Required Fields**:
+- `uuid` - Unique identifier (generated automatically as UUID v4)
+- `title` - Task title (string, can be empty but must be present)
+- `creationDate` - Creation timestamp (REAL, seconds since Unix epoch)
+- `userModificationDate` - Modification timestamp (REAL, seconds since Unix epoch)
+- `type` - Task type (INTEGER: 0 = to-do, 1 = project, 2 = heading)
+- `status` - Task status (INTEGER: 0 = incomplete, 1 = completed, 2 = canceled)
+- `trashed` - Whether task is trashed (INTEGER: 0 = not trashed, 1 = trashed)
+- `start` - Start type (INTEGER: 0 = anytime, 1 = someday)
+- `leavesTombstone` - Whether to leave tombstone on deletion (INTEGER: 0 or 1)
+
+**Optional Fields**:
+- `notes` - Task notes (TEXT)
+- `startDate` - Start date (INTEGER, seconds since 2001-01-01)
+- `deadline` - Deadline date (INTEGER, seconds since 2001-01-01)
+- `project` - Parent project UUID (TEXT, must reference existing project)
+- `area` - Parent area UUID (TEXT, must reference existing area)
+- `heading` - Parent task UUID for subtasks (TEXT, must reference existing task)
+- `cachedTags` - Serialized tags (BLOB, JSON format for compatibility)
+
+### Task Updates
+
+Task updates support partial modifications - only provided fields are updated.
+
+**Always Updated**:
+- `userModificationDate` - Set to current timestamp
+
+**Validation**:
+- Task UUID must exist in database
+- Referenced projects must exist and have `type = 1`
+- Referenced areas must exist in `TMArea` table
+- Referenced parent tasks must exist in `TMTask` table
+
+### Date Format for Write Operations
+
+Dates are stored as INTEGER timestamps representing **seconds since 2001-01-01 00:00:00 UTC**.
+
+**Conversion Formula**:
+```
+things_timestamp = (date - 2001-01-01) * 86400
+```
+
+**Example**:
+- 2025-01-15 → 757,382,400 seconds since 2001-01-01
+
+### Binary Fields
+
+#### cachedTags BLOB
+
+The `cachedTags` field stores serialized tag data. `rust-things3` uses JSON serialization for compatibility:
+
+```json
+["tag1", "tag2", "tag3"]
+```
+
 ## Query Patterns
 
 ### Get Inbox Tasks

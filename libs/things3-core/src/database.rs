@@ -1,6 +1,6 @@
 use crate::{
     error::{Result as ThingsResult, ThingsError},
-    models::{Area, Project, Task, TaskStatus, TaskType},
+    models::{Area, CreateTaskRequest, Project, Task, TaskStatus, TaskType, UpdateTaskRequest},
 };
 use chrono::{DateTime, NaiveDate, Utc};
 use serde::{Deserialize, Serialize};
@@ -43,6 +43,38 @@ pub(crate) fn things_date_to_naive_date(seconds_since_2001: i64) -> Option<chron
     let date_time = base_date + chrono::Duration::seconds(seconds_since_2001);
 
     Some(date_time.date_naive())
+}
+
+/// Convert NaiveDate to Things 3 timestamp (seconds since 2001-01-01)
+pub fn naive_date_to_things_timestamp(date: NaiveDate) -> i64 {
+    use chrono::{NaiveTime, TimeZone, Utc};
+
+    // Base date: 2001-01-01 00:00:00 UTC
+    let base_date = Utc.with_ymd_and_hms(2001, 1, 1, 0, 0, 0).single().unwrap();
+
+    // Convert NaiveDate to DateTime at midnight UTC
+    let date_time = date
+        .and_time(NaiveTime::from_hms_opt(0, 0, 0).unwrap())
+        .and_local_timezone(Utc)
+        .single()
+        .unwrap();
+
+    // Calculate seconds difference
+    date_time.timestamp() - base_date.timestamp()
+}
+
+/// Serialize tags to Things 3 binary format
+/// Note: This is a simplified implementation using JSON
+/// The actual Things 3 binary format is proprietary
+pub fn serialize_tags_to_blob(tags: &[String]) -> ThingsResult<Vec<u8>> {
+    serde_json::to_vec(tags)
+        .map_err(|e| ThingsError::unknown(format!("Failed to serialize tags: {e}")))
+}
+
+/// Deserialize tags from Things 3 binary format
+pub fn deserialize_tags_from_blob(blob: &[u8]) -> ThingsResult<Vec<String>> {
+    serde_json::from_slice(blob)
+        .map_err(|e| ThingsError::unknown(format!("Failed to deserialize tags: {e}")))
 }
 
 /// Convert Things 3 UUID format to standard UUID
@@ -994,6 +1026,257 @@ impl ThingsDatabase {
     #[instrument(skip(self))]
     pub async fn get_areas(&self) -> ThingsResult<Vec<Area>> {
         self.get_all_areas().await
+    }
+
+    /// Create a new task in the database
+    ///
+    /// Validates:
+    /// - Project UUID exists if provided
+    /// - Area UUID exists if provided
+    /// - Parent task UUID exists if provided
+    ///
+    /// Returns the UUID of the created task
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if validation fails or if the database insert fails
+    #[instrument(skip(self))]
+    pub async fn create_task(&self, request: CreateTaskRequest) -> ThingsResult<Uuid> {
+        // Generate UUID for new task
+        let uuid = Uuid::new_v4();
+        let uuid_str = uuid.to_string();
+
+        // Validate referenced entities
+        if let Some(project_uuid) = &request.project_uuid {
+            self.validate_project_exists(project_uuid).await?;
+        }
+
+        if let Some(area_uuid) = &request.area_uuid {
+            self.validate_area_exists(area_uuid).await?;
+        }
+
+        if let Some(parent_uuid) = &request.parent_uuid {
+            self.validate_task_exists(parent_uuid).await?;
+        }
+
+        // Convert dates to Things 3 format (seconds since 2001-01-01)
+        let start_date_ts = request.start_date.map(naive_date_to_things_timestamp);
+        let deadline_ts = request.deadline.map(naive_date_to_things_timestamp);
+
+        // Get current timestamp for creation/modification dates
+        let now = Utc::now().timestamp() as f64;
+
+        // Serialize tags to binary format (if provided)
+        let cached_tags = request
+            .tags
+            .as_ref()
+            .map(|tags| serialize_tags_to_blob(tags))
+            .transpose()?;
+
+        // Insert into TMTask table
+        sqlx::query(
+            r"
+            INSERT INTO TMTask (
+                uuid, title, type, status, notes,
+                startDate, deadline, project, area, heading,
+                cachedTags, creationDate, userModificationDate,
+                trashed, start, leavesTombstone
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ",
+        )
+        .bind(&uuid_str)
+        .bind(&request.title)
+        .bind(request.task_type.unwrap_or(TaskType::Todo) as i32)
+        .bind(request.status.unwrap_or(TaskStatus::Incomplete) as i32)
+        .bind(request.notes.as_ref())
+        .bind(start_date_ts)
+        .bind(deadline_ts)
+        .bind(request.project_uuid.map(|u| u.to_string()))
+        .bind(request.area_uuid.map(|u| u.to_string()))
+        .bind(request.parent_uuid.map(|u| u.to_string()))
+        .bind(cached_tags)
+        .bind(now)
+        .bind(now)
+        .bind(0) // not trashed
+        .bind(0) // start type
+        .bind(0) // leaves tombstone
+        .execute(&self.pool)
+        .await
+        .map_err(|e| ThingsError::unknown(format!("Failed to create task: {e}")))?;
+
+        info!("Created task with UUID: {}", uuid);
+        Ok(uuid)
+    }
+
+    /// Update an existing task
+    ///
+    /// Only updates fields that are provided (Some(_))
+    /// Validates existence of referenced entities
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the task doesn't exist, validation fails, or the database update fails
+    #[instrument(skip(self))]
+    pub async fn update_task(&self, request: UpdateTaskRequest) -> ThingsResult<()> {
+        // Verify task exists
+        self.validate_task_exists(&request.uuid).await?;
+
+        // Validate referenced entities if being updated
+        if let Some(project_uuid) = &request.project_uuid {
+            self.validate_project_exists(project_uuid).await?;
+        }
+
+        if let Some(area_uuid) = &request.area_uuid {
+            self.validate_area_exists(area_uuid).await?;
+        }
+
+        // Build dynamic UPDATE query based on provided fields
+        let mut updates = Vec::new();
+
+        if request.title.is_some() {
+            updates.push("title = ?");
+        }
+
+        if request.notes.is_some() {
+            updates.push("notes = ?");
+        }
+
+        if request.start_date.is_some() {
+            updates.push("startDate = ?");
+        }
+
+        if request.deadline.is_some() {
+            updates.push("deadline = ?");
+        }
+
+        if request.status.is_some() {
+            updates.push("status = ?");
+        }
+
+        if request.project_uuid.is_some() {
+            updates.push("project = ?");
+        }
+
+        if request.area_uuid.is_some() {
+            updates.push("area = ?");
+        }
+
+        if request.tags.is_some() {
+            updates.push("cachedTags = ?");
+        }
+
+        // Always update modification date
+        updates.push("userModificationDate = ?");
+
+        if updates.is_empty() {
+            return Ok(()); // Nothing to update
+        }
+
+        let query = format!("UPDATE TMTask SET {} WHERE uuid = ?", updates.join(", "));
+
+        // Build query with bindings
+        let mut q = sqlx::query(&query);
+
+        if let Some(title) = &request.title {
+            q = q.bind(title);
+        }
+
+        if let Some(notes) = &request.notes {
+            q = q.bind(notes);
+        }
+
+        if let Some(start_date) = request.start_date {
+            q = q.bind(naive_date_to_things_timestamp(start_date));
+        }
+
+        if let Some(deadline) = request.deadline {
+            q = q.bind(naive_date_to_things_timestamp(deadline));
+        }
+
+        if let Some(status) = request.status {
+            q = q.bind(status as i32);
+        }
+
+        if let Some(project_uuid) = request.project_uuid {
+            q = q.bind(project_uuid.to_string());
+        }
+
+        if let Some(area_uuid) = request.area_uuid {
+            q = q.bind(area_uuid.to_string());
+        }
+
+        if let Some(tags) = &request.tags {
+            let cached_tags = serialize_tags_to_blob(tags)?;
+            q = q.bind(cached_tags);
+        }
+
+        // Bind modification date and UUID
+        let now = Utc::now().timestamp() as f64;
+        q = q.bind(now).bind(request.uuid.to_string());
+
+        q.execute(&self.pool)
+            .await
+            .map_err(|e| ThingsError::unknown(format!("Failed to update task: {e}")))?;
+
+        info!("Updated task with UUID: {}", request.uuid);
+        Ok(())
+    }
+
+    /// Validate that a task exists
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the task does not exist or if the database query fails
+    async fn validate_task_exists(&self, uuid: &Uuid) -> ThingsResult<()> {
+        let exists = sqlx::query("SELECT 1 FROM TMTask WHERE uuid = ?")
+            .bind(uuid.to_string())
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(|e| ThingsError::unknown(format!("Failed to validate task: {e}")))?
+            .is_some();
+
+        if !exists {
+            return Err(ThingsError::unknown(format!("Task not found: {uuid}")));
+        }
+        Ok(())
+    }
+
+    /// Validate that a project exists (project is a task with type = 1)
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the project does not exist or if the database query fails
+    async fn validate_project_exists(&self, uuid: &Uuid) -> ThingsResult<()> {
+        let exists = sqlx::query("SELECT 1 FROM TMTask WHERE uuid = ? AND type = 1")
+            .bind(uuid.to_string())
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(|e| ThingsError::unknown(format!("Failed to validate project: {e}")))?
+            .is_some();
+
+        if !exists {
+            return Err(ThingsError::unknown(format!("Project not found: {uuid}")));
+        }
+        Ok(())
+    }
+
+    /// Validate that an area exists
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the area does not exist or if the database query fails
+    async fn validate_area_exists(&self, uuid: &Uuid) -> ThingsResult<()> {
+        let exists = sqlx::query("SELECT 1 FROM TMArea WHERE uuid = ?")
+            .bind(uuid.to_string())
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(|e| ThingsError::unknown(format!("Failed to validate area: {e}")))?
+            .is_some();
+
+        if !exists {
+            return Err(ThingsError::unknown(format!("Area not found: {uuid}")));
+        }
+        Ok(())
     }
 }
 

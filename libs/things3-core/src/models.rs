@@ -125,20 +125,26 @@ pub struct Tag {
 /// Task creation request
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CreateTaskRequest {
-    /// Task title
+    /// Task title (required)
     pub title: String,
+    /// Task type (defaults to Todo)
+    pub task_type: Option<TaskType>,
     /// Optional notes
     pub notes: Option<String>,
     /// Start date
     pub start_date: Option<NaiveDate>,
     /// Deadline
     pub deadline: Option<NaiveDate>,
-    /// Parent project UUID
+    /// Project UUID (validated if provided)
     pub project_uuid: Option<Uuid>,
-    /// Parent area UUID
+    /// Area UUID (validated if provided)
     pub area_uuid: Option<Uuid>,
-    /// Associated tags
-    pub tags: Vec<String>,
+    /// Parent task UUID (for subtasks)
+    pub parent_uuid: Option<Uuid>,
+    /// Tags (as string names)
+    pub tags: Option<Vec<String>>,
+    /// Initial status (defaults to Incomplete)
+    pub status: Option<TaskStatus>,
 }
 
 /// Task update request
@@ -156,6 +162,10 @@ pub struct UpdateTaskRequest {
     pub deadline: Option<NaiveDate>,
     /// New status
     pub status: Option<TaskStatus>,
+    /// New project UUID
+    pub project_uuid: Option<Uuid>,
+    /// New area UUID
+    pub area_uuid: Option<Uuid>,
     /// New tags
     pub tags: Option<Vec<String>>,
 }
