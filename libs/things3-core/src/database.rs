@@ -1242,8 +1242,9 @@ impl ThingsDatabase {
     /// # Errors
     ///
     /// Returns an error if the task does not exist or if the database query fails
+    /// Note: Trashed tasks are treated as non-existent (trashed = 0 filter applied)
     async fn validate_task_exists(&self, uuid: &Uuid) -> ThingsResult<()> {
-        let exists = sqlx::query("SELECT 1 FROM TMTask WHERE uuid = ?")
+        let exists = sqlx::query("SELECT 1 FROM TMTask WHERE uuid = ? AND trashed = 0")
             .bind(uuid.to_string())
             .fetch_optional(&self.pool)
             .await
@@ -1261,13 +1262,15 @@ impl ThingsDatabase {
     /// # Errors
     ///
     /// Returns an error if the project does not exist or if the database query fails
+    /// Note: Trashed projects are treated as non-existent (trashed = 0 filter applied)
     async fn validate_project_exists(&self, uuid: &Uuid) -> ThingsResult<()> {
-        let exists = sqlx::query("SELECT 1 FROM TMTask WHERE uuid = ? AND type = 1")
-            .bind(uuid.to_string())
-            .fetch_optional(&self.pool)
-            .await
-            .map_err(|e| ThingsError::unknown(format!("Failed to validate project: {e}")))?
-            .is_some();
+        let exists =
+            sqlx::query("SELECT 1 FROM TMTask WHERE uuid = ? AND type = 1 AND trashed = 0")
+                .bind(uuid.to_string())
+                .fetch_optional(&self.pool)
+                .await
+                .map_err(|e| ThingsError::unknown(format!("Failed to validate project: {e}")))?
+                .is_some();
 
         if !exists {
             return Err(ThingsError::unknown(format!("Project not found: {uuid}")));
