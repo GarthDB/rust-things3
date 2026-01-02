@@ -247,7 +247,7 @@ async fn concurrent_test_cache_stats() {
     for _ in 0..20 {
         let cache_clone = Arc::clone(&cache);
         tasks.spawn(async move {
-            let stats = cache_clone.get_stats();
+            let _stats = cache_clone.get_stats();
             // Stats should always be retrievable
             true
         });

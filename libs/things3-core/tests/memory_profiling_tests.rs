@@ -28,10 +28,7 @@ async fn memory_test_database_connection() {
     }
 
     // If we get here without OOM, memory management is reasonable
-    assert!(
-        true,
-        "Multiple database connections managed without memory issues"
-    );
+    // Test passes by completing without panic or out-of-memory
 }
 
 /// Test memory usage with large query results
@@ -50,7 +47,7 @@ async fn memory_test_large_query_results() {
     let _projects = db.get_projects(Some(1000)).await.unwrap();
 
     // Results should be properly managed
-    assert!(true, "Large query results handled without memory issues");
+    // Test passes by completing without panic or out-of-memory
 }
 
 /// Test memory usage of cache operations
@@ -64,10 +61,7 @@ async fn memory_test_cache_operations() {
     let _cache = ThingsCache::new(&config);
 
     // Cache should not consume excessive memory
-    assert!(
-        true,
-        "Cache creation with large capacity managed memory properly"
-    );
+    // Test passes by completing without panic or out-of-memory
 }
 
 /// Test memory usage with multiple caches
@@ -85,7 +79,7 @@ async fn memory_test_multiple_caches() {
     // Drop caches
     drop(caches);
 
-    assert!(true, "Multiple caches managed without memory leaks");
+    // Test passes by completing without panic or memory leaks
 }
 
 /// Test memory usage with repeated operations
@@ -104,10 +98,7 @@ async fn memory_test_repeated_operations() {
         // Results should be dropped between iterations
     }
 
-    assert!(
-        true,
-        "Repeated operations handled without memory accumulation"
-    );
+    // Test passes by completing without panic or memory accumulation
 }
 
 /// Test memory usage with export operations
@@ -126,7 +117,7 @@ fn memory_test_export_operations() {
         // Export results should be cleaned up
     }
 
-    assert!(true, "Export operations managed memory properly");
+    // Test passes by completing without panic or memory issues
 }
 
 /// Test memory usage with Arc-wrapped database
@@ -152,10 +143,7 @@ async fn memory_test_arc_wrapped_database() {
     drop(handles);
     assert_eq!(Arc::strong_count(&db), 1);
 
-    assert!(
-        true,
-        "Arc-wrapped database reference counting works correctly"
-    );
+    // Test passes by verifying correct Arc reference counting
 }
 
 /// Test memory usage with database health checks
@@ -173,7 +161,7 @@ async fn memory_test_health_checks() {
         let _is_connected = db.is_connected().await;
     }
 
-    assert!(true, "Health checks don't accumulate memory");
+    // Test passes by completing without panic or memory accumulation
 }
 
 /// Test memory usage with cache stats
@@ -186,7 +174,7 @@ async fn memory_test_cache_stats() {
         let _stats = cache.get_stats();
     }
 
-    assert!(true, "Cache stats operations don't leak memory");
+    // Test passes by completing without panic or memory leaks
 }
 
 /// Test memory usage with search operations
@@ -207,7 +195,7 @@ async fn memory_test_search_operations() {
         }
     }
 
-    assert!(true, "Search operations managed memory properly");
+    // Test passes by completing without panic or memory issues
 }
 
 /// Test memory cleanup after errors
@@ -221,7 +209,7 @@ async fn memory_test_error_cleanup() {
         // Error paths should clean up properly
     }
 
-    assert!(true, "Error paths clean up memory properly");
+    // Test passes by completing without panic or memory leaks
 }
 
 /// Test memory with database pool
@@ -247,8 +235,5 @@ async fn memory_test_database_pool() {
         let _ = task.await.unwrap();
     }
 
-    assert!(
-        true,
-        "Database pool managed connections without memory issues"
-    );
+    // Test passes by completing without panic or memory issues
 }
