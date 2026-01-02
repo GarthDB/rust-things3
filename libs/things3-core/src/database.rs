@@ -1080,8 +1080,8 @@ impl ThingsDatabase {
                 uuid, title, type, status, notes,
                 startDate, deadline, project, area, heading,
                 cachedTags, creationDate, userModificationDate,
-                trashed, start, leavesTombstone
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                trashed
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ",
         )
         .bind(&uuid_str)
@@ -1098,8 +1098,6 @@ impl ThingsDatabase {
         .bind(now)
         .bind(now)
         .bind(0) // not trashed
-        .bind(0) // start type
-        .bind(0) // leaves tombstone
         .execute(&self.pool)
         .await
         .map_err(|e| ThingsError::unknown(format!("Failed to create task: {e}")))?;
