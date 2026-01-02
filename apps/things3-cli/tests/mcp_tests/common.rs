@@ -1,8 +1,7 @@
 //! Common test utilities and setup functions for MCP tests
 
-pub(crate) use serde_json::json;
 use sqlx::SqlitePool;
-pub(crate) use things3_cli::mcp::{CallToolRequest, Content, ThingsMcpServer};
+pub(crate) use things3_cli::mcp::ThingsMcpServer;
 use things3_core::{config::ThingsConfig, database::ThingsDatabase};
 
 /// Create a test MCP server with mock database
@@ -63,6 +62,24 @@ async fn create_test_schema(db: &ThingsDatabase) -> Result<(), Box<dyn std::erro
             'index' INTEGER NOT NULL DEFAULT 0,
             creationDate REAL NOT NULL,
             userModificationDate REAL NOT NULL
+        )
+        ",
+    )
+    .execute(pool)
+    .await?;
+
+    // Create TMTag table
+    sqlx::query(
+        r"
+        CREATE TABLE IF NOT EXISTS TMTag (
+            uuid TEXT PRIMARY KEY,
+            title TEXT NOT NULL,
+            shortcut TEXT,
+            parent TEXT,
+            creationDate REAL NOT NULL,
+            userModificationDate REAL NOT NULL,
+            usedDate REAL,
+            'index' INTEGER NOT NULL DEFAULT 0
         )
         ",
     )

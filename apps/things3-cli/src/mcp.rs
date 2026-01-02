@@ -507,7 +507,7 @@ pub struct GetPromptResult {
 /// MCP server for Things 3 integration
 pub struct ThingsMcpServer {
     #[allow(dead_code)]
-    db: Arc<ThingsDatabase>,
+    pub db: Arc<ThingsDatabase>,
     #[allow(dead_code)]
     cache: Arc<Mutex<ThingsCache>>,
     #[allow(dead_code)]

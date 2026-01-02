@@ -1,8 +1,7 @@
 //! MCP tag tool integration tests
 
 use serde_json::json;
-use things3_cli::mcp::{CallToolRequest, ThingsMcpServer};
-use uuid::Uuid;
+use things3_cli::mcp::CallToolRequest;
 
 mod mcp_tests;
 use mcp_tests::common::create_test_mcp_server;
@@ -32,7 +31,10 @@ async fn test_search_tags_finds_exact() {
     };
 
     let result = server.call_tool(request).await.unwrap();
-    let response: serde_json::Value = serde_json::from_str(&result.content[0].text).unwrap();
+    let text = match &result.content[0] {
+        things3_cli::mcp::Content::Text { text } => text,
+    };
+    let response: serde_json::Value = serde_json::from_str(text).unwrap();
 
     assert!(response.is_array());
     assert!(!response.as_array().unwrap().is_empty());
@@ -61,7 +63,10 @@ async fn test_search_tags_finds_similar() {
     };
 
     let result = server.call_tool(request).await.unwrap();
-    let response: serde_json::Value = serde_json::from_str(&result.content[0].text).unwrap();
+    let text = match &result.content[0] {
+        things3_cli::mcp::Content::Text { text } => text,
+    };
+    let response: serde_json::Value = serde_json::from_str(text).unwrap();
 
     assert!(response.is_array());
     // Should find "important" as similar
@@ -88,7 +93,10 @@ async fn test_get_tag_suggestions_exact_match() {
     };
 
     let result = server.call_tool(request).await.unwrap();
-    let response: serde_json::Value = serde_json::from_str(&result.content[0].text).unwrap();
+    let text = match &result.content[0] {
+        things3_cli::mcp::Content::Text { text } => text,
+    };
+    let response: serde_json::Value = serde_json::from_str(text).unwrap();
 
     assert_eq!(response["recommendation"], "use_existing");
     assert!(!response["exact_match"].is_null());
@@ -115,7 +123,10 @@ async fn test_get_tag_suggestions_similar_found() {
     };
 
     let result = server.call_tool(request).await.unwrap();
-    let response: serde_json::Value = serde_json::from_str(&result.content[0].text).unwrap();
+    let text = match &result.content[0] {
+        things3_cli::mcp::Content::Text { text } => text,
+    };
+    let response: serde_json::Value = serde_json::from_str(text).unwrap();
 
     assert_eq!(response["recommendation"], "consider_similar");
     assert!(response["exact_match"].is_null());
@@ -144,7 +155,10 @@ async fn test_get_popular_tags() {
     };
 
     let result = server.call_tool(request).await.unwrap();
-    let response: serde_json::Value = serde_json::from_str(&result.content[0].text).unwrap();
+    let text = match &result.content[0] {
+        things3_cli::mcp::Content::Text { text } => text,
+    };
+    let response: serde_json::Value = serde_json::from_str(text).unwrap();
 
     assert!(response.is_array());
     assert_eq!(response.as_array().unwrap().len(), 3);
@@ -170,7 +184,10 @@ async fn test_get_recent_tags() {
     };
 
     let result = server.call_tool(request).await.unwrap();
-    let response: serde_json::Value = serde_json::from_str(&result.content[0].text).unwrap();
+    let text = match &result.content[0] {
+        things3_cli::mcp::Content::Text { text } => text,
+    };
+    let response: serde_json::Value = serde_json::from_str(text).unwrap();
 
     assert!(response.is_array());
     // Will be empty since usedDate is NULL initially
@@ -193,7 +210,10 @@ async fn test_create_tag_with_duplicate_check() {
     };
 
     let result = server.call_tool(request).await.unwrap();
-    let response: serde_json::Value = serde_json::from_str(&result.content[0].text).unwrap();
+    let text = match &result.content[0] {
+        things3_cli::mcp::Content::Text { text } => text,
+    };
+    let response: serde_json::Value = serde_json::from_str(text).unwrap();
 
     assert_eq!(response["status"], "created");
     assert!(!response["uuid"].is_null());
@@ -207,7 +227,10 @@ async fn test_create_tag_with_duplicate_check() {
     };
 
     let result = server.call_tool(request).await.unwrap();
-    let response: serde_json::Value = serde_json::from_str(&result.content[0].text).unwrap();
+    let text = match &result.content[0] {
+        things3_cli::mcp::Content::Text { text } => text,
+    };
+    let response: serde_json::Value = serde_json::from_str(text).unwrap();
 
     assert_eq!(response["status"], "existing");
 }
@@ -226,7 +249,10 @@ async fn test_create_tag_force_skip_check() {
     };
 
     let result1 = server.call_tool(request).await.unwrap();
-    let response1: serde_json::Value = serde_json::from_str(&result1.content[0].text).unwrap();
+    let text1 = match &result1.content[0] {
+        things3_cli::mcp::Content::Text { text } => text,
+    };
+    let response1: serde_json::Value = serde_json::from_str(text1).unwrap();
     assert_eq!(response1["status"], "created");
 
     // Create duplicate with force
@@ -239,7 +265,10 @@ async fn test_create_tag_force_skip_check() {
     };
 
     let result2 = server.call_tool(request).await.unwrap();
-    let response2: serde_json::Value = serde_json::from_str(&result2.content[0].text).unwrap();
+    let text2 = match &result2.content[0] {
+        things3_cli::mcp::Content::Text { text } => text,
+    };
+    let response2: serde_json::Value = serde_json::from_str(text2).unwrap();
     assert_eq!(response2["status"], "created");
 
     // Both should have been created
@@ -269,7 +298,10 @@ async fn test_update_tag_tool() {
     };
 
     let result = server.call_tool(request).await.unwrap();
-    let response: serde_json::Value = serde_json::from_str(&result.content[0].text).unwrap();
+    let text = match &result.content[0] {
+        things3_cli::mcp::Content::Text { text } => text,
+    };
+    let response: serde_json::Value = serde_json::from_str(text).unwrap();
 
     assert_eq!(response["message"], "Tag updated successfully");
     assert_eq!(response["uuid"], uuid.to_string());
@@ -296,7 +328,10 @@ async fn test_delete_tag_tool() {
     };
 
     let result = server.call_tool(request).await.unwrap();
-    let response: serde_json::Value = serde_json::from_str(&result.content[0].text).unwrap();
+    let text = match &result.content[0] {
+        things3_cli::mcp::Content::Text { text } => text,
+    };
+    let response: serde_json::Value = serde_json::from_str(text).unwrap();
 
     assert_eq!(response["message"], "Tag deleted successfully");
 }
@@ -330,7 +365,10 @@ async fn test_merge_tags_tool() {
     };
 
     let result = server.call_tool(request).await.unwrap();
-    let response: serde_json::Value = serde_json::from_str(&result.content[0].text).unwrap();
+    let text = match &result.content[0] {
+        things3_cli::mcp::Content::Text { text } => text,
+    };
+    let response: serde_json::Value = serde_json::from_str(text).unwrap();
 
     assert_eq!(response["message"], "Tags merged successfully");
 }
@@ -361,7 +399,10 @@ async fn test_add_tag_to_task_tool() {
     };
 
     let result = server.call_tool(request).await.unwrap();
-    let response: serde_json::Value = serde_json::from_str(&result.content[0].text).unwrap();
+    let text = match &result.content[0] {
+        things3_cli::mcp::Content::Text { text } => text,
+    };
+    let response: serde_json::Value = serde_json::from_str(text).unwrap();
 
     assert_eq!(response["status"], "assigned");
     assert!(!response["tag_uuid"].is_null());
@@ -393,7 +434,10 @@ async fn test_remove_tag_from_task_tool() {
     };
 
     let result = server.call_tool(request).await.unwrap();
-    let response: serde_json::Value = serde_json::from_str(&result.content[0].text).unwrap();
+    let text = match &result.content[0] {
+        things3_cli::mcp::Content::Text { text } => text,
+    };
+    let response: serde_json::Value = serde_json::from_str(text).unwrap();
 
     assert_eq!(response["message"], "Tag removed from task successfully");
 }
@@ -417,7 +461,10 @@ async fn test_set_task_tags_tool() {
     };
 
     let result = server.call_tool(request).await.unwrap();
-    let response: serde_json::Value = serde_json::from_str(&result.content[0].text).unwrap();
+    let text = match &result.content[0] {
+        things3_cli::mcp::Content::Text { text } => text,
+    };
+    let response: serde_json::Value = serde_json::from_str(text).unwrap();
 
     assert_eq!(response["message"], "Task tags updated successfully");
     assert_eq!(response["tags"].as_array().unwrap().len(), 3);
@@ -448,7 +495,10 @@ async fn test_get_tag_statistics_tool() {
     };
 
     let result = server.call_tool(request).await.unwrap();
-    let response: serde_json::Value = serde_json::from_str(&result.content[0].text).unwrap();
+    let text = match &result.content[0] {
+        things3_cli::mcp::Content::Text { text } => text,
+    };
+    let response: serde_json::Value = serde_json::from_str(text).unwrap();
 
     assert_eq!(response["uuid"], uuid.to_string());
     assert_eq!(response["title"], "work");
@@ -478,7 +528,10 @@ async fn test_find_duplicate_tags_tool() {
     };
 
     let result = server.call_tool(request).await.unwrap();
-    let response: serde_json::Value = serde_json::from_str(&result.content[0].text).unwrap();
+    let text = match &result.content[0] {
+        things3_cli::mcp::Content::Text { text } => text,
+    };
+    let response: serde_json::Value = serde_json::from_str(text).unwrap();
 
     assert!(response.is_array());
     // Should find some similar pairs
@@ -508,7 +561,10 @@ async fn test_get_tag_completions_tool() {
     };
 
     let result = server.call_tool(request).await.unwrap();
-    let response: serde_json::Value = serde_json::from_str(&result.content[0].text).unwrap();
+    let text = match &result.content[0] {
+        things3_cli::mcp::Content::Text { text } => text,
+    };
+    let response: serde_json::Value = serde_json::from_str(text).unwrap();
 
     assert!(response.is_array());
     assert!(!response.as_array().unwrap().is_empty());
@@ -532,8 +588,10 @@ async fn test_tag_lifecycle_integration() {
     };
 
     let create_result = server.call_tool(create_request).await.unwrap();
-    let create_response: serde_json::Value =
-        serde_json::from_str(&create_result.content[0].text).unwrap();
+    let create_text = match &create_result.content[0] {
+        things3_cli::mcp::Content::Text { text } => text,
+    };
+    let create_response: serde_json::Value = serde_json::from_str(create_text).unwrap();
     assert_eq!(create_response["status"], "created");
     let tag_uuid = Uuid::parse_str(create_response["uuid"].as_str().unwrap()).unwrap();
 
@@ -547,8 +605,10 @@ async fn test_tag_lifecycle_integration() {
     };
 
     let update_result = server.call_tool(update_request).await.unwrap();
-    let update_response: serde_json::Value =
-        serde_json::from_str(&update_result.content[0].text).unwrap();
+    let update_text = match &update_result.content[0] {
+        things3_cli::mcp::Content::Text { text } => text,
+    };
+    let update_response: serde_json::Value = serde_json::from_str(update_text).unwrap();
     assert_eq!(update_response["message"], "Tag updated successfully");
 
     // 3. Add tag to a task
@@ -565,8 +625,10 @@ async fn test_tag_lifecycle_integration() {
     };
 
     let add_tag_result = server.call_tool(add_tag_request).await.unwrap();
-    let add_tag_response: serde_json::Value =
-        serde_json::from_str(&add_tag_result.content[0].text).unwrap();
+    let add_tag_text = match &add_tag_result.content[0] {
+        things3_cli::mcp::Content::Text { text } => text,
+    };
+    let add_tag_response: serde_json::Value = serde_json::from_str(add_tag_text).unwrap();
     assert_eq!(add_tag_response["status"], "assigned");
 
     // 4. Get tag statistics
@@ -578,8 +640,10 @@ async fn test_tag_lifecycle_integration() {
     };
 
     let stats_result = server.call_tool(stats_request).await.unwrap();
-    let stats_response: serde_json::Value =
-        serde_json::from_str(&stats_result.content[0].text).unwrap();
+    let stats_text = match &stats_result.content[0] {
+        things3_cli::mcp::Content::Text { text } => text,
+    };
+    let stats_response: serde_json::Value = serde_json::from_str(stats_text).unwrap();
     assert_eq!(stats_response["title"], "project-alpha-v2");
     assert!(stats_response["usage_count"].as_u64().unwrap() > 0);
 
@@ -593,8 +657,10 @@ async fn test_tag_lifecycle_integration() {
     };
 
     let remove_tag_result = server.call_tool(remove_tag_request).await.unwrap();
-    let remove_tag_response: serde_json::Value =
-        serde_json::from_str(&remove_tag_result.content[0].text).unwrap();
+    let remove_tag_text = match &remove_tag_result.content[0] {
+        things3_cli::mcp::Content::Text { text } => text,
+    };
+    let remove_tag_response: serde_json::Value = serde_json::from_str(remove_tag_text).unwrap();
     assert_eq!(
         remove_tag_response["message"],
         "Tag removed from task successfully"
@@ -609,7 +675,9 @@ async fn test_tag_lifecycle_integration() {
     };
 
     let delete_result = server.call_tool(delete_request).await.unwrap();
-    let delete_response: serde_json::Value =
-        serde_json::from_str(&delete_result.content[0].text).unwrap();
+    let delete_text = match &delete_result.content[0] {
+        things3_cli::mcp::Content::Text { text } => text,
+    };
+    let delete_response: serde_json::Value = serde_json::from_str(delete_text).unwrap();
     assert_eq!(delete_response["message"], "Tag deleted successfully");
 }
