@@ -1,4 +1,5 @@
 use crate::{
+    database::{mappers::map_task_row, query_builders::TaskUpdateBuilder, validators},
     error::{Result as ThingsResult, ThingsError},
     models::{
         Area, CreateTaskRequest, DeleteChildHandling, Project, Task, TaskStatus, TaskType,
@@ -813,7 +814,7 @@ impl ThingsDatabase {
             SELECT 
                 uuid, title, status, type, 
                 startDate, deadline, stopDate,
-                project, area,
+                project, area, heading,
                 notes, cachedTags, 
                 creationDate, userModificationDate
             FROM TMTask
@@ -827,51 +828,10 @@ impl ThingsDatabase {
         .await
         .map_err(|e| ThingsError::unknown(format!("Failed to search tasks: {e}")))?;
 
-        let mut tasks = Vec::new();
-        for row in rows {
-            let task = Task {
-                uuid: things_uuid_to_uuid(&row.get::<String, _>("uuid")),
-                title: row.get("title"),
-                status: TaskStatus::from_i32(row.get("status")).unwrap_or(TaskStatus::Incomplete),
-                task_type: TaskType::from_i32(row.get("type")).unwrap_or(TaskType::Todo),
-                start_date: row
-                    .get::<Option<i64>, _>("startDate")
-                    .and_then(|ts| DateTime::from_timestamp(ts, 0))
-                    .map(|dt| dt.date_naive()),
-                deadline: row
-                    .get::<Option<i64>, _>("deadline")
-                    .and_then(|ts| DateTime::from_timestamp(ts, 0))
-                    .map(|dt| dt.date_naive()),
-                project_uuid: row
-                    .get::<Option<String>, _>("project")
-                    .map(|s| things_uuid_to_uuid(&s)),
-                area_uuid: row
-                    .get::<Option<String>, _>("area")
-                    .map(|s| things_uuid_to_uuid(&s)),
-                parent_uuid: None, // No parent column in real schema
-                notes: row.get("notes"),
-                tags: row
-                    .get::<Option<Vec<u8>>, _>("cachedTags")
-                    .map(|_| Vec::new()) // TODO: Parse binary tag data
-                    .unwrap_or_default(),
-                children: Vec::new(), // Not available in this query
-                created: {
-                    let ts_f64 = row.get::<f64, _>("creationDate");
-                    let ts = safe_timestamp_convert(ts_f64);
-                    DateTime::from_timestamp(ts, 0).unwrap_or_else(Utc::now)
-                },
-                modified: {
-                    let ts_f64 = row.get::<f64, _>("userModificationDate");
-                    let ts = safe_timestamp_convert(ts_f64);
-                    DateTime::from_timestamp(ts, 0).unwrap_or_else(Utc::now)
-                },
-                stop_date: row.get::<Option<f64>, _>("stopDate").and_then(|ts| {
-                    let ts_i64 = safe_timestamp_convert(ts);
-                    DateTime::from_timestamp(ts_i64, 0)
-                }),
-            };
-            tasks.push(task);
-        }
+        let tasks = rows
+            .iter()
+            .map(map_task_row)
+            .collect::<ThingsResult<Vec<Task>>>()?;
 
         debug!("Found {} tasks matching query: {}", tasks.len(), query);
         Ok(tasks)
@@ -897,51 +857,8 @@ impl ThingsDatabase {
             .map_err(|e| ThingsError::unknown(format!("Failed to fetch inbox tasks: {e}")))?;
 
         let tasks = rows
-            .into_iter()
-            .map(|row| {
-                Ok(Task {
-                    uuid: things_uuid_to_uuid(&row.get::<String, _>("uuid")),
-                    title: row.get("title"),
-                    task_type: TaskType::from_i32(row.get("type")).unwrap_or(TaskType::Todo),
-                    status: TaskStatus::from_i32(row.get("status"))
-                        .unwrap_or(TaskStatus::Incomplete),
-                    notes: row.get("notes"),
-                    start_date: row
-                        .get::<Option<i64>, _>("startDate")
-                        .and_then(things_date_to_naive_date),
-                    deadline: row
-                        .get::<Option<i64>, _>("deadline")
-                        .and_then(things_date_to_naive_date),
-                    created: {
-                        let ts_f64 = row.get::<f64, _>("creationDate");
-                        let ts = safe_timestamp_convert(ts_f64);
-                        DateTime::from_timestamp(ts, 0).unwrap_or_else(Utc::now)
-                    },
-                    modified: {
-                        let ts_f64 = row.get::<f64, _>("userModificationDate");
-                        let ts = safe_timestamp_convert(ts_f64);
-                        DateTime::from_timestamp(ts, 0).unwrap_or_else(Utc::now)
-                    },
-                    stop_date: row.get::<Option<f64>, _>("stopDate").and_then(|ts| {
-                        let ts_i64 = safe_timestamp_convert(ts);
-                        DateTime::from_timestamp(ts_i64, 0)
-                    }),
-                    project_uuid: row
-                        .get::<Option<String>, _>("project")
-                        .map(|s| things_uuid_to_uuid(&s)),
-                    area_uuid: row
-                        .get::<Option<String>, _>("area")
-                        .map(|s| things_uuid_to_uuid(&s)),
-                    parent_uuid: row
-                        .get::<Option<String>, _>("heading")
-                        .map(|s| things_uuid_to_uuid(&s)),
-                    tags: row
-                        .get::<Option<Vec<u8>>, _>("cachedTags")
-                        .map(|_| Vec::new()) // TODO: Parse binary tag data
-                        .unwrap_or_default(),
-                    children: Vec::new(),
-                })
-            })
+            .iter()
+            .map(map_task_row)
             .collect::<ThingsResult<Vec<Task>>>()?;
 
         Ok(tasks)
@@ -974,51 +891,8 @@ impl ThingsDatabase {
             .map_err(|e| ThingsError::unknown(format!("Failed to fetch today's tasks: {e}")))?;
 
         let tasks = rows
-            .into_iter()
-            .map(|row| {
-                Ok(Task {
-                    uuid: things_uuid_to_uuid(&row.get::<String, _>("uuid")),
-                    title: row.get("title"),
-                    task_type: TaskType::from_i32(row.get("type")).unwrap_or(TaskType::Todo),
-                    status: TaskStatus::from_i32(row.get("status"))
-                        .unwrap_or(TaskStatus::Incomplete),
-                    notes: row.get("notes"),
-                    start_date: row
-                        .get::<Option<i64>, _>("startDate")
-                        .and_then(things_date_to_naive_date),
-                    deadline: row
-                        .get::<Option<i64>, _>("deadline")
-                        .and_then(things_date_to_naive_date),
-                    created: {
-                        let ts_f64 = row.get::<f64, _>("creationDate");
-                        let ts = safe_timestamp_convert(ts_f64);
-                        DateTime::from_timestamp(ts, 0).unwrap_or_else(Utc::now)
-                    },
-                    modified: {
-                        let ts_f64 = row.get::<f64, _>("userModificationDate");
-                        let ts = safe_timestamp_convert(ts_f64);
-                        DateTime::from_timestamp(ts, 0).unwrap_or_else(Utc::now)
-                    },
-                    stop_date: row.get::<Option<f64>, _>("stopDate").and_then(|ts| {
-                        let ts_i64 = safe_timestamp_convert(ts);
-                        DateTime::from_timestamp(ts_i64, 0)
-                    }),
-                    project_uuid: row
-                        .get::<Option<String>, _>("project")
-                        .map(|s| things_uuid_to_uuid(&s)),
-                    area_uuid: row
-                        .get::<Option<String>, _>("area")
-                        .map(|s| things_uuid_to_uuid(&s)),
-                    parent_uuid: row
-                        .get::<Option<String>, _>("heading")
-                        .map(|s| things_uuid_to_uuid(&s)),
-                    tags: row
-                        .get::<Option<Vec<u8>>, _>("cachedTags")
-                        .map(|_| Vec::new()) // TODO: Parse binary tag data
-                        .unwrap_or_default(),
-                    children: Vec::new(),
-                })
-            })
+            .iter()
+            .map(map_task_row)
             .collect::<ThingsResult<Vec<Task>>>()?;
 
         Ok(tasks)
@@ -1065,15 +939,15 @@ impl ThingsDatabase {
 
         // Validate referenced entities
         if let Some(project_uuid) = &request.project_uuid {
-            self.validate_project_exists(project_uuid).await?;
+            validators::validate_project_exists(&self.pool, project_uuid).await?;
         }
 
         if let Some(area_uuid) = &request.area_uuid {
-            self.validate_area_exists(area_uuid).await?;
+            validators::validate_area_exists(&self.pool, area_uuid).await?;
         }
 
         if let Some(parent_uuid) = &request.parent_uuid {
-            self.validate_task_exists(parent_uuid).await?;
+            validators::validate_task_exists(&self.pool, parent_uuid).await?;
         }
 
         // Convert dates to Things 3 format (seconds since 2001-01-01)
@@ -1134,64 +1008,29 @@ impl ThingsDatabase {
     #[instrument(skip(self))]
     pub async fn update_task(&self, request: UpdateTaskRequest) -> ThingsResult<()> {
         // Verify task exists
-        self.validate_task_exists(&request.uuid).await?;
+        validators::validate_task_exists(&self.pool, &request.uuid).await?;
 
         // Validate referenced entities if being updated
         if let Some(project_uuid) = &request.project_uuid {
-            self.validate_project_exists(project_uuid).await?;
+            validators::validate_project_exists(&self.pool, project_uuid).await?;
         }
 
         if let Some(area_uuid) = &request.area_uuid {
-            self.validate_area_exists(area_uuid).await?;
+            validators::validate_area_exists(&self.pool, area_uuid).await?;
         }
 
-        // Build dynamic UPDATE query based on provided fields
-        let mut updates = Vec::new();
+        // Use the TaskUpdateBuilder to construct the query
+        let builder = TaskUpdateBuilder::from_request(&request);
 
-        if request.title.is_some() {
-            updates.push("title = ?");
+        // If no fields to update, just return (modification date will still be updated)
+        if builder.is_empty() {
+            return Ok(());
         }
 
-        if request.notes.is_some() {
-            updates.push("notes = ?");
-        }
+        let query_string = builder.build_query_string();
+        let mut q = sqlx::query(&query_string);
 
-        if request.start_date.is_some() {
-            updates.push("startDate = ?");
-        }
-
-        if request.deadline.is_some() {
-            updates.push("deadline = ?");
-        }
-
-        if request.status.is_some() {
-            updates.push("status = ?");
-        }
-
-        if request.project_uuid.is_some() {
-            updates.push("project = ?");
-        }
-
-        if request.area_uuid.is_some() {
-            updates.push("area = ?");
-        }
-
-        if request.tags.is_some() {
-            updates.push("cachedTags = ?");
-        }
-
-        // Always update modification date
-        updates.push("userModificationDate = ?");
-
-        if updates.is_empty() {
-            return Ok(()); // Nothing to update
-        }
-
-        let query = format!("UPDATE TMTask SET {} WHERE uuid = ?", updates.join(", "));
-
-        // Build query with bindings
-        let mut q = sqlx::query(&query);
-
+        // Bind values in the same order as the builder added fields
         if let Some(title) = &request.title {
             q = q.bind(title);
         }
@@ -1225,7 +1064,7 @@ impl ThingsDatabase {
             q = q.bind(cached_tags);
         }
 
-        // Bind modification date and UUID
+        // Bind modification date and UUID (always added by builder)
         let now = Utc::now().timestamp() as f64;
         q = q.bind(now).bind(request.uuid.to_string());
 
@@ -1234,66 +1073,6 @@ impl ThingsDatabase {
             .map_err(|e| ThingsError::unknown(format!("Failed to update task: {e}")))?;
 
         info!("Updated task with UUID: {}", request.uuid);
-        Ok(())
-    }
-
-    /// Validate that a task exists
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the task does not exist or if the database query fails
-    /// Note: Trashed tasks are treated as non-existent (trashed = 0 filter applied)
-    async fn validate_task_exists(&self, uuid: &Uuid) -> ThingsResult<()> {
-        let exists = sqlx::query("SELECT 1 FROM TMTask WHERE uuid = ? AND trashed = 0")
-            .bind(uuid.to_string())
-            .fetch_optional(&self.pool)
-            .await
-            .map_err(|e| ThingsError::unknown(format!("Failed to validate task: {e}")))?
-            .is_some();
-
-        if !exists {
-            return Err(ThingsError::unknown(format!("Task not found: {uuid}")));
-        }
-        Ok(())
-    }
-
-    /// Validate that a project exists (project is a task with type = 1)
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the project does not exist or if the database query fails
-    /// Note: Trashed projects are treated as non-existent (trashed = 0 filter applied)
-    async fn validate_project_exists(&self, uuid: &Uuid) -> ThingsResult<()> {
-        let exists =
-            sqlx::query("SELECT 1 FROM TMTask WHERE uuid = ? AND type = 1 AND trashed = 0")
-                .bind(uuid.to_string())
-                .fetch_optional(&self.pool)
-                .await
-                .map_err(|e| ThingsError::unknown(format!("Failed to validate project: {e}")))?
-                .is_some();
-
-        if !exists {
-            return Err(ThingsError::unknown(format!("Project not found: {uuid}")));
-        }
-        Ok(())
-    }
-
-    /// Validate that an area exists
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the area does not exist or if the database query fails
-    async fn validate_area_exists(&self, uuid: &Uuid) -> ThingsResult<()> {
-        let exists = sqlx::query("SELECT 1 FROM TMArea WHERE uuid = ?")
-            .bind(uuid.to_string())
-            .fetch_optional(&self.pool)
-            .await
-            .map_err(|e| ThingsError::unknown(format!("Failed to validate area: {e}")))?
-            .is_some();
-
-        if !exists {
-            return Err(ThingsError::unknown(format!("Area not found: {uuid}")));
-        }
         Ok(())
     }
 
@@ -1329,58 +1108,8 @@ impl ThingsDatabase {
                 return Ok(None); // Return None for trashed tasks
             }
 
-            let uuid_str = row.get::<String, _>("uuid");
-            // Try to parse as standard UUID first, fall back to Things UUID conversion
-            let uuid =
-                Uuid::parse_str(&uuid_str).unwrap_or_else(|_| things_uuid_to_uuid(&uuid_str));
-
-            let task = Task {
-                uuid,
-                title: row.get("title"),
-                status: TaskStatus::from_i32(row.get("status")).unwrap_or(TaskStatus::Incomplete),
-                task_type: TaskType::from_i32(row.get("type")).unwrap_or(TaskType::Todo),
-                notes: row.get("notes"),
-                start_date: row
-                    .get::<Option<i64>, _>("startDate")
-                    .and_then(things_date_to_naive_date),
-                deadline: row
-                    .get::<Option<i64>, _>("deadline")
-                    .and_then(things_date_to_naive_date),
-                created: {
-                    let ts_f64 = row.get::<f64, _>("creationDate");
-                    let ts = safe_timestamp_convert(ts_f64);
-                    DateTime::from_timestamp(ts, 0).unwrap_or_else(Utc::now)
-                },
-                modified: {
-                    let ts_f64 = row.get::<f64, _>("userModificationDate");
-                    let ts = safe_timestamp_convert(ts_f64);
-                    DateTime::from_timestamp(ts, 0).unwrap_or_else(Utc::now)
-                },
-                stop_date: row.get::<Option<f64>, _>("stopDate").and_then(|ts| {
-                    let ts_i64 = safe_timestamp_convert(ts);
-                    DateTime::from_timestamp(ts_i64, 0)
-                }),
-                project_uuid: row.get::<Option<String>, _>("project").and_then(|s| {
-                    Uuid::parse_str(&s)
-                        .ok()
-                        .or_else(|| Some(things_uuid_to_uuid(&s)))
-                }),
-                area_uuid: row.get::<Option<String>, _>("area").and_then(|s| {
-                    Uuid::parse_str(&s)
-                        .ok()
-                        .or_else(|| Some(things_uuid_to_uuid(&s)))
-                }),
-                parent_uuid: row.get::<Option<String>, _>("heading").and_then(|s| {
-                    Uuid::parse_str(&s)
-                        .ok()
-                        .or_else(|| Some(things_uuid_to_uuid(&s)))
-                }),
-                tags: row
-                    .get::<Option<String>, _>("cachedTags")
-                    .map(|_| Vec::new()) // TODO: Parse binary tag data
-                    .unwrap_or_default(),
-                children: Vec::new(),
-            };
+            // Use the centralized mapper
+            let task = map_task_row(&row)?;
             Ok(Some(task))
         } else {
             Ok(None)
@@ -1395,7 +1124,7 @@ impl ThingsDatabase {
     #[instrument(skip(self))]
     pub async fn complete_task(&self, uuid: &Uuid) -> ThingsResult<()> {
         // Verify task exists
-        self.validate_task_exists(uuid).await?;
+        validators::validate_task_exists(&self.pool, uuid).await?;
 
         let now = Utc::now().timestamp() as f64;
 
@@ -1421,7 +1150,7 @@ impl ThingsDatabase {
     #[instrument(skip(self))]
     pub async fn uncomplete_task(&self, uuid: &Uuid) -> ThingsResult<()> {
         // Verify task exists
-        self.validate_task_exists(uuid).await?;
+        validators::validate_task_exists(&self.pool, uuid).await?;
 
         let now = Utc::now().timestamp() as f64;
 
@@ -1450,7 +1179,7 @@ impl ThingsDatabase {
         child_handling: DeleteChildHandling,
     ) -> ThingsResult<()> {
         // Verify task exists
-        self.validate_task_exists(uuid).await?;
+        validators::validate_task_exists(&self.pool, uuid).await?;
 
         // Check for child tasks
         let children = sqlx::query("SELECT uuid FROM TMTask WHERE heading = ? AND trashed = 0")
