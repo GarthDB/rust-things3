@@ -1,4 +1,13 @@
-//! Comprehensive tests for MCP server functionality
+//! Legacy MCP server tests - being migrated to modular structure
+//!
+//! This file contains the original comprehensive test suite.
+//! New tests should be added to the appropriate module in `mcp_tests/`:
+//! - `tool_tests.rs` - Tool-related tests  
+//! - `prompt_tests.rs` - Prompt-related tests
+//! - `resource_tests.rs` - Resource-related tests
+//! - `error_tests.rs` - Error handling tests
+//!
+//! Tests will be gradually migrated from this file to the new structure.
 
 use serde_json::json;
 use sqlx::SqlitePool;
