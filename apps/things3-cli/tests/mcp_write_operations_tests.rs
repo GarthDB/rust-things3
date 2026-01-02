@@ -48,7 +48,6 @@ impl McpTestHarness {
                 .first()
                 .and_then(|c| match c {
                     things3_cli::mcp::Content::Text { text } => Some(text.clone()),
-                    _ => None,
                 })
                 .unwrap_or_default();
 
