@@ -1186,6 +1186,177 @@ impl ThingsMcpServer {
                     "required": ["tasks"]
                 }),
             },
+            Tool {
+                name: "create_project".to_string(),
+                description: "Create a new project (a task with type=project)".to_string(),
+                input_schema: serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "title": {
+                            "type": "string",
+                            "description": "Project title (required)"
+                        },
+                        "notes": {
+                            "type": "string",
+                            "description": "Project notes"
+                        },
+                        "area_uuid": {
+                            "type": "string",
+                            "format": "uuid",
+                            "description": "Area UUID"
+                        },
+                        "start_date": {
+                            "type": "string",
+                            "format": "date",
+                            "description": "Start date (YYYY-MM-DD)"
+                        },
+                        "deadline": {
+                            "type": "string",
+                            "format": "date",
+                            "description": "Deadline (YYYY-MM-DD)"
+                        },
+                        "tags": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                            "description": "Tag names"
+                        }
+                    },
+                    "required": ["title"]
+                }),
+            },
+            Tool {
+                name: "update_project".to_string(),
+                description: "Update an existing project (only provided fields will be updated)".to_string(),
+                input_schema: serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "uuid": {
+                            "type": "string",
+                            "format": "uuid",
+                            "description": "Project UUID (required)"
+                        },
+                        "title": {
+                            "type": "string",
+                            "description": "New project title"
+                        },
+                        "notes": {
+                            "type": "string",
+                            "description": "New project notes"
+                        },
+                        "area_uuid": {
+                            "type": "string",
+                            "format": "uuid",
+                            "description": "New area UUID"
+                        },
+                        "start_date": {
+                            "type": "string",
+                            "format": "date",
+                            "description": "New start date (YYYY-MM-DD)"
+                        },
+                        "deadline": {
+                            "type": "string",
+                            "format": "date",
+                            "description": "New deadline (YYYY-MM-DD)"
+                        },
+                        "tags": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                            "description": "New tag names"
+                        }
+                    },
+                    "required": ["uuid"]
+                }),
+            },
+            Tool {
+                name: "complete_project".to_string(),
+                description: "Mark a project as completed, with options for handling child tasks".to_string(),
+                input_schema: serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "uuid": {
+                            "type": "string",
+                            "format": "uuid",
+                            "description": "UUID of the project to complete"
+                        },
+                        "child_handling": {
+                            "type": "string",
+                            "enum": ["error", "cascade", "orphan"],
+                            "default": "error",
+                            "description": "How to handle child tasks: error (fail if children exist), cascade (complete children too), orphan (move children to inbox)"
+                        }
+                    },
+                    "required": ["uuid"]
+                }),
+            },
+            Tool {
+                name: "delete_project".to_string(),
+                description: "Soft delete a project (set trashed=1), with options for handling child tasks".to_string(),
+                input_schema: serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "uuid": {
+                            "type": "string",
+                            "format": "uuid",
+                            "description": "UUID of the project to delete"
+                        },
+                        "child_handling": {
+                            "type": "string",
+                            "enum": ["error", "cascade", "orphan"],
+                            "default": "error",
+                            "description": "How to handle child tasks: error (fail if children exist), cascade (delete children too), orphan (move children to inbox)"
+                        }
+                    },
+                    "required": ["uuid"]
+                }),
+            },
+            Tool {
+                name: "create_area".to_string(),
+                description: "Create a new area".to_string(),
+                input_schema: serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "title": {
+                            "type": "string",
+                            "description": "Area title (required)"
+                        }
+                    },
+                    "required": ["title"]
+                }),
+            },
+            Tool {
+                name: "update_area".to_string(),
+                description: "Update an existing area".to_string(),
+                input_schema: serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "uuid": {
+                            "type": "string",
+                            "format": "uuid",
+                            "description": "Area UUID (required)"
+                        },
+                        "title": {
+                            "type": "string",
+                            "description": "New area title (required)"
+                        }
+                    },
+                    "required": ["uuid", "title"]
+                }),
+            },
+            Tool {
+                name: "delete_area".to_string(),
+                description: "Delete an area (hard delete). All projects in this area will be moved to no area.".to_string(),
+                input_schema: serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "uuid": {
+                            "type": "string",
+                            "format": "uuid",
+                            "description": "UUID of the area to delete"
+                        }
+                    },
+                    "required": ["uuid"]
+                }),
+            },
         ]
     }
 
@@ -1323,6 +1494,13 @@ impl ThingsMcpServer {
             "complete_task" => self.handle_complete_task(arguments).await,
             "uncomplete_task" => self.handle_uncomplete_task(arguments).await,
             "delete_task" => self.handle_delete_task(arguments).await,
+            "create_project" => self.handle_create_project(arguments).await,
+            "update_project" => self.handle_update_project(arguments).await,
+            "complete_project" => self.handle_complete_project(arguments).await,
+            "delete_project" => self.handle_delete_project(arguments).await,
+            "create_area" => self.handle_create_area(arguments).await,
+            "update_area" => self.handle_update_area(arguments).await,
+            "delete_area" => self.handle_delete_area(arguments).await,
             "get_productivity_metrics" => self.handle_get_productivity_metrics(arguments).await,
             "export_data" => self.handle_export_data(arguments).await,
             "bulk_create_tasks" => Self::handle_bulk_create_tasks(&arguments),
@@ -1600,6 +1778,328 @@ impl ThingsMcpServer {
             content: vec![Content::Text {
                 text: serde_json::to_string_pretty(&response)
                     .map_err(|e| McpError::serialization_failed("delete_task response", e))?,
+            }],
+            is_error: false,
+        })
+    }
+
+    async fn handle_create_project(&self, args: Value) -> McpResult<CallToolResult> {
+        let title = args
+            .get("title")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| McpError::invalid_parameter("title", "Project title is required"))?
+            .to_string();
+
+        let notes = args.get("notes").and_then(|v| v.as_str()).map(String::from);
+
+        let area_uuid = args
+            .get("area_uuid")
+            .and_then(|v| v.as_str())
+            .map(|s| {
+                uuid::Uuid::parse_str(s).map_err(|e| {
+                    McpError::invalid_parameter("area_uuid", format!("Invalid UUID: {e}"))
+                })
+            })
+            .transpose()?;
+
+        let start_date = args
+            .get("start_date")
+            .and_then(|v| v.as_str())
+            .map(|s| {
+                chrono::NaiveDate::parse_from_str(s, "%Y-%m-%d").map_err(|e| {
+                    McpError::invalid_parameter("start_date", format!("Invalid date: {e}"))
+                })
+            })
+            .transpose()?;
+
+        let deadline = args
+            .get("deadline")
+            .and_then(|v| v.as_str())
+            .map(|s| {
+                chrono::NaiveDate::parse_from_str(s, "%Y-%m-%d").map_err(|e| {
+                    McpError::invalid_parameter("deadline", format!("Invalid date: {e}"))
+                })
+            })
+            .transpose()?;
+
+        let tags = args.get("tags").and_then(|v| v.as_array()).map(|arr| {
+            arr.iter()
+                .filter_map(|v| v.as_str().map(String::from))
+                .collect::<Vec<_>>()
+        });
+
+        let request = things3_core::models::CreateProjectRequest {
+            title,
+            notes,
+            area_uuid,
+            start_date,
+            deadline,
+            tags,
+        };
+
+        let uuid = self
+            .db
+            .create_project(request)
+            .await
+            .map_err(|e| McpError::database_operation_failed("create_project", e))?;
+
+        let response = serde_json::json!({
+            "message": "Project created successfully",
+            "uuid": uuid.to_string()
+        });
+
+        Ok(CallToolResult {
+            content: vec![Content::Text {
+                text: serde_json::to_string_pretty(&response)
+                    .map_err(|e| McpError::serialization_failed("create_project response", e))?,
+            }],
+            is_error: false,
+        })
+    }
+
+    async fn handle_update_project(&self, args: Value) -> McpResult<CallToolResult> {
+        let uuid_str = args
+            .get("uuid")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| McpError::invalid_parameter("uuid", "UUID is required"))?;
+
+        let uuid = uuid::Uuid::parse_str(uuid_str)
+            .map_err(|e| McpError::invalid_parameter("uuid", format!("Invalid UUID: {e}")))?;
+
+        let title = args.get("title").and_then(|v| v.as_str()).map(String::from);
+        let notes = args.get("notes").and_then(|v| v.as_str()).map(String::from);
+
+        let area_uuid = args
+            .get("area_uuid")
+            .and_then(|v| v.as_str())
+            .map(|s| {
+                uuid::Uuid::parse_str(s).map_err(|e| {
+                    McpError::invalid_parameter("area_uuid", format!("Invalid UUID: {e}"))
+                })
+            })
+            .transpose()?;
+
+        let start_date = args
+            .get("start_date")
+            .and_then(|v| v.as_str())
+            .map(|s| {
+                chrono::NaiveDate::parse_from_str(s, "%Y-%m-%d").map_err(|e| {
+                    McpError::invalid_parameter("start_date", format!("Invalid date: {e}"))
+                })
+            })
+            .transpose()?;
+
+        let deadline = args
+            .get("deadline")
+            .and_then(|v| v.as_str())
+            .map(|s| {
+                chrono::NaiveDate::parse_from_str(s, "%Y-%m-%d").map_err(|e| {
+                    McpError::invalid_parameter("deadline", format!("Invalid date: {e}"))
+                })
+            })
+            .transpose()?;
+
+        let tags = args.get("tags").and_then(|v| v.as_array()).map(|arr| {
+            arr.iter()
+                .filter_map(|v| v.as_str().map(String::from))
+                .collect::<Vec<_>>()
+        });
+
+        let request = things3_core::models::UpdateProjectRequest {
+            uuid,
+            title,
+            notes,
+            area_uuid,
+            start_date,
+            deadline,
+            tags,
+        };
+
+        self.db
+            .update_project(request)
+            .await
+            .map_err(|e| McpError::database_operation_failed("update_project", e))?;
+
+        let response = serde_json::json!({
+            "message": "Project updated successfully",
+            "uuid": uuid_str
+        });
+
+        Ok(CallToolResult {
+            content: vec![Content::Text {
+                text: serde_json::to_string_pretty(&response)
+                    .map_err(|e| McpError::serialization_failed("update_project response", e))?,
+            }],
+            is_error: false,
+        })
+    }
+
+    async fn handle_complete_project(&self, args: Value) -> McpResult<CallToolResult> {
+        let uuid_str = args
+            .get("uuid")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| McpError::invalid_parameter("uuid", "UUID is required"))?;
+
+        let uuid = uuid::Uuid::parse_str(uuid_str)
+            .map_err(|e| McpError::invalid_parameter("uuid", format!("Invalid UUID: {e}")))?;
+
+        let child_handling_str = args
+            .get("child_handling")
+            .and_then(|v| v.as_str())
+            .unwrap_or("error");
+
+        let child_handling = match child_handling_str {
+            "cascade" => things3_core::models::ProjectChildHandling::Cascade,
+            "orphan" => things3_core::models::ProjectChildHandling::Orphan,
+            _ => things3_core::models::ProjectChildHandling::Error,
+        };
+
+        self.db
+            .complete_project(&uuid, child_handling)
+            .await
+            .map_err(|e| McpError::database_operation_failed("complete_project", e))?;
+
+        let response = serde_json::json!({
+            "message": "Project completed successfully",
+            "uuid": uuid_str
+        });
+
+        Ok(CallToolResult {
+            content: vec![Content::Text {
+                text: serde_json::to_string_pretty(&response)
+                    .map_err(|e| McpError::serialization_failed("complete_project response", e))?,
+            }],
+            is_error: false,
+        })
+    }
+
+    async fn handle_delete_project(&self, args: Value) -> McpResult<CallToolResult> {
+        let uuid_str = args
+            .get("uuid")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| McpError::invalid_parameter("uuid", "UUID is required"))?;
+
+        let uuid = uuid::Uuid::parse_str(uuid_str)
+            .map_err(|e| McpError::invalid_parameter("uuid", format!("Invalid UUID: {e}")))?;
+
+        let child_handling_str = args
+            .get("child_handling")
+            .and_then(|v| v.as_str())
+            .unwrap_or("error");
+
+        let child_handling = match child_handling_str {
+            "cascade" => things3_core::models::ProjectChildHandling::Cascade,
+            "orphan" => things3_core::models::ProjectChildHandling::Orphan,
+            _ => things3_core::models::ProjectChildHandling::Error,
+        };
+
+        self.db
+            .delete_project(&uuid, child_handling)
+            .await
+            .map_err(|e| McpError::database_operation_failed("delete_project", e))?;
+
+        let response = serde_json::json!({
+            "message": "Project deleted successfully",
+            "uuid": uuid_str
+        });
+
+        Ok(CallToolResult {
+            content: vec![Content::Text {
+                text: serde_json::to_string_pretty(&response)
+                    .map_err(|e| McpError::serialization_failed("delete_project response", e))?,
+            }],
+            is_error: false,
+        })
+    }
+
+    async fn handle_create_area(&self, args: Value) -> McpResult<CallToolResult> {
+        let title = args
+            .get("title")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| McpError::invalid_parameter("title", "Area title is required"))?
+            .to_string();
+
+        let request = things3_core::models::CreateAreaRequest { title };
+
+        let uuid = self
+            .db
+            .create_area(request)
+            .await
+            .map_err(|e| McpError::database_operation_failed("create_area", e))?;
+
+        let response = serde_json::json!({
+            "message": "Area created successfully",
+            "uuid": uuid.to_string()
+        });
+
+        Ok(CallToolResult {
+            content: vec![Content::Text {
+                text: serde_json::to_string_pretty(&response)
+                    .map_err(|e| McpError::serialization_failed("create_area response", e))?,
+            }],
+            is_error: false,
+        })
+    }
+
+    async fn handle_update_area(&self, args: Value) -> McpResult<CallToolResult> {
+        let uuid_str = args
+            .get("uuid")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| McpError::invalid_parameter("uuid", "UUID is required"))?;
+
+        let uuid = uuid::Uuid::parse_str(uuid_str)
+            .map_err(|e| McpError::invalid_parameter("uuid", format!("Invalid UUID: {e}")))?;
+
+        let title = args
+            .get("title")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| McpError::invalid_parameter("title", "Title is required"))?
+            .to_string();
+
+        let request = things3_core::models::UpdateAreaRequest { uuid, title };
+
+        self.db
+            .update_area(request)
+            .await
+            .map_err(|e| McpError::database_operation_failed("update_area", e))?;
+
+        let response = serde_json::json!({
+            "message": "Area updated successfully",
+            "uuid": uuid_str
+        });
+
+        Ok(CallToolResult {
+            content: vec![Content::Text {
+                text: serde_json::to_string_pretty(&response)
+                    .map_err(|e| McpError::serialization_failed("update_area response", e))?,
+            }],
+            is_error: false,
+        })
+    }
+
+    async fn handle_delete_area(&self, args: Value) -> McpResult<CallToolResult> {
+        let uuid_str = args
+            .get("uuid")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| McpError::invalid_parameter("uuid", "UUID is required"))?;
+
+        let uuid = uuid::Uuid::parse_str(uuid_str)
+            .map_err(|e| McpError::invalid_parameter("uuid", format!("Invalid UUID: {e}")))?;
+
+        self.db
+            .delete_area(&uuid)
+            .await
+            .map_err(|e| McpError::database_operation_failed("delete_area", e))?;
+
+        let response = serde_json::json!({
+            "message": "Area deleted successfully",
+            "uuid": uuid_str
+        });
+
+        Ok(CallToolResult {
+            content: vec![Content::Text {
+                text: serde_json::to_string_pretty(&response)
+                    .map_err(|e| McpError::serialization_failed("delete_area response", e))?,
             }],
             is_error: false,
         })

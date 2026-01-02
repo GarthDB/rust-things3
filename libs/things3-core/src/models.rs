@@ -213,6 +213,73 @@ pub struct TaskFilters {
     pub offset: Option<usize>,
 }
 
+/// Project creation request
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CreateProjectRequest {
+    /// Project title (required)
+    pub title: String,
+    /// Optional notes
+    pub notes: Option<String>,
+    /// Area UUID (validated if provided)
+    pub area_uuid: Option<Uuid>,
+    /// Start date
+    pub start_date: Option<NaiveDate>,
+    /// Deadline
+    pub deadline: Option<NaiveDate>,
+    /// Tags (as string names)
+    pub tags: Option<Vec<String>>,
+}
+
+/// Project update request
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UpdateProjectRequest {
+    /// Project UUID
+    pub uuid: Uuid,
+    /// New title
+    pub title: Option<String>,
+    /// New notes
+    pub notes: Option<String>,
+    /// New area UUID
+    pub area_uuid: Option<Uuid>,
+    /// New start date
+    pub start_date: Option<NaiveDate>,
+    /// New deadline
+    pub deadline: Option<NaiveDate>,
+    /// New tags
+    pub tags: Option<Vec<String>>,
+}
+
+/// Area creation request
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CreateAreaRequest {
+    /// Area title (required)
+    pub title: String,
+}
+
+/// Area update request
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UpdateAreaRequest {
+    /// Area UUID
+    pub uuid: Uuid,
+    /// New title
+    pub title: String,
+}
+
+/// How to handle child tasks when completing/deleting a project
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub enum ProjectChildHandling {
+    /// Return error if project has child tasks (default, safest)
+    #[serde(rename = "error")]
+    #[default]
+    Error,
+    /// Complete/delete all child tasks
+    #[serde(rename = "cascade")]
+    Cascade,
+    /// Move child tasks to inbox (orphan them)
+    #[serde(rename = "orphan")]
+    Orphan,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
