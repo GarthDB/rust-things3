@@ -188,41 +188,80 @@ Search for tasks by title or notes.
 ### Task Management Tools
 
 #### `create_task`
-Create a new task.
+Create a new task in Things 3 with comprehensive field support and validation.
 
 **Parameters**:
-- `title` (required): Task title
-- `notes` (optional): Task notes
-- `project_uuid` (optional): Project UUID
-- `area_uuid` (optional): Area UUID
-- `deadline` (optional): Deadline date (YYYY-MM-DD)
-- `tags` (optional): Array of tag names
+- `title` (string, required): Task title
+- `task_type` (string, optional): Task type - "to-do" (default), "project", or "heading"
+- `notes` (string, optional): Task notes
+- `start_date` (string, optional): Start date in YYYY-MM-DD format
+- `deadline` (string, optional): Deadline in YYYY-MM-DD format
+- `project_uuid` (string, optional): UUID of parent project (validated - must exist)
+- `area_uuid` (string, optional): UUID of parent area (validated - must exist)
+- `parent_uuid` (string, optional): UUID of parent task for subtasks (validated - must exist)
+- `tags` (array of strings, optional): Tag names
+- `status` (string, optional): Initial status - "incomplete" (default), "completed", "canceled", or "trashed"
 
-**Example**:
+**Validation**:
+- Referenced projects, areas, and parent tasks are validated for existence
+- Invalid UUIDs will result in an error response
+- Dates must be in YYYY-MM-DD format
+
+**Example (Minimal)**:
+```json
+{
+  "name": "create_task",
+  "arguments": {
+    "title": "Review PR"
+  }
+}
+```
+
+**Example (Complete)**:
 ```json
 {
   "name": "create_task",
   "arguments": {
     "title": "Review PR",
-    "notes": "Check code quality and tests",
-    "project_uuid": "550e8400-e29b-41d4-a716-446655440000",
+    "task_type": "to-do",
+    "notes": "Check code quality, tests, and documentation",
+    "start_date": "2026-01-10",
     "deadline": "2026-01-15",
-    "tags": ["work", "urgent"]
+    "project_uuid": "550e8400-e29b-41d4-a716-446655440000",
+    "tags": ["work", "urgent", "code-review"],
+    "status": "incomplete"
   }
 }
 ```
 
+**Response**:
+```json
+{
+  "uuid": "generated-uuid-here",
+  "message": "Task created successfully"
+}
+```
+
 #### `update_task`
-Update an existing task.
+Update an existing task. Only provided fields will be updated (partial updates supported).
 
 **Parameters**:
-- `uuid` (required): Task UUID
-- `title` (optional): New title
-- `notes` (optional): New notes
-- `status` (optional): New status
-- `deadline` (optional): New deadline
+- `uuid` (string, required): Task UUID
+- `title` (string, optional): New title
+- `notes` (string, optional): New notes
+- `start_date` (string, optional): New start date (YYYY-MM-DD)
+- `deadline` (string, optional): New deadline (YYYY-MM-DD)
+- `status` (string, optional): New status - "incomplete", "completed", "canceled", or "trashed"
+- `project_uuid` (string, optional): New project UUID (validated - must exist)
+- `area_uuid` (string, optional): New area UUID (validated - must exist)
+- `tags` (array of strings, optional): New tag names
 
-**Example**:
+**Validation**:
+- Task with the given UUID must exist
+- Referenced projects and areas are validated for existence
+- Invalid UUIDs will result in an error response
+
+**Example (Single Field)**:
 ```json
 {
   "name": "update_task",
@@ -230,6 +269,27 @@ Update an existing task.
     "uuid": "550e8400-e29b-41d4-a716-446655440000",
     "status": "completed"
   }
+}
+```
+
+**Example (Multiple Fields)**:
+```json
+{
+  "name": "update_task",
+  "arguments": {
+    "uuid": "550e8400-e29b-41d4-a716-446655440000",
+    "title": "Updated: Review PR",
+    "notes": "Added security review",
+    "deadline": "2026-01-20",
+    "tags": ["work", "urgent", "code-review", "security"]
+  }
+}
+```
+
+**Response**:
+```json
+{
+  "message": "Task updated successfully"
 }
 ```
 

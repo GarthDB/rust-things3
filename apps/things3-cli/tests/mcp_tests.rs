@@ -335,8 +335,7 @@ async fn test_create_task_tool() {
         name: "create_task".to_string(),
         arguments: Some(json!({
             "title": "Test Task",
-            "notes": "Test notes",
-            "project_uuid": "test-project-uuid"
+            "notes": "Test notes"
         })),
     };
 
@@ -347,8 +346,8 @@ async fn test_create_task_tool() {
     match &result.content[0] {
         Content::Text { text } => {
             let parsed: serde_json::Value = serde_json::from_str(text).unwrap();
-            assert_eq!(parsed["title"], "Test Task");
-            assert_eq!(parsed["status"], "placeholder");
+            assert!(parsed.get("uuid").is_some(), "Response should contain UUID");
+            assert_eq!(parsed["message"], "Task created successfully");
         }
     }
 }
@@ -364,22 +363,33 @@ async fn test_create_task_tool_missing_title() {
     };
 
     let result = server.call_tool(request).await;
+    // Missing title should cause a deserialization error
     assert!(result.is_err());
-    match result.unwrap_err() {
-        McpError::MissingParameter { parameter_name } => {
-            assert_eq!(parameter_name, "title");
-        }
-        _ => panic!("Expected MissingParameter error"),
-    }
 }
 
 #[tokio::test]
 async fn test_update_task_tool() {
     let server = create_test_mcp_server().await;
+
+    // First create a task to update
+    let create_request = CallToolRequest {
+        name: "create_task".to_string(),
+        arguments: Some(json!({
+            "title": "Task to Update"
+        })),
+    };
+    let create_result = server.call_tool(create_request).await.unwrap();
+    let create_text = match &create_result.content[0] {
+        Content::Text { text } => text,
+    };
+    let created: serde_json::Value = serde_json::from_str(create_text).unwrap();
+    let uuid = created["uuid"].as_str().unwrap();
+
+    // Now update it
     let request = CallToolRequest {
         name: "update_task".to_string(),
         arguments: Some(json!({
-            "uuid": "test-task-uuid",
+            "uuid": uuid,
             "title": "Updated Task",
             "status": "completed"
         })),
@@ -392,8 +402,7 @@ async fn test_update_task_tool() {
     match &result.content[0] {
         Content::Text { text } => {
             let parsed: serde_json::Value = serde_json::from_str(text).unwrap();
-            assert_eq!(parsed["uuid"], "test-task-uuid");
-            assert_eq!(parsed["status"], "placeholder");
+            assert_eq!(parsed["message"], "Task updated successfully");
         }
     }
 }
@@ -409,13 +418,8 @@ async fn test_update_task_tool_missing_uuid() {
     };
 
     let result = server.call_tool(request).await;
+    // Missing uuid should cause a deserialization error
     assert!(result.is_err());
-    match result.unwrap_err() {
-        McpError::MissingParameter { parameter_name } => {
-            assert_eq!(parameter_name, "uuid");
-        }
-        _ => panic!("Expected MissingParameter error"),
-    }
 }
 
 #[tokio::test]

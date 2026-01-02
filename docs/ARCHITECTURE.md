@@ -141,7 +141,7 @@ sequenceDiagram
     IO-->>AI: Write to stdout
 ```
 
-### Database Query Flow
+### Database Query Flow (Read Operations)
 
 ```mermaid
 sequenceDiagram
@@ -163,6 +163,49 @@ sequenceDiagram
         DB->>Cache: store_result()
     end
     DB-->>App: Vec<Task>
+```
+
+### Database Write Flow (Create/Update Operations)
+
+```mermaid
+sequenceDiagram
+    participant MCP as MCP Client
+    participant Handler as Tool Handler
+    participant DB as ThingsDatabase
+    participant Validator as Validation Layer
+    participant SQLx as SQLx Pool
+    participant SQLite
+    
+    MCP->>Handler: create_task(request)
+    Handler->>DB: create_task(CreateTaskRequest)
+    DB->>DB: Generate UUID v4
+    
+    alt Project UUID provided
+        DB->>Validator: validate_project_exists()
+        Validator->>SQLx: SELECT 1 FROM TMTask WHERE uuid=? AND type=1
+        SQLx->>SQLite: Query
+        SQLite-->>SQLx: Result
+        SQLx-->>Validator: Exists/Not Found
+        Validator-->>DB: Validation result
+    end
+    
+    alt Area UUID provided
+        DB->>Validator: validate_area_exists()
+        Validator->>SQLx: SELECT 1 FROM TMArea WHERE uuid=?
+        SQLx->>SQLite: Query
+        SQLite-->>SQLx: Result
+        SQLx-->>Validator: Exists/Not Found
+        Validator-->>DB: Validation result
+    end
+    
+    DB->>DB: Convert dates to Things 3 format
+    DB->>DB: Serialize tags to BLOB
+    DB->>SQLx: INSERT INTO TMTask
+    SQLx->>SQLite: Execute INSERT
+    SQLite-->>SQLx: Success
+    SQLx-->>DB: Rows affected
+    DB-->>Handler: Created UUID
+    Handler-->>MCP: Success response
 ```
 
 ## Module Boundaries
