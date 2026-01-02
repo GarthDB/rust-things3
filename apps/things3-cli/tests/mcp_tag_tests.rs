@@ -2,6 +2,7 @@
 
 use serde_json::json;
 use things3_cli::mcp::CallToolRequest;
+use uuid::Uuid;
 
 mod mcp_tests;
 use mcp_tests::common::create_test_mcp_server;
@@ -385,7 +386,7 @@ async fn test_add_tag_to_task_tool() {
     // The test database has tasks in it already
 
     // Get a task UUID from the test database
-    let tasks = server.db.get_inbox().await.unwrap();
+    let tasks = server.db.get_inbox(None).await.unwrap();
     assert!(!tasks.is_empty(), "Test should have tasks in inbox");
     let task_uuid = tasks[0].uuid;
 
@@ -413,7 +414,7 @@ async fn test_remove_tag_from_task_tool() {
     let server = create_test_mcp_server().await;
 
     // Get a task
-    let tasks = server.db.get_inbox().await.unwrap();
+    let tasks = server.db.get_inbox(None).await.unwrap();
     assert!(!tasks.is_empty());
     let task_uuid = tasks[0].uuid;
 
@@ -447,7 +448,7 @@ async fn test_set_task_tags_tool() {
     let server = create_test_mcp_server().await;
 
     // Get a task
-    let tasks = server.db.get_inbox().await.unwrap();
+    let tasks = server.db.get_inbox(None).await.unwrap();
     assert!(!tasks.is_empty());
     let task_uuid = tasks[0].uuid;
 
@@ -612,7 +613,7 @@ async fn test_tag_lifecycle_integration() {
     assert_eq!(update_response["message"], "Tag updated successfully");
 
     // 3. Add tag to a task
-    let tasks = server.db.get_inbox().await.unwrap();
+    let tasks = server.db.get_inbox(None).await.unwrap();
     assert!(!tasks.is_empty());
     let task_uuid = tasks[0].uuid;
 
