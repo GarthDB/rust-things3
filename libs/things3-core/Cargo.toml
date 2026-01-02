@@ -23,6 +23,9 @@ anyhow.workspace = true
 sqlx = { version = "0.8", features = ["runtime-tokio-rustls", "sqlite", "chrono", "uuid", "json"], default-features = false }
 rusqlite = { version = "0.31", features = ["bundled"] }
 
+# String similarity (for tag fuzzy matching)
+strsim.workspace = true
+
 # Async
 tokio.workspace = true
 

@@ -2,8 +2,9 @@
 
 mod mcp_tests;
 
-use mcp_tests::common::{create_test_mcp_server, json, CallToolRequest, Content};
-use serde_json::Value;
+use mcp_tests::common::create_test_mcp_server;
+use serde_json::{json, Value};
+use things3_cli::mcp::{CallToolRequest, Content};
 
 /// Helper to parse CallToolResult into a Value for easier assertions
 fn parse_tool_result(result: &things3_cli::mcp::CallToolResult) -> Value {

@@ -3,6 +3,7 @@
 mod core;
 pub mod mappers;
 pub mod query_builders;
+pub mod tag_utils;
 pub mod validators;
 
 // Re-export everything from core for backward compatibility
