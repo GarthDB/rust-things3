@@ -46,8 +46,8 @@ impl McpTestHarness {
             let text = result
                 .content
                 .first()
-                .and_then(|c| match c {
-                    things3_cli::mcp::Content::Text { text } => Some(text.clone()),
+                .map(|c| match c {
+                    things3_cli::mcp::Content::Text { text } => text.clone(),
                 })
                 .unwrap_or_default();
 
