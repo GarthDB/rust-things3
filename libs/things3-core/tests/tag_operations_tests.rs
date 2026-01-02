@@ -1,14 +1,12 @@
 //! Tag operations tests - comprehensive coverage for tag management with duplicate prevention
 
-use chrono::Utc;
 use things3_core::{
-    database::{tag_utils::*, ThingsDatabase},
+    database::tag_utils::*,
     models::{CreateTagRequest, TagCreationResult, TagMatchType, UpdateTagRequest},
 };
-use uuid::Uuid;
 
 #[cfg(feature = "test-utils")]
-use things3_core::test_utils::create_test_database;
+use things3_core::test_utils::create_test_database_and_connect;
 
 // ========================================================================
 // TAG NORMALIZATION AND SIMILARITY TESTS
@@ -78,7 +76,7 @@ fn test_get_match_type() {
 #[tokio::test]
 #[cfg(feature = "test-utils")]
 async fn test_create_tag_prevents_exact_duplicate() {
-    let db = create_test_database().await.unwrap();
+    let (db, _temp_file) = create_test_database_and_connect().await.unwrap();
 
     // Create first tag
     let request1 = CreateTagRequest {
@@ -108,7 +106,7 @@ async fn test_create_tag_prevents_exact_duplicate() {
 #[tokio::test]
 #[cfg(feature = "test-utils")]
 async fn test_create_tag_suggests_similar() {
-    let db = create_test_database().await.unwrap();
+    let (db, _temp_file) = create_test_database_and_connect().await.unwrap();
 
     // Create first tag
     let request1 = CreateTagRequest {
@@ -137,7 +135,7 @@ async fn test_create_tag_suggests_similar() {
 #[tokio::test]
 #[cfg(feature = "test-utils")]
 async fn test_create_tag_force_skips_check() {
-    let db = create_test_database().await.unwrap();
+    let (db, _temp_file) = create_test_database_and_connect().await.unwrap();
 
     // Create first tag
     let request1 = CreateTagRequest {
@@ -164,7 +162,7 @@ async fn test_create_tag_force_skips_check() {
 #[tokio::test]
 #[cfg(feature = "test-utils")]
 async fn test_find_tag_by_normalized_title() {
-    let db = create_test_database().await.unwrap();
+    let (db, _temp_file) = create_test_database_and_connect().await.unwrap();
 
     let request = CreateTagRequest {
         title: "Work".to_string(),
@@ -182,7 +180,7 @@ async fn test_find_tag_by_normalized_title() {
 #[tokio::test]
 #[cfg(feature = "test-utils")]
 async fn test_find_similar_tags_returns_sorted() {
-    let db = create_test_database().await.unwrap();
+    let (db, _temp_file) = create_test_database_and_connect().await.unwrap();
 
     // Create several tags
     let tags = vec!["work", "working", "worker", "vacation"];
@@ -208,7 +206,7 @@ async fn test_find_similar_tags_returns_sorted() {
 #[tokio::test]
 #[cfg(feature = "test-utils")]
 async fn test_update_tag_checks_duplicates() {
-    let db = create_test_database().await.unwrap();
+    let (db, _temp_file) = create_test_database_and_connect().await.unwrap();
 
     // Create two tags
     let request1 = CreateTagRequest {
@@ -239,7 +237,7 @@ async fn test_update_tag_checks_duplicates() {
 #[tokio::test]
 #[cfg(feature = "test-utils")]
 async fn test_update_tag_success() {
-    let db = create_test_database().await.unwrap();
+    let (db, _temp_file) = create_test_database_and_connect().await.unwrap();
 
     let request = CreateTagRequest {
         title: "work".to_string(),
@@ -271,7 +269,7 @@ async fn test_update_tag_success() {
 #[tokio::test]
 #[cfg(feature = "test-utils")]
 async fn test_delete_tag() {
-    let db = create_test_database().await.unwrap();
+    let (db, _temp_file) = create_test_database_and_connect().await.unwrap();
 
     let request = CreateTagRequest {
         title: "work".to_string(),
@@ -291,7 +289,7 @@ async fn test_delete_tag() {
 #[tokio::test]
 #[cfg(feature = "test-utils")]
 async fn test_merge_tags() {
-    let db = create_test_database().await.unwrap();
+    let (db, _temp_file) = create_test_database_and_connect().await.unwrap();
 
     // Create two tags
     let request1 = CreateTagRequest {
@@ -330,7 +328,7 @@ async fn test_merge_tags() {
 #[tokio::test]
 #[cfg(feature = "test-utils")]
 async fn test_get_all_tags() {
-    let db = create_test_database().await.unwrap();
+    let (db, _temp_file) = create_test_database_and_connect().await.unwrap();
 
     // Create several tags
     for title in &["work", "personal", "urgent", "later"] {
@@ -354,7 +352,7 @@ async fn test_get_all_tags() {
 #[tokio::test]
 #[cfg(feature = "test-utils")]
 async fn test_search_tags() {
-    let db = create_test_database().await.unwrap();
+    let (db, _temp_file) = create_test_database_and_connect().await.unwrap();
 
     // Create several tags
     for title in &["work", "working", "worker", "vacation"] {
@@ -374,7 +372,7 @@ async fn test_search_tags() {
 #[tokio::test]
 #[cfg(feature = "test-utils")]
 async fn test_get_popular_tags() {
-    let db = create_test_database().await.unwrap();
+    let (db, _temp_file) = create_test_database_and_connect().await.unwrap();
 
     // Create tags (usage count will be 0 initially)
     for title in &["alpha", "beta", "gamma"] {
@@ -393,7 +391,7 @@ async fn test_get_popular_tags() {
 #[tokio::test]
 #[cfg(feature = "test-utils")]
 async fn test_get_recent_tags() {
-    let db = create_test_database().await.unwrap();
+    let (db, _temp_file) = create_test_database_and_connect().await.unwrap();
 
     // Create a tag
     let request = CreateTagRequest {
@@ -415,7 +413,7 @@ async fn test_get_recent_tags() {
 #[tokio::test]
 #[cfg(feature = "test-utils")]
 async fn test_get_tag_completions() {
-    let db = create_test_database().await.unwrap();
+    let (db, _temp_file) = create_test_database_and_connect().await.unwrap();
 
     // Create several tags
     for title in &["work", "working", "worker", "vacation"] {
@@ -442,7 +440,7 @@ async fn test_get_tag_completions() {
 #[tokio::test]
 #[cfg(feature = "test-utils")]
 async fn test_find_duplicate_tags() {
-    let db = create_test_database().await.unwrap();
+    let (db, _temp_file) = create_test_database_and_connect().await.unwrap();
 
     // Create similar tags
     for title in &["work", "Work", "wrk", "working"] {

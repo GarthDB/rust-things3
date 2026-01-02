@@ -69,6 +69,25 @@ pub async fn create_test_database<P: AsRef<Path>>(db_path: P) -> crate::Result<(
     .await
     .map_err(|e| crate::ThingsError::Database(format!("Failed to create TMArea table: {e}")))?;
 
+    // Create TMTag table
+    sqlx::query(
+        "
+        CREATE TABLE IF NOT EXISTS TMTag (
+            uuid TEXT PRIMARY KEY,
+            title TEXT NOT NULL,
+            shortcut TEXT,
+            parent TEXT,
+            creationDate REAL NOT NULL,
+            userModificationDate REAL NOT NULL,
+            usedDate REAL,
+            'index' INTEGER NOT NULL DEFAULT 0
+        )
+        ",
+    )
+    .execute(&pool)
+    .await
+    .map_err(|e| crate::ThingsError::Database(format!("Failed to create TMTag table: {e}")))?;
+
     // Insert test data
     insert_test_data(&pool).await?;
 
