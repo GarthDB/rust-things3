@@ -1289,6 +1289,74 @@ impl ThingsDatabase {
         Ok(())
     }
 
+    /// Get a single project by UUID
+    ///
+    /// Returns `None` if the project doesn't exist or is trashed
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database query fails
+    #[instrument(skip(self))]
+    pub async fn get_project_by_uuid(&self, uuid: &Uuid) -> ThingsResult<Option<Project>> {
+        let row = sqlx::query(
+            r"
+            SELECT 
+                uuid, title, status, 
+                area, notes, 
+                creationDate, userModificationDate,
+                startDate, deadline,
+                trashed, type
+            FROM TMTask
+            WHERE uuid = ? AND type = 1
+            ",
+        )
+        .bind(uuid.to_string())
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|e| ThingsError::unknown(format!("Failed to fetch project: {e}")))?;
+
+        if let Some(row) = row {
+            // Check if trashed
+            let trashed: i64 = row.get("trashed");
+            if trashed == 1 {
+                return Ok(None); // Return None for trashed projects
+            }
+
+            let project = Project {
+                uuid: things_uuid_to_uuid(&row.get::<String, _>("uuid")),
+                title: row.get("title"),
+                status: TaskStatus::from_i32(row.get("status")).unwrap_or(TaskStatus::Incomplete),
+                area_uuid: row
+                    .get::<Option<String>, _>("area")
+                    .map(|s| things_uuid_to_uuid(&s)),
+                notes: row.get("notes"),
+                deadline: row
+                    .get::<Option<i64>, _>("deadline")
+                    .and_then(|ts| DateTime::from_timestamp(ts, 0))
+                    .map(|dt| dt.date_naive()),
+                start_date: row
+                    .get::<Option<i64>, _>("startDate")
+                    .and_then(|ts| DateTime::from_timestamp(ts, 0))
+                    .map(|dt| dt.date_naive()),
+                tags: Vec::new(),  // TODO: Load tags separately
+                tasks: Vec::new(), // TODO: Load child tasks separately
+                created: {
+                    let ts_f64 = row.get::<f64, _>("creationDate");
+                    let ts = safe_timestamp_convert(ts_f64);
+                    DateTime::from_timestamp(ts, 0).unwrap_or_else(Utc::now)
+                },
+                modified: {
+                    let ts_f64 = row.get::<f64, _>("userModificationDate");
+                    let ts = safe_timestamp_convert(ts_f64);
+                    DateTime::from_timestamp(ts, 0).unwrap_or_else(Utc::now)
+                },
+            };
+            Ok(Some(project))
+        } else {
+            Ok(None)
+        }
+    }
+
     /// Update an existing project
     ///
     /// Only updates fields that are provided (Some(_))
@@ -1308,9 +1376,7 @@ impl ThingsDatabase {
         // Validate dates if either is being updated
         if request.start_date.is_some() || request.deadline.is_some() {
             // Fetch current project to merge dates
-            let current_projects = self.get_all_projects().await?;
-            if let Some(current_project) = current_projects.iter().find(|p| p.uuid == request.uuid)
-            {
+            if let Some(current_project) = self.get_project_by_uuid(&request.uuid).await? {
                 let final_start = request.start_date.or(current_project.start_date);
                 let final_deadline = request.deadline.or(current_project.deadline);
                 crate::database::validate_date_range(final_start, final_deadline)?;

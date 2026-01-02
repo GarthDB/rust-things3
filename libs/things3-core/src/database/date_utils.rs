@@ -200,14 +200,28 @@ pub fn format_date_for_display(date: Option<NaiveDate>) -> String {
 
 /// Parse a date from a string, supporting multiple formats
 ///
-/// Supports:
-/// - ISO 8601: "YYYY-MM-DD"
+/// Currently supports:
+/// - ISO 8601: "YYYY-MM-DD" (e.g., "2024-12-31")
+///
+/// Future formats to consider:
+/// - US format: "MM/DD/YYYY"
+/// - European format: "DD/MM/YYYY"
+/// - Natural language: "today", "tomorrow", "next week"
 ///
 /// # Arguments
 /// * `s` - String to parse
 ///
 /// # Returns
-/// `Ok(NaiveDate)` if parsing succeeds, `Err` otherwise
+/// `Ok(NaiveDate)` if parsing succeeds, `Err(DateConversionError)` otherwise
+///
+/// # Examples
+/// ```
+/// use things3_core::database::parse_date_from_string;
+/// use chrono::NaiveDate;
+///
+/// let date = parse_date_from_string("2024-12-31").unwrap();
+/// assert_eq!(date, NaiveDate::from_ymd_opt(2024, 12, 31).unwrap());
+/// ```
 pub fn parse_date_from_string(s: &str) -> Result<NaiveDate, DateConversionError> {
     NaiveDate::parse_from_str(s, "%Y-%m-%d").map_err(|e| DateConversionError::ParseError {
         string: s.to_string(),
