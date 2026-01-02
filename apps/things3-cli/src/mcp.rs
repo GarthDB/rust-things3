@@ -996,6 +996,51 @@ impl ThingsMcpServer {
                     }
                 }),
             },
+            Tool {
+                name: "logbook_search".to_string(),
+                description: "Search completed tasks in the Things 3 logbook. Supports text search, date ranges, and filtering by project/area/tags.".to_string(),
+                input_schema: serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "search_text": {
+                            "type": "string",
+                            "description": "Search in task titles and notes (case-insensitive)"
+                        },
+                        "from_date": {
+                            "type": "string",
+                            "format": "date",
+                            "description": "Start date for completion date range (YYYY-MM-DD)"
+                        },
+                        "to_date": {
+                            "type": "string",
+                            "format": "date",
+                            "description": "End date for completion date range (YYYY-MM-DD)"
+                        },
+                        "project_uuid": {
+                            "type": "string",
+                            "format": "uuid",
+                            "description": "Filter by project UUID"
+                        },
+                        "area_uuid": {
+                            "type": "string",
+                            "format": "uuid",
+                            "description": "Filter by area UUID"
+                        },
+                        "tags": {
+                            "type": "array",
+                            "items": { "type": "string" },
+                            "description": "Filter by one or more tags (all must match)"
+                        },
+                        "limit": {
+                            "type": "integer",
+                            "default": 50,
+                            "minimum": 1,
+                            "maximum": 500,
+                            "description": "Maximum number of results to return (default: 50, max: 500)"
+                        }
+                    }
+                }),
+            },
         ]
     }
 
@@ -1761,6 +1806,7 @@ impl ThingsMcpServer {
             "get_projects" => self.handle_get_projects(arguments).await,
             "get_areas" => self.handle_get_areas(arguments).await,
             "search_tasks" => self.handle_search_tasks(arguments).await,
+            "logbook_search" => self.handle_logbook_search(arguments).await,
             "create_task" => self.handle_create_task(arguments).await,
             "update_task" => self.handle_update_task(arguments).await,
             "complete_task" => self.handle_complete_task(arguments).await,
@@ -1909,6 +1955,66 @@ impl ThingsMcpServer {
 
         let json = serde_json::to_string_pretty(&tasks)
             .map_err(|e| McpError::serialization_failed("search_tasks serialization", e))?;
+
+        Ok(CallToolResult {
+            content: vec![Content::Text { text: json }],
+            is_error: false,
+        })
+    }
+
+    async fn handle_logbook_search(&self, args: Value) -> McpResult<CallToolResult> {
+        // Parse all optional parameters
+        let search_text = args
+            .get("search_text")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string());
+
+        let from_date = args
+            .get("from_date")
+            .and_then(|v| v.as_str())
+            .and_then(|s| chrono::NaiveDate::parse_from_str(s, "%Y-%m-%d").ok());
+
+        let to_date = args
+            .get("to_date")
+            .and_then(|v| v.as_str())
+            .and_then(|s| chrono::NaiveDate::parse_from_str(s, "%Y-%m-%d").ok());
+
+        let project_uuid = args
+            .get("project_uuid")
+            .and_then(|v| v.as_str())
+            .and_then(|s| Uuid::parse_str(s).ok());
+
+        let area_uuid = args
+            .get("area_uuid")
+            .and_then(|v| v.as_str())
+            .and_then(|s| Uuid::parse_str(s).ok());
+
+        let tags = args.get("tags").and_then(|v| v.as_array()).map(|arr| {
+            arr.iter()
+                .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                .collect::<Vec<String>>()
+        });
+
+        let limit = args.get("limit").and_then(|v| v.as_u64()).map(|v| v as u32);
+
+        // Call database method
+        let tasks = self
+            .db
+            .search_logbook(
+                search_text,
+                from_date,
+                to_date,
+                project_uuid,
+                area_uuid,
+                tags,
+                limit,
+            )
+            .await
+            .map_err(|e| McpError::database_operation_failed("logbook_search", e))?;
+
+        // Serialize results
+        let json = serde_json::to_string_pretty(&tasks)
+            .map_err(|e| McpError::serialization_failed("logbook_search serialization", e))?;
 
         Ok(CallToolResult {
             content: vec![Content::Text { text: json }],

@@ -101,10 +101,13 @@ pub fn map_task_row(row: &SqliteRow) -> ThingsResult<Task> {
         .get::<Option<String>, _>("heading")
         .map(|s| parse_uuid_with_fallback(&s));
 
-    // Try to get cachedTags as binary data
+    // Try to get cachedTags as binary data and parse it
     let tags = row
         .get::<Option<Vec<u8>>, _>("cachedTags")
-        .map(|_| Vec::new()) // TODO: Parse binary tag data
+        .and_then(|blob| {
+            // Parse the JSON blob into a Vec<String>
+            crate::database::deserialize_tags_from_blob(&blob).ok()
+        })
         .unwrap_or_default();
 
     Ok(Task {
