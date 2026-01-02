@@ -1,19 +1,8 @@
-use tempfile::NamedTempFile;
 use things3_core::{
-    test_utils::create_test_database, CreateTaskRequest, DeleteChildHandling, TaskStatus, TaskType,
-    ThingsDatabase,
+    test_utils::create_test_database_and_connect, CreateTaskRequest, DeleteChildHandling,
+    TaskStatus, TaskType,
 };
 use uuid::Uuid;
-
-// Helper function to create a test database and connect
-// Returns both the database and the temp file to keep the file alive
-async fn create_test_database_and_connect() -> (ThingsDatabase, NamedTempFile) {
-    let temp_file = NamedTempFile::new().unwrap();
-    let db_path = temp_file.path();
-    create_test_database(db_path).await.unwrap();
-    let db = ThingsDatabase::new(db_path).await.unwrap();
-    (db, temp_file)
-}
 
 // ============================================================================
 // get_task_by_uuid Tests
@@ -22,7 +11,7 @@ async fn create_test_database_and_connect() -> (ThingsDatabase, NamedTempFile) {
 #[tokio::test]
 #[cfg(feature = "test-utils")]
 async fn test_get_task_by_uuid_existing_task() {
-    let (db, _temp_file) = create_test_database_and_connect().await;
+    let (db, _temp_file) = create_test_database_and_connect().await.unwrap();
 
     // Create a task
     let request = CreateTaskRequest {
@@ -50,7 +39,7 @@ async fn test_get_task_by_uuid_existing_task() {
 #[tokio::test]
 #[cfg(feature = "test-utils")]
 async fn test_get_task_by_uuid_nonexistent() {
-    let (db, _temp_file) = create_test_database_and_connect().await;
+    let (db, _temp_file) = create_test_database_and_connect().await.unwrap();
 
     let nonexistent_uuid = Uuid::new_v4();
     let result = db.get_task_by_uuid(&nonexistent_uuid).await.unwrap();
@@ -60,7 +49,7 @@ async fn test_get_task_by_uuid_nonexistent() {
 #[tokio::test]
 #[cfg(feature = "test-utils")]
 async fn test_get_task_by_uuid_trashed_task() {
-    let (db, _temp_file) = create_test_database_and_connect().await;
+    let (db, _temp_file) = create_test_database_and_connect().await.unwrap();
 
     // Create a task
     let request = CreateTaskRequest {
@@ -93,7 +82,7 @@ async fn test_get_task_by_uuid_trashed_task() {
 #[tokio::test]
 #[cfg(feature = "test-utils")]
 async fn test_get_task_by_uuid_with_project() {
-    let (db, _temp_file) = create_test_database_and_connect().await;
+    let (db, _temp_file) = create_test_database_and_connect().await.unwrap();
 
     // Create a project
     let project_request = CreateTaskRequest {
@@ -133,7 +122,7 @@ async fn test_get_task_by_uuid_with_project() {
 #[tokio::test]
 #[cfg(feature = "test-utils")]
 async fn test_get_task_by_uuid_with_parent() {
-    let (db, _temp_file) = create_test_database_and_connect().await;
+    let (db, _temp_file) = create_test_database_and_connect().await.unwrap();
 
     // Create parent task
     let parent_request = CreateTaskRequest {
@@ -173,7 +162,7 @@ async fn test_get_task_by_uuid_with_parent() {
 #[tokio::test]
 #[cfg(feature = "test-utils")]
 async fn test_get_task_by_uuid_completed_task() {
-    let (db, _temp_file) = create_test_database_and_connect().await;
+    let (db, _temp_file) = create_test_database_and_connect().await.unwrap();
 
     // Create and complete a task
     let request = CreateTaskRequest {
@@ -200,7 +189,7 @@ async fn test_get_task_by_uuid_completed_task() {
 #[tokio::test]
 #[cfg(feature = "test-utils")]
 async fn test_get_task_by_uuid_all_fields() {
-    let (db, _temp_file) = create_test_database_and_connect().await;
+    let (db, _temp_file) = create_test_database_and_connect().await.unwrap();
 
     // Create a task with many fields populated
     let start_date = chrono::NaiveDate::from_ymd_opt(2024, 1, 15).unwrap();
