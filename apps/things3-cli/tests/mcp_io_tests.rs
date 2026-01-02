@@ -757,7 +757,7 @@ async fn test_all_available_tools() {
     assert!(!tools.is_empty(), "Should have at least one tool");
 
     // Test calling get_today and get_inbox (most common tools)
-    let tool_tests = vec!["get_today", "get_inbox"];
+    let tool_tests = ["get_today", "get_inbox"];
 
     for (idx, tool_name) in tool_tests.iter().enumerate() {
         let tools_call_request = json!({
