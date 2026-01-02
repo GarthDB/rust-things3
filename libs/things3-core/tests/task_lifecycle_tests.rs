@@ -1,22 +1,11 @@
 //! Task lifecycle operation tests (complete, uncomplete, delete)
 
 use chrono::Utc;
-use tempfile::NamedTempFile;
 use things3_core::{
-    test_utils::create_test_database, CreateTaskRequest, DeleteChildHandling, TaskStatus, TaskType,
-    ThingsDatabase,
+    test_utils::create_test_database_and_connect, CreateTaskRequest, DeleteChildHandling,
+    TaskStatus, TaskType,
 };
 use uuid::Uuid;
-
-// Helper function to create a test database and connect
-// Returns both the database and the temp file to keep the file alive
-async fn create_test_database_and_connect() -> (ThingsDatabase, NamedTempFile) {
-    let temp_file = NamedTempFile::new().unwrap();
-    let db_path = temp_file.path();
-    create_test_database(db_path).await.unwrap();
-    let db = ThingsDatabase::new(db_path).await.unwrap();
-    (db, temp_file)
-}
 
 // ============================================================================
 // Complete Task Tests (8 tests)
@@ -25,7 +14,7 @@ async fn create_test_database_and_connect() -> (ThingsDatabase, NamedTempFile) {
 #[tokio::test]
 #[cfg(feature = "test-utils")]
 async fn test_complete_task_basic() {
-    let (db, _temp_file) = create_test_database_and_connect().await;
+    let (db, _temp_file) = create_test_database_and_connect().await.unwrap();
 
     // Create a task
     let request = CreateTaskRequest {
@@ -50,7 +39,7 @@ async fn test_complete_task_basic() {
 #[tokio::test]
 #[cfg(feature = "test-utils")]
 async fn test_complete_task_sets_stop_date() {
-    let (db, _temp_file) = create_test_database_and_connect().await;
+    let (db, _temp_file) = create_test_database_and_connect().await.unwrap();
 
     // Create a task
     let request = CreateTaskRequest {
@@ -89,7 +78,7 @@ async fn test_complete_task_sets_stop_date() {
 #[tokio::test]
 #[cfg(feature = "test-utils")]
 async fn test_complete_task_nonexistent() {
-    let (db, _temp_file) = create_test_database_and_connect().await;
+    let (db, _temp_file) = create_test_database_and_connect().await.unwrap();
 
     let nonexistent_uuid = Uuid::new_v4();
     let result = db.complete_task(&nonexistent_uuid).await;
@@ -99,7 +88,7 @@ async fn test_complete_task_nonexistent() {
 #[tokio::test]
 #[cfg(feature = "test-utils")]
 async fn test_complete_task_already_completed() {
-    let (db, _temp_file) = create_test_database_and_connect().await;
+    let (db, _temp_file) = create_test_database_and_connect().await.unwrap();
 
     // Create and complete a task
     let request = CreateTaskRequest {
@@ -125,7 +114,7 @@ async fn test_complete_task_already_completed() {
 #[tokio::test]
 #[cfg(feature = "test-utils")]
 async fn test_complete_task_updates_modification_date() {
-    let (db, _temp_file) = create_test_database_and_connect().await;
+    let (db, _temp_file) = create_test_database_and_connect().await.unwrap();
 
     // Create a task
     let request = CreateTaskRequest {
@@ -164,7 +153,7 @@ async fn test_complete_task_updates_modification_date() {
 #[tokio::test]
 #[cfg(feature = "test-utils")]
 async fn test_complete_multiple_tasks_sequentially() {
-    let (db, _temp_file) = create_test_database_and_connect().await;
+    let (db, _temp_file) = create_test_database_and_connect().await.unwrap();
 
     // Create multiple tasks
     let mut task_uuids = Vec::new();
@@ -201,7 +190,7 @@ async fn test_complete_multiple_tasks_sequentially() {
 #[tokio::test]
 #[cfg(feature = "test-utils")]
 async fn test_complete_task_with_children() {
-    let (db, _temp_file) = create_test_database_and_connect().await;
+    let (db, _temp_file) = create_test_database_and_connect().await.unwrap();
 
     // Create parent task
     let parent_request = CreateTaskRequest {
@@ -248,7 +237,7 @@ async fn test_complete_task_with_children() {
 #[tokio::test]
 #[cfg(feature = "test-utils")]
 async fn test_complete_project_task() {
-    let (db, _temp_file) = create_test_database_and_connect().await;
+    let (db, _temp_file) = create_test_database_and_connect().await.unwrap();
 
     // Create a project (task with type=1)
     let request = CreateTaskRequest {
@@ -281,7 +270,7 @@ async fn test_complete_project_task() {
 #[tokio::test]
 #[cfg(feature = "test-utils")]
 async fn test_uncomplete_task_basic() {
-    let (db, _temp_file) = create_test_database_and_connect().await;
+    let (db, _temp_file) = create_test_database_and_connect().await.unwrap();
 
     // Create and complete a task
     let request = CreateTaskRequest {
@@ -311,7 +300,7 @@ async fn test_uncomplete_task_basic() {
 #[tokio::test]
 #[cfg(feature = "test-utils")]
 async fn test_uncomplete_task_clears_stop_date() {
-    let (db, _temp_file) = create_test_database_and_connect().await;
+    let (db, _temp_file) = create_test_database_and_connect().await.unwrap();
 
     // Create and complete a task
     let request = CreateTaskRequest {
@@ -344,7 +333,7 @@ async fn test_uncomplete_task_clears_stop_date() {
 #[tokio::test]
 #[cfg(feature = "test-utils")]
 async fn test_uncomplete_incomplete_task() {
-    let (db, _temp_file) = create_test_database_and_connect().await;
+    let (db, _temp_file) = create_test_database_and_connect().await.unwrap();
 
     // Create an incomplete task
     let request = CreateTaskRequest {
@@ -372,7 +361,7 @@ async fn test_uncomplete_incomplete_task() {
 #[tokio::test]
 #[cfg(feature = "test-utils")]
 async fn test_uncomplete_nonexistent() {
-    let (db, _temp_file) = create_test_database_and_connect().await;
+    let (db, _temp_file) = create_test_database_and_connect().await.unwrap();
 
     let nonexistent_uuid = Uuid::new_v4();
     let result = db.uncomplete_task(&nonexistent_uuid).await;
@@ -382,7 +371,7 @@ async fn test_uncomplete_nonexistent() {
 #[tokio::test]
 #[cfg(feature = "test-utils")]
 async fn test_uncomplete_updates_modification_date() {
-    let (db, _temp_file) = create_test_database_and_connect().await;
+    let (db, _temp_file) = create_test_database_and_connect().await.unwrap();
 
     // Create and complete a task
     let request = CreateTaskRequest {
@@ -422,7 +411,7 @@ async fn test_uncomplete_updates_modification_date() {
 #[tokio::test]
 #[cfg(feature = "test-utils")]
 async fn test_complete_then_uncomplete_cycle() {
-    let (db, _temp_file) = create_test_database_and_connect().await;
+    let (db, _temp_file) = create_test_database_and_connect().await.unwrap();
 
     // Create task
     let request = CreateTaskRequest {
@@ -465,7 +454,7 @@ async fn test_complete_then_uncomplete_cycle() {
 #[tokio::test]
 #[cfg(feature = "test-utils")]
 async fn test_delete_task_basic() {
-    let (db, _temp_file) = create_test_database_and_connect().await;
+    let (db, _temp_file) = create_test_database_and_connect().await.unwrap();
 
     // Create a task
     let request = CreateTaskRequest {
@@ -490,7 +479,7 @@ async fn test_delete_task_basic() {
 #[tokio::test]
 #[cfg(feature = "test-utils")]
 async fn test_delete_task_sets_trashed_flag() {
-    let (db, _temp_file) = create_test_database_and_connect().await;
+    let (db, _temp_file) = create_test_database_and_connect().await.unwrap();
 
     // Create a task
     let request = CreateTaskRequest {
@@ -523,7 +512,7 @@ async fn test_delete_task_sets_trashed_flag() {
 #[tokio::test]
 #[cfg(feature = "test-utils")]
 async fn test_delete_task_nonexistent() {
-    let (db, _temp_file) = create_test_database_and_connect().await;
+    let (db, _temp_file) = create_test_database_and_connect().await.unwrap();
 
     let nonexistent_uuid = Uuid::new_v4();
     let result = db
@@ -535,7 +524,7 @@ async fn test_delete_task_nonexistent() {
 #[tokio::test]
 #[cfg(feature = "test-utils")]
 async fn test_delete_task_with_children_error_mode() {
-    let (db, _temp_file) = create_test_database_and_connect().await;
+    let (db, _temp_file) = create_test_database_and_connect().await.unwrap();
 
     // Create parent task
     let parent_request = CreateTaskRequest {
@@ -580,7 +569,7 @@ async fn test_delete_task_with_children_error_mode() {
 #[tokio::test]
 #[cfg(feature = "test-utils")]
 async fn test_delete_task_with_children_cascade() {
-    let (db, _temp_file) = create_test_database_and_connect().await;
+    let (db, _temp_file) = create_test_database_and_connect().await.unwrap();
 
     // Create parent task
     let parent_request = CreateTaskRequest {
@@ -629,7 +618,7 @@ async fn test_delete_task_with_children_cascade() {
 #[tokio::test]
 #[cfg(feature = "test-utils")]
 async fn test_delete_task_with_children_orphan() {
-    let (db, _temp_file) = create_test_database_and_connect().await;
+    let (db, _temp_file) = create_test_database_and_connect().await.unwrap();
 
     // Create parent task
     let parent_request = CreateTaskRequest {
@@ -685,7 +674,7 @@ async fn test_delete_task_with_children_orphan() {
 #[tokio::test]
 #[cfg(feature = "test-utils")]
 async fn test_delete_multiple_children_cascade() {
-    let (db, _temp_file) = create_test_database_and_connect().await;
+    let (db, _temp_file) = create_test_database_and_connect().await.unwrap();
 
     // Create parent task
     let parent_request = CreateTaskRequest {
@@ -736,7 +725,7 @@ async fn test_delete_multiple_children_cascade() {
 #[tokio::test]
 #[cfg(feature = "test-utils")]
 async fn test_delete_nested_children_cascade() {
-    let (db, _temp_file) = create_test_database_and_connect().await;
+    let (db, _temp_file) = create_test_database_and_connect().await.unwrap();
 
     // Create grandparent
     let grandparent_request = CreateTaskRequest {
@@ -809,7 +798,7 @@ async fn test_delete_nested_children_cascade() {
 #[tokio::test]
 #[cfg(feature = "test-utils")]
 async fn test_delete_completed_task() {
-    let (db, _temp_file) = create_test_database_and_connect().await;
+    let (db, _temp_file) = create_test_database_and_connect().await.unwrap();
 
     // Create and complete a task
     let request = CreateTaskRequest {
@@ -835,7 +824,7 @@ async fn test_delete_completed_task() {
 #[tokio::test]
 #[cfg(feature = "test-utils")]
 async fn test_delete_project_with_tasks() {
-    let (db, _temp_file) = create_test_database_and_connect().await;
+    let (db, _temp_file) = create_test_database_and_connect().await.unwrap();
 
     // Create a project
     let project_request = CreateTaskRequest {
@@ -885,7 +874,7 @@ async fn test_delete_project_with_tasks() {
 #[tokio::test]
 #[cfg(feature = "test-utils")]
 async fn test_delete_updates_modification_date() {
-    let (db, _temp_file) = create_test_database_and_connect().await;
+    let (db, _temp_file) = create_test_database_and_connect().await.unwrap();
 
     // Create a task
     let request = CreateTaskRequest {
@@ -912,7 +901,7 @@ async fn test_delete_updates_modification_date() {
 #[tokio::test]
 #[cfg(feature = "test-utils")]
 async fn test_delete_then_query_excluded() {
-    let (db, _temp_file) = create_test_database_and_connect().await;
+    let (db, _temp_file) = create_test_database_and_connect().await.unwrap();
 
     // Create a task
     let request = CreateTaskRequest {
@@ -958,7 +947,7 @@ async fn test_delete_then_query_excluded() {
 #[tokio::test]
 #[cfg(feature = "test-utils")]
 async fn test_operations_on_trashed_task() {
-    let (db, _temp_file) = create_test_database_and_connect().await;
+    let (db, _temp_file) = create_test_database_and_connect().await.unwrap();
 
     // Create and delete a task
     let request = CreateTaskRequest {
@@ -991,7 +980,7 @@ async fn test_operations_on_trashed_task() {
 #[tokio::test]
 #[cfg(feature = "test-utils")]
 async fn test_complete_and_delete_sequence() {
-    let (db, _temp_file) = create_test_database_and_connect().await;
+    let (db, _temp_file) = create_test_database_and_connect().await.unwrap();
 
     // Create a task
     let request = CreateTaskRequest {
@@ -1024,7 +1013,7 @@ async fn test_complete_and_delete_sequence() {
 #[tokio::test]
 #[cfg(feature = "test-utils")]
 async fn test_invalid_uuid_format() {
-    let (db, _temp_file) = create_test_database_and_connect().await;
+    let (db, _temp_file) = create_test_database_and_connect().await.unwrap();
 
     // UUIDs are validated at parse time, so this test verifies
     // that operations with invalid UUIDs fail gracefully
@@ -1036,7 +1025,7 @@ async fn test_invalid_uuid_format() {
 #[tokio::test]
 #[cfg(feature = "test-utils")]
 async fn test_concurrent_operations() {
-    let (db, _temp_file) = create_test_database_and_connect().await;
+    let (db, _temp_file) = create_test_database_and_connect().await.unwrap();
 
     // Create a task
     let request = CreateTaskRequest {

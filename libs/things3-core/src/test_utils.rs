@@ -1,8 +1,12 @@
 //! Test utilities and mock data for Things 3 integration
 
-use crate::models::{Area, Project, Task, TaskStatus, TaskType};
-use chrono::Utc;
+use crate::{
+    models::{Area, CreateTaskRequest, Project, Task, TaskStatus, TaskType},
+    ThingsDatabase,
+};
+use chrono::{NaiveDate, Utc};
 use std::path::Path;
+use tempfile::NamedTempFile;
 use uuid::Uuid;
 
 /// Create a test database with mock data
@@ -716,5 +720,243 @@ mod tests {
                 "UUID should have 4 hyphens"
             );
         }
+    }
+}
+
+/// Create a test database and connect to it, returning both the database and temp file
+///
+/// This is a common pattern in tests to ensure the temporary database file
+/// remains valid for the duration of the test.
+///
+/// # Returns
+///
+/// A tuple of (`ThingsDatabase`, `NamedTempFile`) where the file must be kept
+/// alive to prevent premature deletion.
+///
+/// # Errors
+///
+/// Returns an error if database creation or connection fails
+pub async fn create_test_database_and_connect(
+) -> Result<(ThingsDatabase, NamedTempFile), crate::ThingsError> {
+    let temp_file = NamedTempFile::new()
+        .map_err(|e| crate::ThingsError::Database(format!("Failed to create temp file: {e}")))?;
+    let db_path = temp_file.path();
+    create_test_database(db_path).await?;
+    let db = ThingsDatabase::new(db_path).await?;
+    Ok((db, temp_file))
+}
+
+/// Builder for creating test task requests with fluent API
+///
+/// Provides a convenient way to create `CreateTaskRequest` instances in tests
+/// with only the fields you need, using sensible defaults.
+///
+/// # Example
+///
+/// ```ignore
+/// let request = TaskRequestBuilder::new()
+///     .title("Test Task")
+///     .notes("Some notes")
+///     .with_deadline_days_from_now(7)
+///     .build();
+/// ```
+#[derive(Debug, Clone, Default)]
+pub struct TaskRequestBuilder {
+    title: Option<String>,
+    notes: Option<String>,
+    status: Option<TaskStatus>,
+    task_type: Option<TaskType>,
+    start_date: Option<NaiveDate>,
+    deadline: Option<NaiveDate>,
+    project_uuid: Option<Uuid>,
+    area_uuid: Option<Uuid>,
+    parent_uuid: Option<Uuid>,
+    tags: Option<Vec<String>>,
+}
+
+impl TaskRequestBuilder {
+    /// Create a new builder with default values
+    #[must_use]
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Set the task title
+    #[must_use]
+    pub fn title<S: Into<String>>(mut self, title: S) -> Self {
+        self.title = Some(title.into());
+        self
+    }
+
+    /// Set the task notes
+    #[must_use]
+    pub fn notes<S: Into<String>>(mut self, notes: S) -> Self {
+        self.notes = Some(notes.into());
+        self
+    }
+
+    /// Set the task status
+    #[must_use]
+    pub fn status(mut self, status: TaskStatus) -> Self {
+        self.status = Some(status);
+        self
+    }
+
+    /// Set the task type
+    #[must_use]
+    pub fn task_type(mut self, task_type: TaskType) -> Self {
+        self.task_type = Some(task_type);
+        self
+    }
+
+    /// Set the start date
+    #[must_use]
+    pub fn start_date(mut self, date: NaiveDate) -> Self {
+        self.start_date = Some(date);
+        self
+    }
+
+    /// Set start date to N days from now
+    #[must_use]
+    pub fn with_start_days_from_now(mut self, days: i64) -> Self {
+        self.start_date = Some((Utc::now() + chrono::Duration::days(days)).date_naive());
+        self
+    }
+
+    /// Set the deadline
+    #[must_use]
+    pub fn deadline(mut self, date: NaiveDate) -> Self {
+        self.deadline = Some(date);
+        self
+    }
+
+    /// Set deadline to N days from now
+    #[must_use]
+    pub fn with_deadline_days_from_now(mut self, days: i64) -> Self {
+        self.deadline = Some((Utc::now() + chrono::Duration::days(days)).date_naive());
+        self
+    }
+
+    /// Set the project UUID
+    #[must_use]
+    pub fn project(mut self, uuid: Uuid) -> Self {
+        self.project_uuid = Some(uuid);
+        self
+    }
+
+    /// Set the area UUID
+    #[must_use]
+    pub fn area(mut self, uuid: Uuid) -> Self {
+        self.area_uuid = Some(uuid);
+        self
+    }
+
+    /// Set the parent task UUID
+    #[must_use]
+    pub fn parent(mut self, uuid: Uuid) -> Self {
+        self.parent_uuid = Some(uuid);
+        self
+    }
+
+    /// Set tags
+    #[must_use]
+    pub fn tags(mut self, tags: Vec<String>) -> Self {
+        self.tags = Some(tags);
+        self
+    }
+
+    /// Add a single tag
+    #[must_use]
+    pub fn add_tag<S: Into<String>>(mut self, tag: S) -> Self {
+        let mut tags = self.tags.unwrap_or_default();
+        tags.push(tag.into());
+        self.tags = Some(tags);
+        self
+    }
+
+    /// Build the `CreateTaskRequest`
+    ///
+    /// Uses "Test Task" as default title if none was provided
+    #[must_use]
+    pub fn build(self) -> CreateTaskRequest {
+        CreateTaskRequest {
+            title: self.title.unwrap_or_else(|| "Test Task".to_string()),
+            notes: self.notes,
+            status: self.status,
+            task_type: self.task_type,
+            start_date: self.start_date,
+            deadline: self.deadline,
+            project_uuid: self.project_uuid,
+            area_uuid: self.area_uuid,
+            parent_uuid: self.parent_uuid,
+            tags: self.tags,
+        }
+    }
+}
+
+#[cfg(test)]
+mod builder_tests {
+    use super::*;
+
+    #[test]
+    fn test_task_request_builder_minimal() {
+        let request = TaskRequestBuilder::new().build();
+        assert_eq!(request.title, "Test Task");
+        assert!(request.notes.is_none());
+        assert!(request.status.is_none());
+    }
+
+    #[test]
+    fn test_task_request_builder_full() {
+        let project_uuid = Uuid::new_v4();
+        let area_uuid = Uuid::new_v4();
+
+        let request = TaskRequestBuilder::new()
+            .title("Custom Title")
+            .notes("Custom Notes")
+            .status(TaskStatus::Completed)
+            .task_type(TaskType::Project)
+            .project(project_uuid)
+            .area(area_uuid)
+            .tags(vec!["tag1".to_string(), "tag2".to_string()])
+            .build();
+
+        assert_eq!(request.title, "Custom Title");
+        assert_eq!(request.notes, Some("Custom Notes".to_string()));
+        assert_eq!(request.status, Some(TaskStatus::Completed));
+        assert_eq!(request.task_type, Some(TaskType::Project));
+        assert_eq!(request.project_uuid, Some(project_uuid));
+        assert_eq!(request.area_uuid, Some(area_uuid));
+        assert_eq!(
+            request.tags,
+            Some(vec!["tag1".to_string(), "tag2".to_string()])
+        );
+    }
+
+    #[test]
+    fn test_task_request_builder_add_tag() {
+        let request = TaskRequestBuilder::new()
+            .add_tag("tag1")
+            .add_tag("tag2")
+            .build();
+
+        assert_eq!(
+            request.tags,
+            Some(vec!["tag1".to_string(), "tag2".to_string()])
+        );
+    }
+
+    #[test]
+    fn test_task_request_builder_dates() {
+        let start = NaiveDate::from_ymd_opt(2025, 1, 15).unwrap();
+        let deadline = NaiveDate::from_ymd_opt(2025, 2, 1).unwrap();
+
+        let request = TaskRequestBuilder::new()
+            .start_date(start)
+            .deadline(deadline)
+            .build();
+
+        assert_eq!(request.start_date, Some(start));
+        assert_eq!(request.deadline, Some(deadline));
     }
 }
