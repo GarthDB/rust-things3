@@ -1329,8 +1329,13 @@ impl ThingsDatabase {
                 return Ok(None); // Return None for trashed tasks
             }
 
+            let uuid_str = row.get::<String, _>("uuid");
+            // Try to parse as standard UUID first, fall back to Things UUID conversion
+            let uuid =
+                Uuid::parse_str(&uuid_str).unwrap_or_else(|_| things_uuid_to_uuid(&uuid_str));
+
             let task = Task {
-                uuid: things_uuid_to_uuid(&row.get::<String, _>("uuid")),
+                uuid,
                 title: row.get("title"),
                 status: TaskStatus::from_i32(row.get("status")).unwrap_or(TaskStatus::Incomplete),
                 task_type: TaskType::from_i32(row.get("type")).unwrap_or(TaskType::Todo),
@@ -1355,17 +1360,23 @@ impl ThingsDatabase {
                     let ts_i64 = safe_timestamp_convert(ts);
                     DateTime::from_timestamp(ts_i64, 0)
                 }),
-                project_uuid: row
-                    .get::<Option<String>, _>("project")
-                    .map(|s| things_uuid_to_uuid(&s)),
-                area_uuid: row
-                    .get::<Option<String>, _>("area")
-                    .map(|s| things_uuid_to_uuid(&s)),
-                parent_uuid: row
-                    .get::<Option<String>, _>("heading")
-                    .map(|s| things_uuid_to_uuid(&s)),
+                project_uuid: row.get::<Option<String>, _>("project").and_then(|s| {
+                    Uuid::parse_str(&s)
+                        .ok()
+                        .or_else(|| Some(things_uuid_to_uuid(&s)))
+                }),
+                area_uuid: row.get::<Option<String>, _>("area").and_then(|s| {
+                    Uuid::parse_str(&s)
+                        .ok()
+                        .or_else(|| Some(things_uuid_to_uuid(&s)))
+                }),
+                parent_uuid: row.get::<Option<String>, _>("heading").and_then(|s| {
+                    Uuid::parse_str(&s)
+                        .ok()
+                        .or_else(|| Some(things_uuid_to_uuid(&s)))
+                }),
                 tags: row
-                    .get::<Option<Vec<u8>>, _>("cachedTags")
+                    .get::<Option<String>, _>("cachedTags")
                     .map(|_| Vec::new()) // TODO: Parse binary tag data
                     .unwrap_or_default(),
                 children: Vec::new(),

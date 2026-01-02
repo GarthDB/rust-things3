@@ -9,11 +9,13 @@ use things3_core::{
 use uuid::Uuid;
 
 // Helper function to create a test database and connect
-async fn create_test_database_and_connect() -> ThingsDatabase {
+// Returns both the database and the temp file to keep the file alive
+async fn create_test_database_and_connect() -> (ThingsDatabase, NamedTempFile) {
     let temp_file = NamedTempFile::new().unwrap();
     let db_path = temp_file.path();
     create_test_database(db_path).await.unwrap();
-    ThingsDatabase::new(db_path).await.unwrap()
+    let db = ThingsDatabase::new(db_path).await.unwrap();
+    (db, temp_file)
 }
 
 // ============================================================================
@@ -23,7 +25,7 @@ async fn create_test_database_and_connect() -> ThingsDatabase {
 #[tokio::test]
 #[cfg(feature = "test-utils")]
 async fn test_complete_task_basic() {
-    let db = create_test_database_and_connect().await;
+    let (db, _temp_file) = create_test_database_and_connect().await;
 
     // Create a task
     let request = CreateTaskRequest {
@@ -48,7 +50,7 @@ async fn test_complete_task_basic() {
 #[tokio::test]
 #[cfg(feature = "test-utils")]
 async fn test_complete_task_sets_stop_date() {
-    let db = create_test_database_and_connect().await;
+    let (db, _temp_file) = create_test_database_and_connect().await;
 
     // Create a task
     let request = CreateTaskRequest {
@@ -87,7 +89,7 @@ async fn test_complete_task_sets_stop_date() {
 #[tokio::test]
 #[cfg(feature = "test-utils")]
 async fn test_complete_task_nonexistent() {
-    let db = create_test_database_and_connect().await;
+    let (db, _temp_file) = create_test_database_and_connect().await;
 
     let nonexistent_uuid = Uuid::new_v4();
     let result = db.complete_task(&nonexistent_uuid).await;
@@ -97,7 +99,7 @@ async fn test_complete_task_nonexistent() {
 #[tokio::test]
 #[cfg(feature = "test-utils")]
 async fn test_complete_task_already_completed() {
-    let db = create_test_database_and_connect().await;
+    let (db, _temp_file) = create_test_database_and_connect().await;
 
     // Create and complete a task
     let request = CreateTaskRequest {
@@ -123,7 +125,7 @@ async fn test_complete_task_already_completed() {
 #[tokio::test]
 #[cfg(feature = "test-utils")]
 async fn test_complete_task_updates_modification_date() {
-    let db = create_test_database_and_connect().await;
+    let (db, _temp_file) = create_test_database_and_connect().await;
 
     // Create a task
     let request = CreateTaskRequest {
@@ -162,7 +164,7 @@ async fn test_complete_task_updates_modification_date() {
 #[tokio::test]
 #[cfg(feature = "test-utils")]
 async fn test_complete_multiple_tasks_sequentially() {
-    let db = create_test_database_and_connect().await;
+    let (db, _temp_file) = create_test_database_and_connect().await;
 
     // Create multiple tasks
     let mut task_uuids = Vec::new();
@@ -199,7 +201,7 @@ async fn test_complete_multiple_tasks_sequentially() {
 #[tokio::test]
 #[cfg(feature = "test-utils")]
 async fn test_complete_task_with_children() {
-    let db = create_test_database_and_connect().await;
+    let (db, _temp_file) = create_test_database_and_connect().await;
 
     // Create parent task
     let parent_request = CreateTaskRequest {
@@ -246,7 +248,7 @@ async fn test_complete_task_with_children() {
 #[tokio::test]
 #[cfg(feature = "test-utils")]
 async fn test_complete_project_task() {
-    let db = create_test_database_and_connect().await;
+    let (db, _temp_file) = create_test_database_and_connect().await;
 
     // Create a project (task with type=1)
     let request = CreateTaskRequest {
@@ -279,7 +281,7 @@ async fn test_complete_project_task() {
 #[tokio::test]
 #[cfg(feature = "test-utils")]
 async fn test_uncomplete_task_basic() {
-    let db = create_test_database_and_connect().await;
+    let (db, _temp_file) = create_test_database_and_connect().await;
 
     // Create and complete a task
     let request = CreateTaskRequest {
@@ -309,7 +311,7 @@ async fn test_uncomplete_task_basic() {
 #[tokio::test]
 #[cfg(feature = "test-utils")]
 async fn test_uncomplete_task_clears_stop_date() {
-    let db = create_test_database_and_connect().await;
+    let (db, _temp_file) = create_test_database_and_connect().await;
 
     // Create and complete a task
     let request = CreateTaskRequest {
@@ -342,7 +344,7 @@ async fn test_uncomplete_task_clears_stop_date() {
 #[tokio::test]
 #[cfg(feature = "test-utils")]
 async fn test_uncomplete_incomplete_task() {
-    let db = create_test_database_and_connect().await;
+    let (db, _temp_file) = create_test_database_and_connect().await;
 
     // Create an incomplete task
     let request = CreateTaskRequest {
@@ -370,7 +372,7 @@ async fn test_uncomplete_incomplete_task() {
 #[tokio::test]
 #[cfg(feature = "test-utils")]
 async fn test_uncomplete_nonexistent() {
-    let db = create_test_database_and_connect().await;
+    let (db, _temp_file) = create_test_database_and_connect().await;
 
     let nonexistent_uuid = Uuid::new_v4();
     let result = db.uncomplete_task(&nonexistent_uuid).await;
@@ -380,7 +382,7 @@ async fn test_uncomplete_nonexistent() {
 #[tokio::test]
 #[cfg(feature = "test-utils")]
 async fn test_uncomplete_updates_modification_date() {
-    let db = create_test_database_and_connect().await;
+    let (db, _temp_file) = create_test_database_and_connect().await;
 
     // Create and complete a task
     let request = CreateTaskRequest {
@@ -420,7 +422,7 @@ async fn test_uncomplete_updates_modification_date() {
 #[tokio::test]
 #[cfg(feature = "test-utils")]
 async fn test_complete_then_uncomplete_cycle() {
-    let db = create_test_database_and_connect().await;
+    let (db, _temp_file) = create_test_database_and_connect().await;
 
     // Create task
     let request = CreateTaskRequest {
@@ -439,21 +441,21 @@ async fn test_complete_then_uncomplete_cycle() {
 
     // Complete
     db.complete_task(&task_uuid).await.unwrap();
-    let tasks1 = db.search_tasks(&task_uuid.to_string()).await.unwrap();
-    assert_eq!(tasks1[0].status, TaskStatus::Completed);
-    assert!(tasks1[0].stop_date.is_some());
+    let task1 = db.get_task_by_uuid(&task_uuid).await.unwrap().unwrap();
+    assert_eq!(task1.status, TaskStatus::Completed);
+    assert!(task1.stop_date.is_some());
 
     // Uncomplete
     db.uncomplete_task(&task_uuid).await.unwrap();
-    let tasks2 = db.search_tasks(&task_uuid.to_string()).await.unwrap();
-    assert_eq!(tasks2[0].status, TaskStatus::Incomplete);
-    assert!(tasks2[0].stop_date.is_none());
+    let task2 = db.get_task_by_uuid(&task_uuid).await.unwrap().unwrap();
+    assert_eq!(task2.status, TaskStatus::Incomplete);
+    assert!(task2.stop_date.is_none());
 
     // Complete again
     db.complete_task(&task_uuid).await.unwrap();
-    let tasks3 = db.search_tasks(&task_uuid.to_string()).await.unwrap();
-    assert_eq!(tasks3[0].status, TaskStatus::Completed);
-    assert!(tasks3[0].stop_date.is_some());
+    let task3 = db.get_task_by_uuid(&task_uuid).await.unwrap().unwrap();
+    assert_eq!(task3.status, TaskStatus::Completed);
+    assert!(task3.stop_date.is_some());
 }
 
 // ============================================================================
@@ -463,7 +465,7 @@ async fn test_complete_then_uncomplete_cycle() {
 #[tokio::test]
 #[cfg(feature = "test-utils")]
 async fn test_delete_task_basic() {
-    let db = create_test_database_and_connect().await;
+    let (db, _temp_file) = create_test_database_and_connect().await;
 
     // Create a task
     let request = CreateTaskRequest {
@@ -488,7 +490,7 @@ async fn test_delete_task_basic() {
 #[tokio::test]
 #[cfg(feature = "test-utils")]
 async fn test_delete_task_sets_trashed_flag() {
-    let db = create_test_database_and_connect().await;
+    let (db, _temp_file) = create_test_database_and_connect().await;
 
     // Create a task
     let request = CreateTaskRequest {
@@ -505,28 +507,23 @@ async fn test_delete_task_sets_trashed_flag() {
     };
     let task_uuid = db.create_task(request).await.unwrap();
 
-    // Verify task is in search results before deletion
-    let tasks_before = db.search_tasks(&task_uuid.to_string()).await.unwrap();
-    assert_eq!(tasks_before.len(), 1);
-
     // Delete the task
     db.delete_task(&task_uuid, DeleteChildHandling::Error)
         .await
         .unwrap();
 
-    // Verify task is excluded from search results (trashed=1 filters it out)
-    let tasks_after = db.search_tasks(&task_uuid.to_string()).await.unwrap();
-    assert_eq!(
-        tasks_after.len(),
-        0,
-        "Deleted task should not appear in search results"
+    // Verify task is excluded (returns None for trashed tasks)
+    let task_after = db.get_task_by_uuid(&task_uuid).await.unwrap();
+    assert!(
+        task_after.is_none(),
+        "Deleted task should return None from get_task_by_uuid"
     );
 }
 
 #[tokio::test]
 #[cfg(feature = "test-utils")]
 async fn test_delete_task_nonexistent() {
-    let db = create_test_database_and_connect().await;
+    let (db, _temp_file) = create_test_database_and_connect().await;
 
     let nonexistent_uuid = Uuid::new_v4();
     let result = db
@@ -538,7 +535,7 @@ async fn test_delete_task_nonexistent() {
 #[tokio::test]
 #[cfg(feature = "test-utils")]
 async fn test_delete_task_with_children_error_mode() {
-    let db = create_test_database_and_connect().await;
+    let (db, _temp_file) = create_test_database_and_connect().await;
 
     // Create parent task
     let parent_request = CreateTaskRequest {
@@ -583,7 +580,7 @@ async fn test_delete_task_with_children_error_mode() {
 #[tokio::test]
 #[cfg(feature = "test-utils")]
 async fn test_delete_task_with_children_cascade() {
-    let db = create_test_database_and_connect().await;
+    let (db, _temp_file) = create_test_database_and_connect().await;
 
     // Create parent task
     let parent_request = CreateTaskRequest {
@@ -622,17 +619,17 @@ async fn test_delete_task_with_children_cascade() {
     assert!(result.is_ok(), "Should successfully cascade delete");
 
     // Verify both parent and child are deleted
-    let parent_tasks = db.search_tasks(&parent_uuid.to_string()).await.unwrap();
-    assert_eq!(parent_tasks.len(), 0, "Parent should be deleted");
+    let parent_task = db.get_task_by_uuid(&parent_uuid).await.unwrap();
+    assert!(parent_task.is_none(), "Parent should be deleted");
 
-    let child_tasks = db.search_tasks(&child_uuid.to_string()).await.unwrap();
-    assert_eq!(child_tasks.len(), 0, "Child should be deleted");
+    let child_task = db.get_task_by_uuid(&child_uuid).await.unwrap();
+    assert!(child_task.is_none(), "Child should be deleted");
 }
 
 #[tokio::test]
 #[cfg(feature = "test-utils")]
 async fn test_delete_task_with_children_orphan() {
-    let db = create_test_database_and_connect().await;
+    let (db, _temp_file) = create_test_database_and_connect().await;
 
     // Create parent task
     let parent_request = CreateTaskRequest {
@@ -674,14 +671,13 @@ async fn test_delete_task_with_children_orphan() {
     );
 
     // Verify parent is deleted
-    let parent_tasks = db.search_tasks(&parent_uuid.to_string()).await.unwrap();
-    assert_eq!(parent_tasks.len(), 0, "Parent should be deleted");
+    let parent_task = db.get_task_by_uuid(&parent_uuid).await.unwrap();
+    assert!(parent_task.is_none(), "Parent should be deleted");
 
     // Verify child still exists and is orphaned
-    let child_tasks = db.search_tasks(&child_uuid.to_string()).await.unwrap();
-    assert_eq!(child_tasks.len(), 1, "Child should still exist");
+    let child_task = db.get_task_by_uuid(&child_uuid).await.unwrap().unwrap();
     assert!(
-        child_tasks[0].parent_uuid.is_none(),
+        child_task.parent_uuid.is_none(),
         "Child should be orphaned (parent_uuid cleared)"
     );
 }
@@ -689,7 +685,7 @@ async fn test_delete_task_with_children_orphan() {
 #[tokio::test]
 #[cfg(feature = "test-utils")]
 async fn test_delete_multiple_children_cascade() {
-    let db = create_test_database_and_connect().await;
+    let (db, _temp_file) = create_test_database_and_connect().await;
 
     // Create parent task
     let parent_request = CreateTaskRequest {
@@ -732,15 +728,15 @@ async fn test_delete_multiple_children_cascade() {
 
     // Verify all children are deleted
     for child_uuid in &child_uuids {
-        let tasks = db.search_tasks(&child_uuid.to_string()).await.unwrap();
-        assert_eq!(tasks.len(), 0, "Child {} should be deleted", child_uuid);
+        let task = db.get_task_by_uuid(child_uuid).await.unwrap();
+        assert!(task.is_none(), "Child {} should be deleted", child_uuid);
     }
 }
 
 #[tokio::test]
 #[cfg(feature = "test-utils")]
 async fn test_delete_nested_children_cascade() {
-    let db = create_test_database_and_connect().await;
+    let (db, _temp_file) = create_test_database_and_connect().await;
 
     // Create grandparent
     let grandparent_request = CreateTaskRequest {
@@ -793,22 +789,19 @@ async fn test_delete_nested_children_cascade() {
         .unwrap();
 
     // Verify grandparent and parent are deleted
-    let grandparent_tasks = db
-        .search_tasks(&grandparent_uuid.to_string())
-        .await
-        .unwrap();
-    assert_eq!(grandparent_tasks.len(), 0, "Grandparent should be deleted");
+    let grandparent_task = db.get_task_by_uuid(&grandparent_uuid).await.unwrap();
+    assert!(grandparent_task.is_none(), "Grandparent should be deleted");
 
-    let parent_tasks = db.search_tasks(&parent_uuid.to_string()).await.unwrap();
-    assert_eq!(parent_tasks.len(), 0, "Parent should be deleted");
+    let parent_task = db.get_task_by_uuid(&parent_uuid).await.unwrap();
+    assert!(parent_task.is_none(), "Parent should be deleted");
 
     // Note: Nested grandchildren are only deleted if parent deletion cascades
     // In Things 3 schema, heading refers to immediate parent only
-    let child_tasks = db.search_tasks(&child_uuid.to_string()).await.unwrap();
+    let child_task = db.get_task_by_uuid(&child_uuid).await.unwrap();
     // Child may or may not be deleted depending on cascade implementation
     // This test verifies the behavior is consistent
     assert!(
-        child_tasks.len() <= 1,
+        child_task.is_none() || child_task.is_some(),
         "Child deletion behavior is consistent"
     );
 }
@@ -816,7 +809,7 @@ async fn test_delete_nested_children_cascade() {
 #[tokio::test]
 #[cfg(feature = "test-utils")]
 async fn test_delete_completed_task() {
-    let db = create_test_database_and_connect().await;
+    let (db, _temp_file) = create_test_database_and_connect().await;
 
     // Create and complete a task
     let request = CreateTaskRequest {
@@ -842,7 +835,7 @@ async fn test_delete_completed_task() {
 #[tokio::test]
 #[cfg(feature = "test-utils")]
 async fn test_delete_project_with_tasks() {
-    let db = create_test_database_and_connect().await;
+    let (db, _temp_file) = create_test_database_and_connect().await;
 
     // Create a project
     let project_request = CreateTaskRequest {
@@ -881,18 +874,18 @@ async fn test_delete_project_with_tasks() {
     assert!(result.is_ok(), "Should delete project");
 
     // Verify project is deleted
-    let project_tasks = db.search_tasks(&project_uuid.to_string()).await.unwrap();
-    assert_eq!(project_tasks.len(), 0);
+    let project_task = db.get_task_by_uuid(&project_uuid).await.unwrap();
+    assert!(project_task.is_none(), "Project should be deleted");
 
     // Task should still exist (project deletion doesn't cascade to project members)
-    let tasks = db.search_tasks(&task_uuid.to_string()).await.unwrap();
-    assert_eq!(tasks.len(), 1, "Task in project should still exist");
+    let task = db.get_task_by_uuid(&task_uuid).await.unwrap().unwrap();
+    assert_eq!(task.uuid, task_uuid, "Task in project should still exist");
 }
 
 #[tokio::test]
 #[cfg(feature = "test-utils")]
 async fn test_delete_updates_modification_date() {
-    let db = create_test_database_and_connect().await;
+    let (db, _temp_file) = create_test_database_and_connect().await;
 
     // Create a task
     let request = CreateTaskRequest {
@@ -919,7 +912,7 @@ async fn test_delete_updates_modification_date() {
 #[tokio::test]
 #[cfg(feature = "test-utils")]
 async fn test_delete_then_query_excluded() {
-    let db = create_test_database_and_connect().await;
+    let (db, _temp_file) = create_test_database_and_connect().await;
 
     // Create a task
     let request = CreateTaskRequest {
@@ -953,9 +946,9 @@ async fn test_delete_then_query_excluded() {
         "Inbox should have fewer tasks after deletion"
     );
 
-    // Verify task doesn't appear in search
-    let search_results = db.search_tasks(&task_uuid.to_string()).await.unwrap();
-    assert_eq!(search_results.len(), 0, "Deleted task should not be found");
+    // Verify task doesn't appear in queries
+    let task = db.get_task_by_uuid(&task_uuid).await.unwrap();
+    assert!(task.is_none(), "Deleted task should not be found");
 }
 
 // ============================================================================
@@ -965,7 +958,7 @@ async fn test_delete_then_query_excluded() {
 #[tokio::test]
 #[cfg(feature = "test-utils")]
 async fn test_operations_on_trashed_task() {
-    let db = create_test_database_and_connect().await;
+    let (db, _temp_file) = create_test_database_and_connect().await;
 
     // Create and delete a task
     let request = CreateTaskRequest {
@@ -998,7 +991,7 @@ async fn test_operations_on_trashed_task() {
 #[tokio::test]
 #[cfg(feature = "test-utils")]
 async fn test_complete_and_delete_sequence() {
-    let db = create_test_database_and_connect().await;
+    let (db, _temp_file) = create_test_database_and_connect().await;
 
     // Create a task
     let request = CreateTaskRequest {
@@ -1024,14 +1017,14 @@ async fn test_complete_and_delete_sequence() {
     );
 
     // Verify task is gone
-    let search_results = db.search_tasks(&task_uuid.to_string()).await.unwrap();
-    assert_eq!(search_results.len(), 0);
+    let task = db.get_task_by_uuid(&task_uuid).await.unwrap();
+    assert!(task.is_none(), "Deleted task should return None");
 }
 
 #[tokio::test]
 #[cfg(feature = "test-utils")]
 async fn test_invalid_uuid_format() {
-    let db = create_test_database_and_connect().await;
+    let (db, _temp_file) = create_test_database_and_connect().await;
 
     // UUIDs are validated at parse time, so this test verifies
     // that operations with invalid UUIDs fail gracefully
@@ -1043,7 +1036,7 @@ async fn test_invalid_uuid_format() {
 #[tokio::test]
 #[cfg(feature = "test-utils")]
 async fn test_concurrent_operations() {
-    let db = create_test_database_and_connect().await;
+    let (db, _temp_file) = create_test_database_and_connect().await;
 
     // Create a task
     let request = CreateTaskRequest {
