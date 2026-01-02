@@ -1,5 +1,5 @@
 use crate::{
-    database::{mappers::map_task_row, query_builders::TaskUpdateBuilder},
+    database::{mappers::map_task_row, query_builders::TaskUpdateBuilder, validators},
     error::{Result as ThingsResult, ThingsError},
     models::{
         Area, CreateTaskRequest, DeleteChildHandling, Project, Task, TaskStatus, TaskType,
@@ -939,15 +939,15 @@ impl ThingsDatabase {
 
         // Validate referenced entities
         if let Some(project_uuid) = &request.project_uuid {
-            self.validate_project_exists(project_uuid).await?;
+            validators::validate_project_exists(&self.pool, project_uuid).await?;
         }
 
         if let Some(area_uuid) = &request.area_uuid {
-            self.validate_area_exists(area_uuid).await?;
+            validators::validate_area_exists(&self.pool, area_uuid).await?;
         }
 
         if let Some(parent_uuid) = &request.parent_uuid {
-            self.validate_task_exists(parent_uuid).await?;
+            validators::validate_task_exists(&self.pool, parent_uuid).await?;
         }
 
         // Convert dates to Things 3 format (seconds since 2001-01-01)
@@ -1008,15 +1008,15 @@ impl ThingsDatabase {
     #[instrument(skip(self))]
     pub async fn update_task(&self, request: UpdateTaskRequest) -> ThingsResult<()> {
         // Verify task exists
-        self.validate_task_exists(&request.uuid).await?;
+        validators::validate_task_exists(&self.pool, &request.uuid).await?;
 
         // Validate referenced entities if being updated
         if let Some(project_uuid) = &request.project_uuid {
-            self.validate_project_exists(project_uuid).await?;
+            validators::validate_project_exists(&self.pool, project_uuid).await?;
         }
 
         if let Some(area_uuid) = &request.area_uuid {
-            self.validate_area_exists(area_uuid).await?;
+            validators::validate_area_exists(&self.pool, area_uuid).await?;
         }
 
         // Use the TaskUpdateBuilder to construct the query
@@ -1076,66 +1076,6 @@ impl ThingsDatabase {
         Ok(())
     }
 
-    /// Validate that a task exists
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the task does not exist or if the database query fails
-    /// Note: Trashed tasks are treated as non-existent (trashed = 0 filter applied)
-    async fn validate_task_exists(&self, uuid: &Uuid) -> ThingsResult<()> {
-        let exists = sqlx::query("SELECT 1 FROM TMTask WHERE uuid = ? AND trashed = 0")
-            .bind(uuid.to_string())
-            .fetch_optional(&self.pool)
-            .await
-            .map_err(|e| ThingsError::unknown(format!("Failed to validate task: {e}")))?
-            .is_some();
-
-        if !exists {
-            return Err(ThingsError::unknown(format!("Task not found: {uuid}")));
-        }
-        Ok(())
-    }
-
-    /// Validate that a project exists (project is a task with type = 1)
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the project does not exist or if the database query fails
-    /// Note: Trashed projects are treated as non-existent (trashed = 0 filter applied)
-    async fn validate_project_exists(&self, uuid: &Uuid) -> ThingsResult<()> {
-        let exists =
-            sqlx::query("SELECT 1 FROM TMTask WHERE uuid = ? AND type = 1 AND trashed = 0")
-                .bind(uuid.to_string())
-                .fetch_optional(&self.pool)
-                .await
-                .map_err(|e| ThingsError::unknown(format!("Failed to validate project: {e}")))?
-                .is_some();
-
-        if !exists {
-            return Err(ThingsError::unknown(format!("Project not found: {uuid}")));
-        }
-        Ok(())
-    }
-
-    /// Validate that an area exists
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the area does not exist or if the database query fails
-    async fn validate_area_exists(&self, uuid: &Uuid) -> ThingsResult<()> {
-        let exists = sqlx::query("SELECT 1 FROM TMArea WHERE uuid = ?")
-            .bind(uuid.to_string())
-            .fetch_optional(&self.pool)
-            .await
-            .map_err(|e| ThingsError::unknown(format!("Failed to validate area: {e}")))?
-            .is_some();
-
-        if !exists {
-            return Err(ThingsError::unknown(format!("Area not found: {uuid}")));
-        }
-        Ok(())
-    }
-
     /// Get a task by its UUID
     ///
     /// # Errors
@@ -1184,7 +1124,7 @@ impl ThingsDatabase {
     #[instrument(skip(self))]
     pub async fn complete_task(&self, uuid: &Uuid) -> ThingsResult<()> {
         // Verify task exists
-        self.validate_task_exists(uuid).await?;
+        validators::validate_task_exists(&self.pool, uuid).await?;
 
         let now = Utc::now().timestamp() as f64;
 
@@ -1210,7 +1150,7 @@ impl ThingsDatabase {
     #[instrument(skip(self))]
     pub async fn uncomplete_task(&self, uuid: &Uuid) -> ThingsResult<()> {
         // Verify task exists
-        self.validate_task_exists(uuid).await?;
+        validators::validate_task_exists(&self.pool, uuid).await?;
 
         let now = Utc::now().timestamp() as f64;
 
@@ -1239,7 +1179,7 @@ impl ThingsDatabase {
         child_handling: DeleteChildHandling,
     ) -> ThingsResult<()> {
         // Verify task exists
-        self.validate_task_exists(uuid).await?;
+        validators::validate_task_exists(&self.pool, uuid).await?;
 
         // Check for child tasks
         let children = sqlx::query("SELECT uuid FROM TMTask WHERE heading = ? AND trashed = 0")
