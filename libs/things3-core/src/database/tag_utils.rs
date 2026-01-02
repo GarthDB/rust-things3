@@ -216,13 +216,16 @@ mod tests {
 
     #[test]
     fn test_calculate_similarity_partial() {
-        // "work" vs "work-project" should have decent similarity
+        // "work" vs "work-project" - Levenshtein distance is character-based,
+        // so adding "-project" makes them quite different (8 chars added to 4 chars)
         let score = calculate_similarity("work", "work-project");
         assert!(
-            score > 0.5,
-            "Expected moderate similarity for partial match, got {}",
+            score > 0.25,
+            "Expected some similarity for partial match, got {}",
             score
         );
+        // For substring matching, use is_partial_match instead
+        assert!(is_partial_match("work", "work-project"));
     }
 
     #[test]
