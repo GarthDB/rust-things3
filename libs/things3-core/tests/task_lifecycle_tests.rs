@@ -66,12 +66,19 @@ async fn test_complete_task_sets_stop_date() {
     let task_uuid = db.create_task(request).await.unwrap();
 
     // Complete the task
-    let result = db.complete_task(&task_uuid).await;
-    assert!(result.is_ok(), "Should successfully complete task");
+    let before_complete = Utc::now();
+    db.complete_task(&task_uuid).await.unwrap();
 
-    // Note: We cannot easily verify stopDate without a get_task_by_uuid method
-    // The operation succeeding indicates it worked correctly
-    // Integration tests and MCP tests verify the full behavior
+    // Verify the task is completed and stopDate is set
+    let task = db.get_task_by_uuid(&task_uuid).await.unwrap().unwrap();
+    assert_eq!(task.status, TaskStatus::Completed);
+    assert!(task.stop_date.is_some(), "stopDate should be set");
+
+    let stop_date = task.stop_date.unwrap();
+    assert!(
+        stop_date >= before_complete,
+        "stopDate should be after or equal to completion time"
+    );
 }
 
 #[tokio::test]
@@ -131,8 +138,8 @@ async fn test_complete_task_updates_modification_date() {
     let task_uuid = db.create_task(request).await.unwrap();
 
     // Get initial modification date
-    let tasks_before = db.search_tasks(&task_uuid.to_string()).await.unwrap();
-    let modified_before = tasks_before[0].modified;
+    let task_before = db.get_task_by_uuid(&task_uuid).await.unwrap().unwrap();
+    let modified_before = task_before.modified;
 
     // Small delay to ensure timestamp difference
     tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
@@ -141,8 +148,8 @@ async fn test_complete_task_updates_modification_date() {
     db.complete_task(&task_uuid).await.unwrap();
 
     // Verify modification date updated
-    let tasks_after = db.search_tasks(&task_uuid.to_string()).await.unwrap();
-    let modified_after = tasks_after[0].modified;
+    let task_after = db.get_task_by_uuid(&task_uuid).await.unwrap().unwrap();
+    let modified_after = task_after.modified;
     assert!(
         modified_after > modified_before,
         "Modification date should be updated"
@@ -181,8 +188,8 @@ async fn test_complete_multiple_tasks_sequentially() {
 
     // Verify all are completed
     for uuid in &task_uuids {
-        let tasks = db.search_tasks(&uuid.to_string()).await.unwrap();
-        assert_eq!(tasks[0].status, TaskStatus::Completed);
+        let task = db.get_task_by_uuid(uuid).await.unwrap().unwrap();
+        assert_eq!(task.status, TaskStatus::Completed);
     }
 }
 
@@ -225,12 +232,12 @@ async fn test_complete_task_with_children() {
     db.complete_task(&parent_uuid).await.unwrap();
 
     // Verify parent is completed
-    let parent_tasks = db.search_tasks(&parent_uuid.to_string()).await.unwrap();
-    assert_eq!(parent_tasks[0].status, TaskStatus::Completed);
+    let parent_task = db.get_task_by_uuid(&parent_uuid).await.unwrap().unwrap();
+    assert_eq!(parent_task.status, TaskStatus::Completed);
 
     // Verify child is still incomplete
-    let child_tasks = db.search_tasks(&child_uuid.to_string()).await.unwrap();
-    assert_eq!(child_tasks[0].status, TaskStatus::Incomplete);
+    let child_task = db.get_task_by_uuid(&child_uuid).await.unwrap().unwrap();
+    assert_eq!(child_task.status, TaskStatus::Incomplete);
 }
 
 #[tokio::test]
@@ -258,8 +265,8 @@ async fn test_complete_project_task() {
     assert!(result.is_ok(), "Should successfully complete project");
 
     // Verify it's completed
-    let tasks = db.search_tasks(&project_uuid.to_string()).await.unwrap();
-    assert_eq!(tasks[0].status, TaskStatus::Completed);
+    let task = db.get_task_by_uuid(&project_uuid).await.unwrap().unwrap();
+    assert_eq!(task.status, TaskStatus::Completed);
 }
 
 // ============================================================================
@@ -292,8 +299,8 @@ async fn test_uncomplete_task_basic() {
     assert!(result.is_ok(), "Should successfully uncomplete task");
 
     // Verify status is incomplete
-    let tasks = db.search_tasks(&task_uuid.to_string()).await.unwrap();
-    assert_eq!(tasks[0].status, TaskStatus::Incomplete);
+    let task = db.get_task_by_uuid(&task_uuid).await.unwrap().unwrap();
+    assert_eq!(task.status, TaskStatus::Incomplete);
 }
 
 #[tokio::test]
@@ -318,18 +325,15 @@ async fn test_uncomplete_task_clears_stop_date() {
     db.complete_task(&task_uuid).await.unwrap();
 
     // Verify stopDate is set
-    let tasks_before = db.search_tasks(&task_uuid.to_string()).await.unwrap();
-    assert!(tasks_before[0].stop_date.is_some());
+    let task_before = db.get_task_by_uuid(&task_uuid).await.unwrap().unwrap();
+    assert!(task_before.stop_date.is_some());
 
     // Uncomplete the task
     db.uncomplete_task(&task_uuid).await.unwrap();
 
     // Verify stopDate is cleared
-    let tasks_after = db.search_tasks(&task_uuid.to_string()).await.unwrap();
-    assert!(
-        tasks_after[0].stop_date.is_none(),
-        "stopDate should be cleared"
-    );
+    let task_after = db.get_task_by_uuid(&task_uuid).await.unwrap().unwrap();
+    assert!(task_after.stop_date.is_none(), "stopDate should be cleared");
 }
 
 #[tokio::test]
@@ -392,8 +396,8 @@ async fn test_uncomplete_updates_modification_date() {
     db.complete_task(&task_uuid).await.unwrap();
 
     // Get modification date after completion
-    let tasks_before = db.search_tasks(&task_uuid.to_string()).await.unwrap();
-    let modified_before = tasks_before[0].modified;
+    let task_before = db.get_task_by_uuid(&task_uuid).await.unwrap().unwrap();
+    let modified_before = task_before.modified;
 
     // Small delay
     tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
@@ -402,8 +406,8 @@ async fn test_uncomplete_updates_modification_date() {
     db.uncomplete_task(&task_uuid).await.unwrap();
 
     // Verify modification date updated
-    let tasks_after = db.search_tasks(&task_uuid.to_string()).await.unwrap();
-    let modified_after = tasks_after[0].modified;
+    let task_after = db.get_task_by_uuid(&task_uuid).await.unwrap().unwrap();
+    let modified_after = task_after.modified;
     assert!(
         modified_after > modified_before,
         "Modification date should be updated"

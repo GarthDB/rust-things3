@@ -1294,6 +1294,85 @@ impl ThingsDatabase {
         Ok(())
     }
 
+    /// Get a task by its UUID
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the task does not exist or if the database query fails
+    #[instrument(skip(self))]
+    pub async fn get_task_by_uuid(&self, uuid: &Uuid) -> ThingsResult<Option<Task>> {
+        let row = sqlx::query(
+            r"
+            SELECT 
+                uuid, title, status, type, 
+                startDate, deadline, stopDate,
+                project, area, heading,
+                notes, cachedTags, 
+                creationDate, userModificationDate,
+                trashed
+            FROM TMTask
+            WHERE uuid = ?
+            ",
+        )
+        .bind(uuid.to_string())
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|e| ThingsError::unknown(format!("Failed to fetch task: {e}")))?;
+
+        if let Some(row) = row {
+            // Check if trashed
+            let trashed: i64 = row.get("trashed");
+            if trashed == 1 {
+                return Ok(None); // Return None for trashed tasks
+            }
+
+            let task = Task {
+                uuid: things_uuid_to_uuid(&row.get::<String, _>("uuid")),
+                title: row.get("title"),
+                status: TaskStatus::from_i32(row.get("status")).unwrap_or(TaskStatus::Incomplete),
+                task_type: TaskType::from_i32(row.get("type")).unwrap_or(TaskType::Todo),
+                notes: row.get("notes"),
+                start_date: row
+                    .get::<Option<i64>, _>("startDate")
+                    .and_then(things_date_to_naive_date),
+                deadline: row
+                    .get::<Option<i64>, _>("deadline")
+                    .and_then(things_date_to_naive_date),
+                created: {
+                    let ts_f64 = row.get::<f64, _>("creationDate");
+                    let ts = safe_timestamp_convert(ts_f64);
+                    DateTime::from_timestamp(ts, 0).unwrap_or_else(Utc::now)
+                },
+                modified: {
+                    let ts_f64 = row.get::<f64, _>("userModificationDate");
+                    let ts = safe_timestamp_convert(ts_f64);
+                    DateTime::from_timestamp(ts, 0).unwrap_or_else(Utc::now)
+                },
+                stop_date: row.get::<Option<f64>, _>("stopDate").and_then(|ts| {
+                    let ts_i64 = safe_timestamp_convert(ts);
+                    DateTime::from_timestamp(ts_i64, 0)
+                }),
+                project_uuid: row
+                    .get::<Option<String>, _>("project")
+                    .map(|s| things_uuid_to_uuid(&s)),
+                area_uuid: row
+                    .get::<Option<String>, _>("area")
+                    .map(|s| things_uuid_to_uuid(&s)),
+                parent_uuid: row
+                    .get::<Option<String>, _>("heading")
+                    .map(|s| things_uuid_to_uuid(&s)),
+                tags: row
+                    .get::<Option<Vec<u8>>, _>("cachedTags")
+                    .map(|_| Vec::new()) // TODO: Parse binary tag data
+                    .unwrap_or_default(),
+                children: Vec::new(),
+            };
+            Ok(Some(task))
+        } else {
+            Ok(None)
+        }
+    }
+
     /// Mark a task as completed
     ///
     /// # Errors
