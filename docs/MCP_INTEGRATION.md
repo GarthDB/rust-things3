@@ -1,0 +1,786 @@
+# MCP Integration Guide
+
+## Table of Contents
+- [Overview](#overview)
+- [Quick Start](#quick-start)
+- [Available Tools](#available-tools)
+- [Configuration](#configuration)
+- [Middleware System](#middleware-system)
+- [Custom Tool Development](#custom-tool-development)
+- [Error Handling](#error-handling)
+- [Testing](#testing)
+- [Advanced Topics](#advanced-topics)
+
+## Overview
+
+The MCP (Model Context Protocol) server provides a standardized interface for AI agents to interact with Things 3 data. It implements the MCP specification for tool calling, resource access, and prompt management.
+
+### Architecture
+
+```mermaid
+graph LR
+    AI[AI Agent] -->|JSON-RPC| IO[I/O Layer]
+    IO --> Server[MCP Server]
+    Server --> MW[Middleware Chain]
+    MW --> Tools[Tool Handlers]
+    Tools --> DB[(Things 3 DB)]
+```
+
+### Key Features
+- **17 Tools**: Comprehensive Things 3 operations
+- **Middleware System**: Logging, validation, auth, rate limiting
+- **Async I/O**: Non-blocking request handling
+- **Type-Safe**: Compile-time validation
+- **Testable**: MockIo for integration testing
+
+## Quick Start
+
+### Starting the MCP Server
+
+```bash
+# Start with default configuration
+things3 mcp
+
+# With custom database path
+things3 mcp --database-path /path/to/things.db
+
+# With verbose logging
+RUST_LOG=debug things3 mcp
+```
+
+### Configuration Files
+
+#### Cursor
+```json
+// .cursor/mcp.json
+{
+  "mcpServers": {
+    "things3": {
+      "command": "things3",
+      "args": ["mcp"],
+      "env": {
+        "THINGS_DB_PATH": "/path/to/things.db",
+        "RUST_LOG": "info"
+      }
+    }
+  }
+}
+```
+
+#### VS Code
+```json
+// .vscode/mcp.json
+{
+  "servers": {
+    "things3": {
+      "type": "stdio",
+      "command": "things3",
+      "args": ["mcp"],
+      "cwd": "${workspaceFolder}",
+      "env": {
+        "THINGS_DB_PATH": "/path/to/things.db"
+      }
+    }
+  }
+}
+```
+
+#### Zed
+```json
+// .zed/settings.json
+{
+  "mcp": {
+    "things3": {
+      "command": "things3",
+      "args": ["mcp"],
+      "env": {
+        "THINGS_DB_PATH": "/path/to/things.db"
+      }
+    }
+  }
+}
+```
+
+## Available Tools
+
+### Data Retrieval Tools
+
+#### `get_inbox`
+Get tasks from the inbox.
+
+**Parameters**:
+- `limit` (optional): Maximum number of tasks (default: 50)
+
+**Example**:
+```json
+{
+  "name": "get_inbox",
+  "arguments": {
+    "limit": 10
+  }
+}
+```
+
+#### `get_today`
+Get tasks scheduled for today.
+
+**Parameters**:
+- `limit` (optional): Maximum number of tasks
+
+**Example**:
+```json
+{
+  "name": "get_today",
+  "arguments": {
+    "limit": 20
+  }
+}
+```
+
+#### `get_projects`
+Get all projects, optionally filtered by area.
+
+**Parameters**:
+- `area_uuid` (optional): Filter by area UUID
+- `limit` (optional): Maximum number of projects
+
+**Example**:
+```json
+{
+  "name": "get_projects",
+  "arguments": {
+    "area_uuid": "550e8400-e29b-41d4-a716-446655440000",
+    "limit": 10
+  }
+}
+```
+
+#### `get_areas`
+Get all areas.
+
+**Parameters**: None
+
+**Example**:
+```json
+{
+  "name": "get_areas"
+}
+```
+
+#### `search_tasks`
+Search for tasks by title or notes.
+
+**Parameters**:
+- `query` (required): Search query
+- `limit` (optional): Maximum results
+
+**Example**:
+```json
+{
+  "name": "search_tasks",
+  "arguments": {
+    "query": "meeting",
+    "limit": 15
+  }
+}
+```
+
+### Task Management Tools
+
+#### `create_task`
+Create a new task.
+
+**Parameters**:
+- `title` (required): Task title
+- `notes` (optional): Task notes
+- `project_uuid` (optional): Project UUID
+- `area_uuid` (optional): Area UUID
+- `deadline` (optional): Deadline date (YYYY-MM-DD)
+- `tags` (optional): Array of tag names
+
+**Example**:
+```json
+{
+  "name": "create_task",
+  "arguments": {
+    "title": "Review PR",
+    "notes": "Check code quality and tests",
+    "project_uuid": "550e8400-e29b-41d4-a716-446655440000",
+    "deadline": "2026-01-15",
+    "tags": ["work", "urgent"]
+  }
+}
+```
+
+#### `update_task`
+Update an existing task.
+
+**Parameters**:
+- `uuid` (required): Task UUID
+- `title` (optional): New title
+- `notes` (optional): New notes
+- `status` (optional): New status
+- `deadline` (optional): New deadline
+
+**Example**:
+```json
+{
+  "name": "update_task",
+  "arguments": {
+    "uuid": "550e8400-e29b-41d4-a716-446655440000",
+    "status": "completed"
+  }
+}
+```
+
+#### `bulk_create_tasks`
+Create multiple tasks at once.
+
+**Parameters**:
+- `tasks` (required): Array of task objects
+
+**Example**:
+```json
+{
+  "name": "bulk_create_tasks",
+  "arguments": {
+    "tasks": [
+      {"title": "Task 1", "notes": "First task"},
+      {"title": "Task 2", "notes": "Second task"}
+    ]
+  }
+}
+```
+
+### Analytics Tools
+
+#### `get_productivity_metrics`
+Get productivity metrics and statistics.
+
+**Parameters**:
+- `days` (optional): Number of days to analyze (default: 7)
+
+**Example**:
+```json
+{
+  "name": "get_productivity_metrics",
+  "arguments": {
+    "days": 30
+  }
+}
+```
+
+#### `get_performance_stats`
+Get performance statistics for the MCP server.
+
+**Parameters**: None
+
+**Example**:
+```json
+{
+  "name": "get_performance_stats"
+}
+```
+
+#### `get_system_metrics`
+Get system resource metrics.
+
+**Parameters**: None
+
+**Example**:
+```json
+{
+  "name": "get_system_metrics"
+}
+```
+
+#### `get_cache_stats`
+Get cache performance statistics.
+
+**Parameters**: None
+
+**Example**:
+```json
+{
+  "name": "get_cache_stats"
+}
+```
+
+### Data Export Tools
+
+#### `export_data`
+Export data in various formats.
+
+**Parameters**:
+- `format` (required): Export format (json, csv, opml, markdown)
+- `output_path` (required): Output file path
+- `include_completed` (optional): Include completed tasks (default: false)
+
+**Example**:
+```json
+{
+  "name": "export_data",
+  "arguments": {
+    "format": "json",
+    "output_path": "/tmp/things_export.json",
+    "include_completed": true
+  }
+}
+```
+
+### Backup Tools
+
+#### `backup_database`
+Create a database backup.
+
+**Parameters**:
+- `backup_path` (optional): Custom backup path
+
+**Example**:
+```json
+{
+  "name": "backup_database",
+  "arguments": {
+    "backup_path": "/backups/things_backup.db"
+  }
+}
+```
+
+#### `restore_database`
+Restore from a backup.
+
+**Parameters**:
+- `backup_path` (required): Path to backup file
+
+**Example**:
+```json
+{
+  "name": "restore_database",
+  "arguments": {
+    "backup_path": "/backups/things_backup.db"
+  }
+}
+```
+
+#### `list_backups`
+List available backups.
+
+**Parameters**: None
+
+**Example**:
+```json
+{
+  "name": "list_backups"
+}
+```
+
+### Utility Tools
+
+#### `get_recent_tasks`
+Get recently modified tasks.
+
+**Parameters**:
+- `limit` (optional): Maximum number of tasks (default: 20)
+
+**Example**:
+```json
+{
+  "name": "get_recent_tasks",
+  "arguments": {
+    "limit": 10
+  }
+}
+```
+
+## Configuration
+
+### Environment Variables
+
+```bash
+# Database path
+export THINGS_DB_PATH="/path/to/things.db"
+
+# Fallback to default path if custom path fails
+export THINGS_FALLBACK_TO_DEFAULT=true
+
+# Logging level
+export RUST_LOG=debug
+
+# MCP server name
+export MCP_SERVER_NAME="things3-custom"
+```
+
+### MCP Server Configuration
+
+Create `mcp_config.json`:
+
+```json
+{
+  "database": {
+    "path": "/path/to/things.db",
+    "fallback_to_default": true
+  },
+  "logging": {
+    "enabled": true,
+    "level": "info"
+  },
+  "validation": {
+    "enabled": true,
+    "strict_mode": false
+  },
+  "performance": {
+    "enabled": true,
+    "slow_request_threshold_ms": 1000
+  },
+  "security": {
+    "authentication": {
+      "enabled": false,
+      "require_auth": false,
+      "jwt_secret": "",
+      "api_keys": []
+    },
+    "rate_limiting": {
+      "enabled": false,
+      "requests_per_minute": 60,
+      "burst_limit": 10
+    }
+  }
+}
+```
+
+## Middleware System
+
+### Available Middleware
+
+1. **LoggingMiddleware**: Request/response logging
+2. **ValidationMiddleware**: Input validation
+3. **PerformanceMiddleware**: Timing and metrics
+4. **AuthenticationMiddleware**: API key/JWT auth
+5. **RateLimitMiddleware**: Request throttling
+
+### Middleware Execution Order
+
+Middleware executes in priority order (lower numbers first):
+
+```
+ValidationMiddleware (priority: 10)
+  ↓
+AuthenticationMiddleware (priority: 50)
+  ↓
+RateLimitMiddleware (priority: 75)
+  ↓
+PerformanceMiddleware (priority: 50)
+  ↓
+LoggingMiddleware (priority: 100)
+  ↓
+Tool Handler
+```
+
+### Custom Middleware Example
+
+```rust
+use async_trait::async_trait;
+use things3_cli::mcp::middleware::{
+    McpMiddleware, MiddlewareContext, MiddlewareResult
+};
+
+struct CustomMiddleware;
+
+#[async_trait]
+impl McpMiddleware for CustomMiddleware {
+    fn name(&self) -> &str {
+        "custom"
+    }
+    
+    fn priority(&self) -> i32 {
+        25 // Execute early
+    }
+    
+    async fn before_request(
+        &self,
+        request: &CallToolRequest,
+        context: &mut MiddlewareContext,
+    ) -> McpResult<MiddlewareResult> {
+        // Custom logic before request
+        println!("Processing: {}", request.name);
+        Ok(MiddlewareResult::Continue)
+    }
+    
+    async fn after_request(
+        &self,
+        request: &CallToolRequest,
+        response: &mut CallToolResult,
+        context: &mut MiddlewareContext,
+    ) -> McpResult<MiddlewareResult> {
+        // Custom logic after request
+        println!("Completed: {}", request.name);
+        Ok(MiddlewareResult::Continue)
+    }
+}
+```
+
+## Custom Tool Development
+
+### Creating a Custom Tool
+
+```rust
+use things3_cli::mcp::{CallToolRequest, CallToolResult, Content};
+
+async fn my_custom_tool(
+    request: CallToolRequest,
+    db: &ThingsDatabase,
+) -> Result<CallToolResult, McpError> {
+    // Extract parameters
+    let limit = request.arguments
+        .and_then(|args| args.get("limit"))
+        .and_then(|v| v.as_u64())
+        .unwrap_or(10) as usize;
+    
+    // Query database
+    let tasks = db.get_inbox(Some(limit)).await?;
+    
+    // Format response
+    let json_data = serde_json::to_string_pretty(&tasks)?;
+    
+    Ok(CallToolResult {
+        content: vec![Content::Text { text: json_data }],
+        is_error: false,
+    })
+}
+```
+
+### Registering Custom Tools
+
+```rust
+use things3_cli::mcp::ThingsMcpServer;
+
+// Add to server implementation
+impl ThingsMcpServer {
+    async fn handle_custom_tool(&self, request: CallToolRequest) 
+        -> Result<CallToolResult, McpError> 
+    {
+        match request.name.as_str() {
+            "my_custom_tool" => my_custom_tool(request, &self.db).await,
+            _ => Err(McpError::ToolNotFound { 
+                tool_name: request.name 
+            }),
+        }
+    }
+}
+```
+
+## Error Handling
+
+### Error Types
+
+```rust
+pub enum McpError {
+    ToolNotFound { tool_name: String },
+    ResourceNotFound { uri: String },
+    InvalidParameter { parameter_name: String, message: String },
+    MissingParameter { parameter_name: String },
+    DatabaseOperationFailed { operation: String, source: ThingsError },
+    // ... more error types
+}
+```
+
+### Error Response Format
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "error": {
+    "code": -32000,
+    "message": "Tool not found: invalid_tool",
+    "data": {
+      "tool_name": "invalid_tool"
+    }
+  }
+}
+```
+
+### Handling Errors in Tools
+
+```rust
+async fn safe_tool_call(request: CallToolRequest) 
+    -> Result<CallToolResult, McpError> 
+{
+    // Validate parameters
+    let limit = request.arguments
+        .and_then(|args| args.get("limit"))
+        .and_then(|v| v.as_u64())
+        .ok_or_else(|| McpError::MissingParameter {
+            parameter_name: "limit".to_string(),
+        })?;
+    
+    // Perform operation with error handling
+    let tasks = db.get_inbox(Some(limit as usize))
+        .await
+        .map_err(|e| McpError::DatabaseOperationFailed {
+            operation: "get_inbox".to_string(),
+            source: e,
+        })?;
+    
+    Ok(CallToolResult {
+        content: vec![Content::Text { 
+            text: serde_json::to_string(&tasks)? 
+        }],
+        is_error: false,
+    })
+}
+```
+
+## Testing
+
+### Unit Testing Tools
+
+```rust
+#[tokio::test]
+async fn test_get_inbox_tool() {
+    let harness = McpTestHarness::new();
+    
+    let result = harness.call_tool("get_inbox", Some(json!({
+        "limit": 5
+    }))).await;
+    
+    assert!(!result.is_error);
+    assert!(!result.content.is_empty());
+}
+```
+
+### Integration Testing
+
+```rust
+#[tokio::test]
+async fn test_mcp_workflow() {
+    let integration_test = McpIntegrationTest::new();
+    
+    // Test complete workflow
+    let result = integration_test
+        .test_tool_workflow("get_inbox", None)
+        .await;
+    
+    assert!(!result.is_error);
+}
+```
+
+### Performance Testing
+
+```rust
+#[tokio::test]
+async fn test_tool_performance() {
+    let perf_test = McpPerformanceTest::new();
+    
+    // Call tool
+    harness.call_tool("get_inbox", None).await;
+    
+    // Assert performance
+    perf_test.assert_under_ms(100);
+}
+```
+
+## Advanced Topics
+
+### Streaming Responses
+
+For large datasets, consider streaming responses:
+
+```rust
+async fn stream_large_dataset(
+    request: CallToolRequest,
+) -> Result<CallToolResult, McpError> {
+    // Process in chunks
+    let mut results = Vec::new();
+    let chunk_size = 100;
+    
+    for offset in (0..total_count).step_by(chunk_size) {
+        let chunk = db.get_tasks_chunk(offset, chunk_size).await?;
+        results.extend(chunk);
+    }
+    
+    Ok(CallToolResult {
+        content: vec![Content::Text { 
+            text: serde_json::to_string(&results)? 
+        }],
+        is_error: false,
+    })
+}
+```
+
+### Caching Strategies
+
+```rust
+// Use built-in caching
+let cache = ThingsCache::new(1000, Duration::from_secs(300));
+
+// Cache expensive operations
+let cached_result = cache.get_or_insert("key", || {
+    expensive_database_query()
+}).await?;
+```
+
+### Authentication
+
+```rust
+// Enable JWT authentication
+let auth_middleware = AuthenticationMiddleware::new(
+    api_keys,
+    jwt_secret.to_string(),
+);
+
+chain = chain.add_middleware(auth_middleware);
+```
+
+### Rate Limiting
+
+```rust
+// Configure rate limiting
+let rate_limit = RateLimitMiddleware::new(
+    60,  // requests per minute
+    10,  // burst limit
+);
+
+chain = chain.add_middleware(rate_limit);
+```
+
+## Best Practices
+
+1. **Always validate input parameters**
+2. **Use appropriate error types**
+3. **Log important operations**
+4. **Implement proper error handling**
+5. **Test with MockIo for integration tests**
+6. **Use middleware for cross-cutting concerns**
+7. **Cache expensive database queries**
+8. **Monitor performance metrics**
+9. **Implement rate limiting for production**
+10. **Keep tool implementations focused and simple**
+
+## Troubleshooting
+
+### Common Issues
+
+**Issue**: MCP server not responding
+- Check if Things 3 database path is correct
+- Verify database file permissions
+- Check logs with `RUST_LOG=debug`
+
+**Issue**: Tool calls timing out
+- Check database query performance
+- Verify network connectivity
+- Increase timeout thresholds
+
+**Issue**: Authentication failures
+- Verify API key or JWT secret
+- Check token expiration
+- Review authentication middleware configuration
+
+## References
+
+- [MCP Protocol Specification](https://modelcontextprotocol.io)
+- [Architecture Documentation](./ARCHITECTURE.md)
+- [Database Schema](./DATABASE_SCHEMA.md)
+- [Development Guide](./DEVELOPMENT.md)
+- [API Documentation](https://docs.rs/things3-cli)
+
