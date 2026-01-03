@@ -408,6 +408,12 @@ impl From<ThingsError> for McpError {
             }
             ThingsError::Validation { message } => McpError::validation_error(message),
             ThingsError::Configuration { message } => McpError::configuration_error(message),
+            ThingsError::DateValidation(e) => {
+                McpError::validation_error(format!("Date validation failed: {e}"))
+            }
+            ThingsError::DateConversion(e) => {
+                McpError::validation_error(format!("Date conversion failed: {e}"))
+            }
             ThingsError::Unknown { message } => McpError::internal_error(message),
         }
     }
