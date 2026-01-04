@@ -3023,6 +3023,10 @@ impl ThingsDatabase {
     // Bulk Operations
     // ============================================================================
 
+    /// Maximum number of tasks that can be processed in a single bulk operation
+    /// This prevents abuse and ensures reasonable transaction sizes
+    const MAX_BULK_BATCH_SIZE: usize = 1000;
+
     /// Move multiple tasks to a project or area (transactional)
     ///
     /// All tasks must exist and be valid, or the entire operation will be rolled back.
@@ -3043,6 +3047,13 @@ impl ThingsDatabase {
         // Validation
         if request.task_uuids.is_empty() {
             return Err(ThingsError::validation("Task UUIDs cannot be empty"));
+        }
+        if request.task_uuids.len() > Self::MAX_BULK_BATCH_SIZE {
+            return Err(ThingsError::validation(format!(
+                "Batch size {} exceeds maximum of {}",
+                request.task_uuids.len(),
+                Self::MAX_BULK_BATCH_SIZE
+            )));
         }
         if request.project_uuid.is_none() && request.area_uuid.is_none() {
             return Err(ThingsError::validation(
@@ -3065,19 +3076,41 @@ impl ThingsDatabase {
             .await
             .map_err(|e| ThingsError::unknown(format!("Failed to begin transaction: {e}")))?;
 
-        // Validate all tasks exist (fail fast)
-        for uuid in &request.task_uuids {
-            let exists = sqlx::query("SELECT uuid FROM TMTask WHERE uuid = ? AND trashed = 0")
-                .bind(uuid.to_string())
-                .fetch_optional(&mut *tx)
-                .await
-                .map_err(|e| ThingsError::unknown(format!("Failed to validate task: {e}")))?;
+        // Validate all tasks exist in a single batch query (prevent N+1)
+        let placeholders = request
+            .task_uuids
+            .iter()
+            .map(|_| "?")
+            .collect::<Vec<_>>()
+            .join(",");
+        let query_str = format!(
+            "SELECT uuid FROM TMTask WHERE uuid IN ({}) AND trashed = 0",
+            placeholders
+        );
 
-            if exists.is_none() {
-                tx.rollback().await.ok();
-                return Err(ThingsError::TaskNotFound {
-                    uuid: uuid.to_string(),
-                });
+        let mut query = sqlx::query(&query_str);
+        for uuid in &request.task_uuids {
+            query = query.bind(uuid.to_string());
+        }
+
+        let found_uuids: Vec<String> = query
+            .fetch_all(&mut *tx)
+            .await
+            .map_err(|e| ThingsError::unknown(format!("Failed to validate tasks: {e}")))?
+            .iter()
+            .map(|row| row.get("uuid"))
+            .collect();
+
+        // Check if any UUIDs were not found
+        if found_uuids.len() != request.task_uuids.len() {
+            // Find the first missing UUID for error reporting
+            for uuid in &request.task_uuids {
+                if !found_uuids.contains(&uuid.to_string()) {
+                    tx.rollback().await.ok();
+                    return Err(ThingsError::TaskNotFound {
+                        uuid: uuid.to_string(),
+                    });
+                }
             }
         }
 
@@ -3144,6 +3177,13 @@ impl ThingsDatabase {
         if request.task_uuids.is_empty() {
             return Err(ThingsError::validation("Task UUIDs cannot be empty"));
         }
+        if request.task_uuids.len() > Self::MAX_BULK_BATCH_SIZE {
+            return Err(ThingsError::validation(format!(
+                "Batch size {} exceeds maximum of {}",
+                request.task_uuids.len(),
+                Self::MAX_BULK_BATCH_SIZE
+            )));
+        }
 
         // Validate date range if both are provided
         if let (Some(start), Some(deadline)) = (request.start_date, request.deadline) {
@@ -3157,46 +3197,64 @@ impl ThingsDatabase {
             .await
             .map_err(|e| ThingsError::unknown(format!("Failed to begin transaction: {e}")))?;
 
-        // Validate all tasks exist and check merged date validity
+        // Validate all tasks exist and check merged date validity in a single batch query
+        let placeholders = request
+            .task_uuids
+            .iter()
+            .map(|_| "?")
+            .collect::<Vec<_>>()
+            .join(",");
+        let query_str = format!(
+            "SELECT uuid, startDate, deadline FROM TMTask WHERE uuid IN ({}) AND trashed = 0",
+            placeholders
+        );
+
+        let mut query = sqlx::query(&query_str);
         for uuid in &request.task_uuids {
-            let row = sqlx::query(
-                "SELECT uuid, startDate, deadline FROM TMTask WHERE uuid = ? AND trashed = 0",
-            )
-            .bind(uuid.to_string())
-            .fetch_optional(&mut *tx)
+            query = query.bind(uuid.to_string());
+        }
+
+        let rows = query
+            .fetch_all(&mut *tx)
             .await
-            .map_err(|e| ThingsError::unknown(format!("Failed to validate task: {e}")))?;
+            .map_err(|e| ThingsError::unknown(format!("Failed to validate tasks: {e}")))?;
 
-            if row.is_none() {
-                tx.rollback().await.ok();
-                return Err(ThingsError::TaskNotFound {
-                    uuid: uuid.to_string(),
-                });
+        // Check if all UUIDs were found
+        if rows.len() != request.task_uuids.len() {
+            // Find the first missing UUID for error reporting
+            let found_uuids: Vec<String> = rows.iter().map(|row| row.get("uuid")).collect();
+            for uuid in &request.task_uuids {
+                if !found_uuids.contains(&uuid.to_string()) {
+                    tx.rollback().await.ok();
+                    return Err(ThingsError::TaskNotFound {
+                        uuid: uuid.to_string(),
+                    });
+                }
             }
+        }
 
-            // Validate merged dates for this specific task
-            if let Some(row) = row {
-                let current_start: Option<i64> = row.get("startDate");
-                let current_deadline: Option<i64> = row.get("deadline");
+        // Validate merged dates for all tasks
+        for row in &rows {
+            let current_start: Option<i64> = row.get("startDate");
+            let current_deadline: Option<i64> = row.get("deadline");
 
-                let final_start = if request.clear_start_date {
-                    None
-                } else if let Some(new_start) = request.start_date {
-                    Some(new_start)
-                } else {
-                    current_start.and_then(|ts| safe_things_date_to_naive_date(ts).ok())
-                };
+            let final_start = if request.clear_start_date {
+                None
+            } else if let Some(new_start) = request.start_date {
+                Some(new_start)
+            } else {
+                current_start.and_then(|ts| safe_things_date_to_naive_date(ts).ok())
+            };
 
-                let final_deadline = if request.clear_deadline {
-                    None
-                } else if let Some(new_deadline) = request.deadline {
-                    Some(new_deadline)
-                } else {
-                    current_deadline.and_then(|ts| safe_things_date_to_naive_date(ts).ok())
-                };
+            let final_deadline = if request.clear_deadline {
+                None
+            } else if let Some(new_deadline) = request.deadline {
+                Some(new_deadline)
+            } else {
+                current_deadline.and_then(|ts| safe_things_date_to_naive_date(ts).ok())
+            };
 
-                validate_date_range(final_start, final_deadline)?;
-            }
+            validate_date_range(final_start, final_deadline)?;
         }
 
         // Build and execute batch update
@@ -3276,6 +3334,13 @@ impl ThingsDatabase {
         if request.task_uuids.is_empty() {
             return Err(ThingsError::validation("Task UUIDs cannot be empty"));
         }
+        if request.task_uuids.len() > Self::MAX_BULK_BATCH_SIZE {
+            return Err(ThingsError::validation(format!(
+                "Batch size {} exceeds maximum of {}",
+                request.task_uuids.len(),
+                Self::MAX_BULK_BATCH_SIZE
+            )));
+        }
 
         // Begin transaction
         let mut tx = self
@@ -3284,19 +3349,41 @@ impl ThingsDatabase {
             .await
             .map_err(|e| ThingsError::unknown(format!("Failed to begin transaction: {e}")))?;
 
-        // Validate all tasks exist (fail fast)
-        for uuid in &request.task_uuids {
-            let exists = sqlx::query("SELECT uuid FROM TMTask WHERE uuid = ? AND trashed = 0")
-                .bind(uuid.to_string())
-                .fetch_optional(&mut *tx)
-                .await
-                .map_err(|e| ThingsError::unknown(format!("Failed to validate task: {e}")))?;
+        // Validate all tasks exist in a single batch query (prevent N+1)
+        let placeholders = request
+            .task_uuids
+            .iter()
+            .map(|_| "?")
+            .collect::<Vec<_>>()
+            .join(",");
+        let query_str = format!(
+            "SELECT uuid FROM TMTask WHERE uuid IN ({}) AND trashed = 0",
+            placeholders
+        );
 
-            if exists.is_none() {
-                tx.rollback().await.ok();
-                return Err(ThingsError::TaskNotFound {
-                    uuid: uuid.to_string(),
-                });
+        let mut query = sqlx::query(&query_str);
+        for uuid in &request.task_uuids {
+            query = query.bind(uuid.to_string());
+        }
+
+        let found_uuids: Vec<String> = query
+            .fetch_all(&mut *tx)
+            .await
+            .map_err(|e| ThingsError::unknown(format!("Failed to validate tasks: {e}")))?
+            .iter()
+            .map(|row| row.get("uuid"))
+            .collect();
+
+        // Check if any UUIDs were not found
+        if found_uuids.len() != request.task_uuids.len() {
+            // Find the first missing UUID for error reporting
+            for uuid in &request.task_uuids {
+                if !found_uuids.contains(&uuid.to_string()) {
+                    tx.rollback().await.ok();
+                    return Err(ThingsError::TaskNotFound {
+                        uuid: uuid.to_string(),
+                    });
+                }
             }
         }
 
@@ -3359,6 +3446,13 @@ impl ThingsDatabase {
         if request.task_uuids.is_empty() {
             return Err(ThingsError::validation("Task UUIDs cannot be empty"));
         }
+        if request.task_uuids.len() > Self::MAX_BULK_BATCH_SIZE {
+            return Err(ThingsError::validation(format!(
+                "Batch size {} exceeds maximum of {}",
+                request.task_uuids.len(),
+                Self::MAX_BULK_BATCH_SIZE
+            )));
+        }
 
         // Begin transaction
         let mut tx = self
@@ -3367,19 +3461,41 @@ impl ThingsDatabase {
             .await
             .map_err(|e| ThingsError::unknown(format!("Failed to begin transaction: {e}")))?;
 
-        // Validate all tasks exist (fail fast)
-        for uuid in &request.task_uuids {
-            let exists = sqlx::query("SELECT uuid FROM TMTask WHERE uuid = ? AND trashed = 0")
-                .bind(uuid.to_string())
-                .fetch_optional(&mut *tx)
-                .await
-                .map_err(|e| ThingsError::unknown(format!("Failed to validate task: {e}")))?;
+        // Validate all tasks exist in a single batch query (prevent N+1)
+        let placeholders = request
+            .task_uuids
+            .iter()
+            .map(|_| "?")
+            .collect::<Vec<_>>()
+            .join(",");
+        let query_str = format!(
+            "SELECT uuid FROM TMTask WHERE uuid IN ({}) AND trashed = 0",
+            placeholders
+        );
 
-            if exists.is_none() {
-                tx.rollback().await.ok();
-                return Err(ThingsError::TaskNotFound {
-                    uuid: uuid.to_string(),
-                });
+        let mut query = sqlx::query(&query_str);
+        for uuid in &request.task_uuids {
+            query = query.bind(uuid.to_string());
+        }
+
+        let found_uuids: Vec<String> = query
+            .fetch_all(&mut *tx)
+            .await
+            .map_err(|e| ThingsError::unknown(format!("Failed to validate tasks: {e}")))?
+            .iter()
+            .map(|row| row.get("uuid"))
+            .collect();
+
+        // Check if any UUIDs were not found
+        if found_uuids.len() != request.task_uuids.len() {
+            // Find the first missing UUID for error reporting
+            for uuid in &request.task_uuids {
+                if !found_uuids.contains(&uuid.to_string()) {
+                    tx.rollback().await.ok();
+                    return Err(ThingsError::TaskNotFound {
+                        uuid: uuid.to_string(),
+                    });
+                }
             }
         }
 

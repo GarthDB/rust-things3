@@ -445,3 +445,29 @@ async fn test_bulk_operations_with_single_task() {
     assert!(result.success);
     assert_eq!(result.processed_count, 1);
 }
+
+#[tokio::test]
+async fn test_bulk_move_exceeds_max_batch_size() {
+    let (db, _temp_file) = create_test_database_and_connect().await.unwrap();
+
+    // Try to move more than MAX_BULK_BATCH_SIZE (1000) tasks
+    let mut task_uuids = Vec::new();
+    for _ in 0..1001 {
+        task_uuids.push(Uuid::new_v4());
+    }
+
+    let bulk_request = BulkMoveRequest {
+        task_uuids,
+        project_uuid: Some(Uuid::new_v4()),
+        area_uuid: None,
+    };
+
+    let result = db.bulk_move(bulk_request).await;
+    assert!(result.is_err());
+    assert!(matches!(result, Err(ThingsError::Validation { .. })));
+    if let Err(ThingsError::Validation { message }) = result {
+        assert!(message.contains("exceeds maximum"));
+        assert!(message.contains("1001"));
+        assert!(message.contains("1000"));
+    }
+}

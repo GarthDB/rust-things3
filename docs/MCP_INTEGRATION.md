@@ -620,7 +620,10 @@ Delete multiple tasks (soft delete) in a single transaction.
 
 3. **Error Handling**: Check the `success` field in responses. On error, the response will contain a descriptive error message indicating which validation failed.
 
-4. **Batch Size**: While there's no hard limit, batches of 50-100 tasks are recommended for optimal performance.
+4. **Batch Size Limits**: 
+   - **Maximum**: 1000 tasks per operation (hard limit to prevent abuse)
+   - **Recommended**: 50-100 tasks for optimal performance
+   - Exceeding the limit returns a validation error
 
 5. **Date Validation**: `bulk_update_dates` validates each task's final date range (merging new dates with existing dates). This prevents creating invalid date ranges.
 
