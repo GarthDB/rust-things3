@@ -43,7 +43,9 @@ pub async fn validate_project_exists(pool: &SqlitePool, uuid: &Uuid) -> ThingsRe
         .is_some();
 
     if !exists {
-        return Err(ThingsError::unknown(format!("Project not found: {uuid}")));
+        return Err(ThingsError::ProjectNotFound {
+            uuid: uuid.to_string(),
+        });
     }
     Ok(())
 }
