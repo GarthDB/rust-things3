@@ -911,6 +911,7 @@ impl ThingsMcpServer {
         let mut tools = Vec::new();
         tools.extend(Self::get_data_retrieval_tools());
         tools.extend(Self::get_task_management_tools());
+        tools.extend(Self::get_bulk_operation_tools());
         tools.extend(Self::get_tag_management_tools());
         tools.extend(Self::get_analytics_tools());
         tools.extend(Self::get_backup_tools());
@@ -1531,6 +1532,100 @@ impl ThingsMcpServer {
         ]
     }
 
+    fn get_bulk_operation_tools() -> Vec<Tool> {
+        vec![
+            Tool {
+                name: "bulk_move".to_string(),
+                description: "Move multiple tasks to a project or area (transactional)".to_string(),
+                input_schema: serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "task_uuids": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                            "description": "Array of task UUIDs to move"
+                        },
+                        "project_uuid": {
+                            "type": "string",
+                            "format": "uuid",
+                            "description": "Target project UUID (optional)"
+                        },
+                        "area_uuid": {
+                            "type": "string",
+                            "format": "uuid",
+                            "description": "Target area UUID (optional)"
+                        }
+                    },
+                    "required": ["task_uuids"]
+                }),
+            },
+            Tool {
+                name: "bulk_update_dates".to_string(),
+                description: "Update dates for multiple tasks with validation (transactional)"
+                    .to_string(),
+                input_schema: serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "task_uuids": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                            "description": "Array of task UUIDs to update"
+                        },
+                        "start_date": {
+                            "type": "string",
+                            "format": "date",
+                            "description": "New start date (YYYY-MM-DD, optional)"
+                        },
+                        "deadline": {
+                            "type": "string",
+                            "format": "date",
+                            "description": "New deadline (YYYY-MM-DD, optional)"
+                        },
+                        "clear_start_date": {
+                            "type": "boolean",
+                            "description": "Clear start date (set to NULL, default: false)"
+                        },
+                        "clear_deadline": {
+                            "type": "boolean",
+                            "description": "Clear deadline (set to NULL, default: false)"
+                        }
+                    },
+                    "required": ["task_uuids"]
+                }),
+            },
+            Tool {
+                name: "bulk_complete".to_string(),
+                description: "Mark multiple tasks as completed (transactional)".to_string(),
+                input_schema: serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "task_uuids": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                            "description": "Array of task UUIDs to complete"
+                        }
+                    },
+                    "required": ["task_uuids"]
+                }),
+            },
+            Tool {
+                name: "bulk_delete".to_string(),
+                description: "Delete multiple tasks (soft delete, transactional)".to_string(),
+                input_schema: serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "task_uuids": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                            "description": "Array of task UUIDs to delete"
+                        }
+                    },
+                    "required": ["task_uuids"]
+                }),
+            },
+        ]
+    }
+
     fn get_tag_management_tools() -> Vec<Tool> {
         vec![
             // Tag Discovery Tools
@@ -1818,6 +1913,10 @@ impl ThingsMcpServer {
             "complete_task" => self.handle_complete_task(arguments).await,
             "uncomplete_task" => self.handle_uncomplete_task(arguments).await,
             "delete_task" => self.handle_delete_task(arguments).await,
+            "bulk_move" => self.handle_bulk_move(arguments).await,
+            "bulk_update_dates" => self.handle_bulk_update_dates(arguments).await,
+            "bulk_complete" => self.handle_bulk_complete(arguments).await,
+            "bulk_delete" => self.handle_bulk_delete(arguments).await,
             "create_project" => self.handle_create_project(arguments).await,
             "update_project" => self.handle_update_project(arguments).await,
             "complete_project" => self.handle_complete_project(arguments).await,
@@ -2180,6 +2279,243 @@ impl ThingsMcpServer {
             content: vec![Content::Text {
                 text: serde_json::to_string_pretty(&response)
                     .map_err(|e| McpError::serialization_failed("delete_task response", e))?,
+            }],
+            is_error: false,
+        })
+    }
+
+    // ============================================================================
+    // Bulk Operation Handlers
+    // ============================================================================
+
+    async fn handle_bulk_move(&self, args: Value) -> McpResult<CallToolResult> {
+        // Parse task UUIDs
+        let task_uuid_strs: Vec<String> = args
+            .get("task_uuids")
+            .and_then(|v| v.as_array())
+            .ok_or_else(|| McpError::invalid_parameter("task_uuids", "Array of UUIDs is required"))?
+            .iter()
+            .filter_map(|v| v.as_str().map(String::from))
+            .collect();
+
+        let task_uuids: Vec<uuid::Uuid> = task_uuid_strs
+            .iter()
+            .map(|s| {
+                uuid::Uuid::parse_str(s).map_err(|e| {
+                    McpError::invalid_parameter("task_uuids", format!("Invalid UUID: {e}"))
+                })
+            })
+            .collect::<McpResult<Vec<_>>>()?;
+
+        // Parse optional project_uuid
+        let project_uuid = args
+            .get("project_uuid")
+            .and_then(|v| v.as_str())
+            .map(|s| {
+                uuid::Uuid::parse_str(s).map_err(|e| {
+                    McpError::invalid_parameter("project_uuid", format!("Invalid UUID: {e}"))
+                })
+            })
+            .transpose()?;
+
+        // Parse optional area_uuid
+        let area_uuid = args
+            .get("area_uuid")
+            .and_then(|v| v.as_str())
+            .map(|s| {
+                uuid::Uuid::parse_str(s).map_err(|e| {
+                    McpError::invalid_parameter("area_uuid", format!("Invalid UUID: {e}"))
+                })
+            })
+            .transpose()?;
+
+        let request = things3_core::models::BulkMoveRequest {
+            task_uuids,
+            project_uuid,
+            area_uuid,
+        };
+
+        let result = self
+            .db
+            .bulk_move(request)
+            .await
+            .map_err(|e| McpError::database_operation_failed("bulk_move", e))?;
+
+        let response = serde_json::json!({
+            "success": result.success,
+            "processed_count": result.processed_count,
+            "message": result.message
+        });
+
+        Ok(CallToolResult {
+            content: vec![Content::Text {
+                text: serde_json::to_string_pretty(&response)
+                    .map_err(|e| McpError::serialization_failed("bulk_move response", e))?,
+            }],
+            is_error: false,
+        })
+    }
+
+    async fn handle_bulk_update_dates(&self, args: Value) -> McpResult<CallToolResult> {
+        use chrono::NaiveDate;
+
+        // Parse task UUIDs
+        let task_uuid_strs: Vec<String> = args
+            .get("task_uuids")
+            .and_then(|v| v.as_array())
+            .ok_or_else(|| McpError::invalid_parameter("task_uuids", "Array of UUIDs is required"))?
+            .iter()
+            .filter_map(|v| v.as_str().map(String::from))
+            .collect();
+
+        let task_uuids: Vec<uuid::Uuid> = task_uuid_strs
+            .iter()
+            .map(|s| {
+                uuid::Uuid::parse_str(s).map_err(|e| {
+                    McpError::invalid_parameter("task_uuids", format!("Invalid UUID: {e}"))
+                })
+            })
+            .collect::<McpResult<Vec<_>>>()?;
+
+        // Parse optional dates
+        let start_date = args
+            .get("start_date")
+            .and_then(|v| v.as_str())
+            .map(|s| {
+                NaiveDate::parse_from_str(s, "%Y-%m-%d").map_err(|e| {
+                    McpError::invalid_parameter("start_date", format!("Invalid date format: {e}"))
+                })
+            })
+            .transpose()?;
+
+        let deadline = args
+            .get("deadline")
+            .and_then(|v| v.as_str())
+            .map(|s| {
+                NaiveDate::parse_from_str(s, "%Y-%m-%d").map_err(|e| {
+                    McpError::invalid_parameter("deadline", format!("Invalid date format: {e}"))
+                })
+            })
+            .transpose()?;
+
+        let clear_start_date = args
+            .get("clear_start_date")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
+
+        let clear_deadline = args
+            .get("clear_deadline")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
+
+        let request = things3_core::models::BulkUpdateDatesRequest {
+            task_uuids,
+            start_date,
+            deadline,
+            clear_start_date,
+            clear_deadline,
+        };
+
+        let result = self
+            .db
+            .bulk_update_dates(request)
+            .await
+            .map_err(|e| McpError::database_operation_failed("bulk_update_dates", e))?;
+
+        let response = serde_json::json!({
+            "success": result.success,
+            "processed_count": result.processed_count,
+            "message": result.message
+        });
+
+        Ok(CallToolResult {
+            content: vec![Content::Text {
+                text: serde_json::to_string_pretty(&response)
+                    .map_err(|e| McpError::serialization_failed("bulk_update_dates response", e))?,
+            }],
+            is_error: false,
+        })
+    }
+
+    async fn handle_bulk_complete(&self, args: Value) -> McpResult<CallToolResult> {
+        // Parse task UUIDs
+        let task_uuid_strs: Vec<String> = args
+            .get("task_uuids")
+            .and_then(|v| v.as_array())
+            .ok_or_else(|| McpError::invalid_parameter("task_uuids", "Array of UUIDs is required"))?
+            .iter()
+            .filter_map(|v| v.as_str().map(String::from))
+            .collect();
+
+        let task_uuids: Vec<uuid::Uuid> = task_uuid_strs
+            .iter()
+            .map(|s| {
+                uuid::Uuid::parse_str(s).map_err(|e| {
+                    McpError::invalid_parameter("task_uuids", format!("Invalid UUID: {e}"))
+                })
+            })
+            .collect::<McpResult<Vec<_>>>()?;
+
+        let request = things3_core::models::BulkCompleteRequest { task_uuids };
+
+        let result = self
+            .db
+            .bulk_complete(request)
+            .await
+            .map_err(|e| McpError::database_operation_failed("bulk_complete", e))?;
+
+        let response = serde_json::json!({
+            "success": result.success,
+            "processed_count": result.processed_count,
+            "message": result.message
+        });
+
+        Ok(CallToolResult {
+            content: vec![Content::Text {
+                text: serde_json::to_string_pretty(&response)
+                    .map_err(|e| McpError::serialization_failed("bulk_complete response", e))?,
+            }],
+            is_error: false,
+        })
+    }
+
+    async fn handle_bulk_delete(&self, args: Value) -> McpResult<CallToolResult> {
+        // Parse task UUIDs
+        let task_uuid_strs: Vec<String> = args
+            .get("task_uuids")
+            .and_then(|v| v.as_array())
+            .ok_or_else(|| McpError::invalid_parameter("task_uuids", "Array of UUIDs is required"))?
+            .iter()
+            .filter_map(|v| v.as_str().map(String::from))
+            .collect();
+
+        let task_uuids: Vec<uuid::Uuid> = task_uuid_strs
+            .iter()
+            .map(|s| {
+                uuid::Uuid::parse_str(s).map_err(|e| {
+                    McpError::invalid_parameter("task_uuids", format!("Invalid UUID: {e}"))
+                })
+            })
+            .collect::<McpResult<Vec<_>>>()?;
+
+        let request = things3_core::models::BulkDeleteRequest { task_uuids };
+
+        let result = self
+            .db
+            .bulk_delete(request)
+            .await
+            .map_err(|e| McpError::database_operation_failed("bulk_delete", e))?;
+
+        let response = serde_json::json!({
+            "success": result.success,
+            "processed_count": result.processed_count,
+            "message": result.message
+        });
+
+        Ok(CallToolResult {
+            content: vec![Content::Text {
+                text: serde_json::to_string_pretty(&response)
+                    .map_err(|e| McpError::serialization_failed("bulk_delete response", e))?,
             }],
             is_error: false,
         })

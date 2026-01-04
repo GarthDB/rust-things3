@@ -421,6 +421,61 @@ pub enum ProjectChildHandling {
     Orphan,
 }
 
+// ============================================================================
+// Bulk Operation Models
+// ============================================================================
+
+/// Request to move multiple tasks to a project or area
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BulkMoveRequest {
+    /// Task UUIDs to move
+    pub task_uuids: Vec<Uuid>,
+    /// Target project UUID (optional)
+    pub project_uuid: Option<Uuid>,
+    /// Target area UUID (optional)
+    pub area_uuid: Option<Uuid>,
+}
+
+/// Request to update dates for multiple tasks
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BulkUpdateDatesRequest {
+    /// Task UUIDs to update
+    pub task_uuids: Vec<Uuid>,
+    /// New start date (None means don't update)
+    pub start_date: Option<NaiveDate>,
+    /// New deadline (None means don't update)
+    pub deadline: Option<NaiveDate>,
+    /// Clear start date (set to NULL)
+    pub clear_start_date: bool,
+    /// Clear deadline (set to NULL)
+    pub clear_deadline: bool,
+}
+
+/// Request to complete multiple tasks
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BulkCompleteRequest {
+    /// Task UUIDs to complete
+    pub task_uuids: Vec<Uuid>,
+}
+
+/// Request to delete multiple tasks
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BulkDeleteRequest {
+    /// Task UUIDs to delete
+    pub task_uuids: Vec<Uuid>,
+}
+
+/// Result of a bulk operation
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BulkOperationResult {
+    /// Whether the operation succeeded
+    pub success: bool,
+    /// Number of tasks processed
+    pub processed_count: usize,
+    /// Result message
+    pub message: String,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
