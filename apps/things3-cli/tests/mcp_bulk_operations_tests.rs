@@ -35,10 +35,8 @@ impl McpTestHarness {
         let result = self.server.call_tool_with_fallback(request).await;
 
         // Extract text content
-        if let Some(content) = result.content.first() {
-            if let things3_cli::mcp::Content::Text { text } = content {
-                return serde_json::from_str(text).expect("Failed to parse response JSON");
-            }
+        if let Some(things3_cli::mcp::Content::Text { text }) = result.content.first() {
+            return serde_json::from_str(text).expect("Failed to parse response JSON");
         }
         panic!("No content in response");
     }
@@ -166,14 +164,10 @@ async fn test_bulk_operation_error_messages() {
     let result = harness.server.call_tool_with_fallback(request).await;
 
     // Should return error in content
-    if let Some(content) = result.content.first() {
-        if let things3_cli::mcp::Content::Text { text } = content {
-            assert!(
-                text.contains("error")
-                    || text.contains("not found")
-                    || text.contains("TaskNotFound")
-            );
-        }
+    if let Some(things3_cli::mcp::Content::Text { text }) = result.content.first() {
+        assert!(
+            text.contains("error") || text.contains("not found") || text.contains("TaskNotFound")
+        );
     }
 }
 
@@ -201,13 +195,9 @@ async fn test_bulk_mixed_valid_invalid_uuids() {
     let result = harness.server.call_tool_with_fallback(request).await;
 
     // Should fail with error (transaction should rollback)
-    if let Some(content) = result.content.first() {
-        if let things3_cli::mcp::Content::Text { text } = content {
-            // Should contain error message
-            assert!(
-                text.contains("error") || text.contains("not found") || text.contains("NotFound")
-            );
-        }
+    if let Some(things3_cli::mcp::Content::Text { text }) = result.content.first() {
+        // Should contain error message
+        assert!(text.contains("error") || text.contains("not found") || text.contains("NotFound"));
     }
 }
 
@@ -227,14 +217,10 @@ async fn test_bulk_operations_empty_arrays() {
     let result = harness.server.call_tool_with_fallback(request).await;
 
     // Should return error
-    if let Some(content) = result.content.first() {
-        if let things3_cli::mcp::Content::Text { text } = content {
-            assert!(
-                text.contains("error")
-                    || text.contains("empty")
-                    || text.contains("cannot be empty")
-            );
-        }
+    if let Some(things3_cli::mcp::Content::Text { text }) = result.content.first() {
+        assert!(
+            text.contains("error") || text.contains("empty") || text.contains("cannot be empty")
+        );
     }
 }
 

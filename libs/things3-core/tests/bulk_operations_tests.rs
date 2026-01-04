@@ -31,7 +31,7 @@ async fn test_bulk_move_to_project() {
     let mut task_uuids = Vec::new();
     for i in 1..=3 {
         let request = TaskRequestBuilder::new()
-            .title(&format!("Task {}", i))
+            .title(format!("Task {}", i))
             .build();
         let task_uuid = db.create_task(request).await.unwrap();
         task_uuids.push(task_uuid);
@@ -69,7 +69,7 @@ async fn test_bulk_move_to_area() {
     let mut task_uuids = Vec::new();
     for i in 1..=3 {
         let request = TaskRequestBuilder::new()
-            .title(&format!("Task {}", i))
+            .title(format!("Task {}", i))
             .build();
         let task_uuid = db.create_task(request).await.unwrap();
         task_uuids.push(task_uuid);
@@ -180,7 +180,7 @@ async fn test_bulk_update_dates_both() {
     let mut task_uuids = Vec::new();
     for i in 1..=3 {
         let request = TaskRequestBuilder::new()
-            .title(&format!("Task {}", i))
+            .title(format!("Task {}", i))
             .build();
         let task_uuid = db.create_task(request).await.unwrap();
         task_uuids.push(task_uuid);
@@ -219,7 +219,7 @@ async fn test_bulk_update_dates_clear() {
     let mut task_uuids = Vec::new();
     for i in 1..=2 {
         let request = TaskRequestBuilder::new()
-            .title(&format!("Task {}", i))
+            .title(format!("Task {}", i))
             .start_date(start_date)
             .deadline(deadline)
             .build();
@@ -308,7 +308,7 @@ async fn test_bulk_complete_multiple() {
     let mut task_uuids = Vec::new();
     for i in 1..=5 {
         let request = TaskRequestBuilder::new()
-            .title(&format!("Task {}", i))
+            .title(format!("Task {}", i))
             .build();
         let task_uuid = db.create_task(request).await.unwrap();
         task_uuids.push(task_uuid);
@@ -361,7 +361,7 @@ async fn test_bulk_delete_soft_delete() {
     let mut task_uuids = Vec::new();
     for i in 1..=3 {
         let request = TaskRequestBuilder::new()
-            .title(&format!("Task {}", i))
+            .title(format!("Task {}", i))
             .build();
         let task_uuid = db.create_task(request).await.unwrap();
         task_uuids.push(task_uuid);
