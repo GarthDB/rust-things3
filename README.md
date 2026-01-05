@@ -280,13 +280,17 @@ The MCP (Model Context Protocol) server provides 21 tools for AI/LLM integration
 ### Examples
 
 See the [`libs/things3-core/examples/`](libs/things3-core/examples/) directory for practical usage examples:
-- `basic_usage.rs` - Basic database operations
-- `bulk_operations.rs` - Bulk operation examples
+- `basic_usage.rs` - Basic database operations (connect, query, create, update)
+- `bulk_operations.rs` - Bulk operation examples (move, complete, delete)
+- `search_tasks.rs` - Advanced search functionality
+- `export_data.rs` - Data export in multiple formats (JSON, CSV, Markdown)
 
 Run examples with:
 ```bash
-cargo run --example basic_usage --package things3-core
-cargo run --example bulk_operations --package things3-core
+cargo run --package things3-core --example basic_usage
+cargo run --package things3-core --example bulk_operations
+cargo run --package things3-core --example search_tasks
+cargo run --package things3-core --example export_data
 ```
 
 ### API Documentation

@@ -2,11 +2,15 @@
 
 This guide helps you migrate between versions of `things3-core`.
 
-## Version 0.2.0 → 0.3.0
+## Current Version: 0.2.0
+
+This PR represents Phase 2 work toward version 0.3.0.
+
+## Version 0.2.0 → 0.3.0 (In Progress)
 
 ### No Breaking Changes
 
-Version 0.3.0 maintains full backward compatibility with 0.2.0. No code changes are required.
+Version 0.3.0 will maintain full backward compatibility with 0.2.0. No code changes will be required.
 
 ### New Features
 
