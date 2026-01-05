@@ -231,11 +231,22 @@ cargo +stable test --workspace
 **Risk**: MSRV too old, missing required features  
 **Mitigation**: Start with 1.70, adjust if needed
 
+## Deferred Items
+
+Some items from this plan were intentionally deferred to post-Phase 3 to keep scope manageable and deliver value quickly. See [`docs/PHASE3_DEFERRALS.md`](../PHASE3_DEFERRALS.md) for:
+
+- **MCP Server Benchmarks**: Requires more complex test infrastructure
+- **RELIABILITY.md**: Better to document after more real-world usage
+- **Memory Leak Detection Tests**: Requires miri/valgrind setup
+- **Statistical Benchmark Analysis**: Need baseline data first
+- **Retry Logic/Circuit Breakers**: No evidence of need yet
+
 ## Documentation Updates
 
 - `README.md` - Add performance characteristics, compatibility info
 - `CONTRIBUTING.md` - Add benchmark running guide
-- New files: `PERFORMANCE.md`, `RELIABILITY.md`, `COMPATIBILITY.md`
+- New files: `PERFORMANCE.md`, `COMPATIBILITY.md`
+- Deferrals tracked in: `PHASE3_DEFERRALS.md`
 
 ## Commit Strategy
 

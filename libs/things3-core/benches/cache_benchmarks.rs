@@ -37,6 +37,7 @@ fn create_test_db_with_data(task_count: usize) -> (tempfile::NamedTempFile, Thin
 
 fn bench_cache_cold_read(c: &mut Criterion) {
     let mut group = c.benchmark_group("cache_cold_read");
+    group.warm_up_time(std::time::Duration::from_secs(2));
     let rt = Runtime::new().unwrap();
 
     for size in [100, 500, 1000].iter() {
@@ -65,6 +66,7 @@ fn bench_cache_cold_read(c: &mut Criterion) {
 
 fn bench_cache_warm_read(c: &mut Criterion) {
     let mut group = c.benchmark_group("cache_warm_read");
+    group.warm_up_time(std::time::Duration::from_secs(2));
     let rt = Runtime::new().unwrap();
 
     for size in [100, 500, 1000].iter() {
@@ -91,6 +93,7 @@ fn bench_cache_warm_read(c: &mut Criterion) {
 
 fn bench_cache_hit_rate(c: &mut Criterion) {
     let mut group = c.benchmark_group("cache_hit_rate");
+    group.warm_up_time(std::time::Duration::from_secs(2));
     let rt = Runtime::new().unwrap();
 
     let (_temp, db) = create_test_db_with_data(1000);
@@ -117,6 +120,7 @@ fn bench_cache_hit_rate(c: &mut Criterion) {
 
 fn bench_cache_eviction(c: &mut Criterion) {
     let mut group = c.benchmark_group("cache_eviction");
+    group.warm_up_time(std::time::Duration::from_secs(2));
     let rt = Runtime::new().unwrap();
 
     let (_temp, db) = create_test_db_with_data(5000);

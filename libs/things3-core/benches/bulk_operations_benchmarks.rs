@@ -43,6 +43,8 @@ fn create_test_db_with_tasks(
 
 fn bench_bulk_move(c: &mut Criterion) {
     let mut group = c.benchmark_group("bulk_move");
+    group.warm_up_time(std::time::Duration::from_secs(3));
+    group.measurement_time(std::time::Duration::from_secs(10));
     let rt = Runtime::new().unwrap();
 
     for size in [10, 50, 100, 500, 1000].iter() {
@@ -77,6 +79,8 @@ fn bench_bulk_move(c: &mut Criterion) {
 
 fn bench_bulk_complete(c: &mut Criterion) {
     let mut group = c.benchmark_group("bulk_complete");
+    group.warm_up_time(std::time::Duration::from_secs(3));
+    group.measurement_time(std::time::Duration::from_secs(10));
     let rt = Runtime::new().unwrap();
 
     for size in [10, 50, 100, 500, 1000].iter() {
@@ -105,6 +109,8 @@ fn bench_bulk_complete(c: &mut Criterion) {
 
 fn bench_bulk_delete(c: &mut Criterion) {
     let mut group = c.benchmark_group("bulk_delete");
+    group.warm_up_time(std::time::Duration::from_secs(3));
+    group.measurement_time(std::time::Duration::from_secs(10));
     let rt = Runtime::new().unwrap();
 
     for size in [10, 50, 100, 500, 1000].iter() {

@@ -37,6 +37,8 @@ fn create_test_db_with_data(task_count: usize) -> (tempfile::NamedTempFile, Thin
 
 fn bench_get_inbox(c: &mut Criterion) {
     let mut group = c.benchmark_group("get_inbox");
+    group.warm_up_time(std::time::Duration::from_secs(3));
+    group.measurement_time(std::time::Duration::from_secs(10));
     let rt = Runtime::new().unwrap();
 
     for size in [10, 50, 100, 500].iter() {
@@ -57,6 +59,8 @@ fn bench_get_inbox(c: &mut Criterion) {
 
 fn bench_get_today(c: &mut Criterion) {
     let mut group = c.benchmark_group("get_today");
+    group.warm_up_time(std::time::Duration::from_secs(3));
+    group.measurement_time(std::time::Duration::from_secs(10));
     let rt = Runtime::new().unwrap();
 
     for size in [10, 50, 100, 500].iter() {
@@ -77,6 +81,8 @@ fn bench_get_today(c: &mut Criterion) {
 
 fn bench_search_tasks(c: &mut Criterion) {
     let mut group = c.benchmark_group("search_tasks");
+    group.warm_up_time(std::time::Duration::from_secs(3));
+    group.measurement_time(std::time::Duration::from_secs(10));
     let rt = Runtime::new().unwrap();
 
     for size in [100, 500, 1000].iter() {
@@ -97,6 +103,7 @@ fn bench_search_tasks(c: &mut Criterion) {
 
 fn bench_get_projects(c: &mut Criterion) {
     let mut group = c.benchmark_group("get_projects");
+    group.warm_up_time(std::time::Duration::from_secs(3));
     let rt = Runtime::new().unwrap();
 
     for size in [10, 50, 100].iter() {
@@ -115,6 +122,7 @@ fn bench_get_projects(c: &mut Criterion) {
 
 fn bench_get_areas(c: &mut Criterion) {
     let mut group = c.benchmark_group("get_areas");
+    group.warm_up_time(std::time::Duration::from_secs(3));
     let rt = Runtime::new().unwrap();
 
     for size in [5, 10, 20].iter() {
@@ -133,6 +141,7 @@ fn bench_get_areas(c: &mut Criterion) {
 
 fn bench_get_stats(c: &mut Criterion) {
     let mut group = c.benchmark_group("get_stats");
+    group.warm_up_time(std::time::Duration::from_secs(3));
     let rt = Runtime::new().unwrap();
 
     for size in [100, 500, 1000].iter() {
