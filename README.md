@@ -271,6 +271,8 @@ The MCP (Model Context Protocol) server provides 21 tools for AI/LLM integration
 
 - **[Architecture](docs/ARCHITECTURE.md)** - System design and component overview
 - **[MCP Integration](docs/MCP_INTEGRATION.md)** - Complete MCP server guide
+- **[Reliability Guide](docs/RELIABILITY.md)** - Connection pooling, error recovery, and resilience patterns
+- **[Performance Guide](docs/PERFORMANCE.md)** - Benchmarks and optimization strategies
 - **[Database Schema](docs/DATABASE_SCHEMA.md)** - Things 3 database structure
 - **[Development Guide](docs/DEVELOPMENT.md)** - Setup and development workflow
 - **[Coverage Analysis](docs/COVERAGE_ANALYSIS.md)** - Test coverage report
