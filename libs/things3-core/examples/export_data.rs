@@ -40,13 +40,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Export to Markdown
     println!("Exporting to Markdown...");
-    let markdown = exporter
-        .export_markdown(&tasks, &projects, &areas)
-        .await?;
+    let markdown = exporter.export_markdown(&tasks, &projects, &areas).await?;
     std::fs::write("export.md", &markdown)?;
     println!("  ✓ Saved to export.md ({} bytes)", markdown.len());
 
     println!("\n✓ Export completed successfully");
     Ok(())
 }
-
