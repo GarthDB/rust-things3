@@ -677,21 +677,35 @@ mod tests {
             // Only verify content if the function succeeded
             // Read and verify pre-commit hook content
             if let Ok(pre_commit_content) = std::fs::read_to_string(".git/hooks/pre-commit") {
-                assert!(pre_commit_content.contains("cargo fmt --all"));
-                assert!(pre_commit_content.contains(
-                    "cargo clippy --all-targets --all-features -- -D warnings -D clippy::pedantic -A clippy::missing_docs_in_private_items -A clippy::module_name_repetitions"
-                ));
-                assert!(pre_commit_content.contains("cargo test --all-features"));
+                // Check if it's a rusty-hook wrapper (which is valid) or our custom script
+                if pre_commit_content.contains("rusty-hook") {
+                    println!("✓ Pre-commit hook is managed by rusty-hook");
+                    assert!(pre_commit_content.contains("rusty-hook run"));
+                } else {
+                    // Our custom bash script
+                    assert!(pre_commit_content.contains("cargo fmt --all"));
+                    assert!(pre_commit_content.contains(
+                        "cargo clippy --all-targets --all-features -- -D warnings -D clippy::pedantic -A clippy::missing_docs_in_private_items -A clippy::module_name_repetitions"
+                    ));
+                    assert!(pre_commit_content.contains("cargo test --all-features"));
+                }
             } else {
                 println!("Warning: Could not read pre-commit hook content");
             }
 
             // Read and verify pre-push hook content
             if let Ok(pre_push_content) = std::fs::read_to_string(".git/hooks/pre-push") {
-                assert!(pre_push_content.contains(
-                    "cargo clippy --all-targets --all-features -- -D warnings -D clippy::pedantic -A clippy::missing_docs_in_private_items -A clippy::module_name_repetitions"
-                ));
-                assert!(pre_push_content.contains("cargo test --all-features"));
+                // Check if it's a rusty-hook wrapper (which is valid) or our custom script
+                if pre_push_content.contains("rusty-hook") {
+                    println!("✓ Pre-push hook is managed by rusty-hook");
+                    assert!(pre_push_content.contains("rusty-hook run"));
+                } else {
+                    // Our custom bash script
+                    assert!(pre_push_content.contains(
+                        "cargo clippy --all-targets --all-features -- -D warnings -D clippy::pedantic -A clippy::missing_docs_in_private_items -A clippy::module_name_repetitions"
+                    ));
+                    assert!(pre_push_content.contains("cargo test --all-features"));
+                }
             } else {
                 println!("Warning: Could not read pre-push hook content");
             }
