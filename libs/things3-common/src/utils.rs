@@ -3,18 +3,52 @@
 use chrono::{DateTime, NaiveDate, Utc};
 
 /// Format a date for display
+///
+/// # Examples
+///
+/// ```
+/// use things3_common::format_date;
+/// use chrono::NaiveDate;
+///
+/// let date = NaiveDate::from_ymd_opt(2024, 1, 15).unwrap();
+/// assert_eq!(format_date(&date), "2024-01-15");
+/// ```
 #[must_use]
 pub fn format_date(date: &NaiveDate) -> String {
     date.format("%Y-%m-%d").to_string()
 }
 
 /// Format a datetime for display
+///
+/// # Examples
+///
+/// ```
+/// use things3_common::format_datetime;
+/// use chrono::{TimeZone, Utc};
+///
+/// let dt = Utc.with_ymd_and_hms(2024, 1, 15, 14, 30, 0).unwrap();
+/// assert_eq!(format_datetime(&dt), "2024-01-15 14:30:00 UTC");
+/// ```
 #[must_use]
 pub fn format_datetime(dt: &DateTime<Utc>) -> String {
     dt.format("%Y-%m-%d %H:%M:%S UTC").to_string()
 }
 
 /// Parse a date string in YYYY-MM-DD format
+///
+/// # Examples
+///
+/// ```
+/// use things3_common::parse_date;
+///
+/// // Valid date
+/// let date = parse_date("2024-01-15").unwrap();
+/// assert_eq!(date.to_string(), "2024-01-15");
+///
+/// // Invalid date format returns error
+/// assert!(parse_date("01/15/2024").is_err());
+/// assert!(parse_date("2024-13-01").is_err()); // Invalid month
+/// ```
 ///
 /// # Errors
 /// Returns `chrono::ParseError` if the date string is not in the expected format
@@ -23,6 +57,21 @@ pub fn parse_date(date_str: &str) -> Result<NaiveDate, chrono::ParseError> {
 }
 
 /// Validate a UUID string
+///
+/// # Examples
+///
+/// ```
+/// use things3_common::is_valid_uuid;
+///
+/// // Valid UUIDs
+/// assert!(is_valid_uuid("550e8400-e29b-41d4-a716-446655440000"));
+/// assert!(is_valid_uuid("ffffffff-ffff-ffff-ffff-ffffffffffff"));
+///
+/// // Invalid UUIDs
+/// assert!(!is_valid_uuid("not-a-uuid"));
+/// assert!(!is_valid_uuid("550e8400-e29b")); // Too short
+/// assert!(!is_valid_uuid("")); // Empty string
+/// ```
 #[must_use]
 pub fn is_valid_uuid(uuid_str: &str) -> bool {
     uuid::Uuid::parse_str(uuid_str).is_ok()

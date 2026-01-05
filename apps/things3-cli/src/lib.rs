@@ -140,6 +140,21 @@ pub enum BulkOperation {
 
 /// Print tasks to the given writer
 ///
+/// # Examples
+///
+/// ```no_run
+/// use things3_cli::print_tasks;
+/// use things3_core::ThingsDatabase;
+/// use std::io;
+///
+/// # async fn example() -> things3_core::Result<()> {
+/// let db = ThingsDatabase::new(std::path::Path::new("test.db")).await?;
+/// let tasks = db.get_inbox(Some(10)).await?;
+/// print_tasks(&db, &tasks, &mut io::stdout())?;
+/// # Ok(())
+/// # }
+/// ```
+///
 /// # Errors
 /// Returns an error if writing fails
 pub fn print_tasks<W: Write>(
@@ -170,6 +185,21 @@ pub fn print_tasks<W: Write>(
 }
 
 /// Print projects to the given writer
+///
+/// # Examples
+///
+/// ```no_run
+/// use things3_cli::print_projects;
+/// use things3_core::ThingsDatabase;
+/// use std::io;
+///
+/// # async fn example() -> things3_core::Result<()> {
+/// let db = ThingsDatabase::new(std::path::Path::new("test.db")).await?;
+/// let projects = db.get_projects(None).await?;
+/// print_projects(&db, &projects, &mut io::stdout())?;
+/// # Ok(())
+/// # }
+/// ```
 ///
 /// # Errors
 /// Returns an error if writing fails
@@ -202,6 +232,21 @@ pub fn print_projects<W: Write>(
 
 /// Print areas to the given writer
 ///
+/// # Examples
+///
+/// ```no_run
+/// use things3_cli::print_areas;
+/// use things3_core::ThingsDatabase;
+/// use std::io;
+///
+/// # async fn example() -> things3_core::Result<()> {
+/// let db = ThingsDatabase::new(std::path::Path::new("test.db")).await?;
+/// let areas = db.get_areas().await?;
+/// print_areas(&db, &areas, &mut io::stdout())?;
+/// # Ok(())
+/// # }
+/// ```
+///
 /// # Errors
 /// Returns an error if writing fails
 pub fn print_areas<W: Write>(
@@ -229,6 +274,19 @@ pub fn print_areas<W: Write>(
 }
 
 /// Perform a health check on the database
+///
+/// # Examples
+///
+/// ```no_run
+/// use things3_cli::health_check;
+/// use things3_core::ThingsDatabase;
+///
+/// # async fn example() -> things3_core::Result<()> {
+/// let db = ThingsDatabase::new(std::path::Path::new("test.db")).await?;
+/// health_check(&db).await?;
+/// # Ok(())
+/// # }
+/// ```
 ///
 /// # Errors
 /// Returns an error if the database is not accessible
@@ -267,6 +325,18 @@ pub async fn health_check(db: &ThingsDatabase) -> Result<()> {
 
 /// Start the WebSocket server for real-time updates
 ///
+/// # Examples
+///
+/// ```no_run
+/// use things3_cli::start_websocket_server;
+///
+/// # async fn example() -> things3_core::Result<()> {
+/// // Start WebSocket server on port 8080
+/// start_websocket_server(8080).await?;
+/// # Ok(())
+/// # }
+/// ```
+///
 /// # Errors
 /// Returns an error if the server fails to start
 pub async fn start_websocket_server(port: u16) -> Result<()> {
@@ -285,6 +355,18 @@ pub async fn start_websocket_server(port: u16) -> Result<()> {
 }
 
 /// Watch for real-time updates via WebSocket
+///
+/// # Examples
+///
+/// ```
+/// use things3_cli::watch_updates;
+///
+/// # fn example() -> things3_core::Result<()> {
+/// // Connect to WebSocket server
+/// watch_updates("ws://127.0.0.1:8080")?;
+/// # Ok(())
+/// # }
+/// ```
 ///
 /// # Errors
 /// Returns an error if the connection fails
