@@ -21,10 +21,11 @@ jobs:
         os: [ubuntu-latest, macos-latest]
         rust:
           - 1.70.0  # MSRV
-          - 1.75.0
-          - 1.80.0
           - stable
-          - beta
+        include:
+          # Test beta on Ubuntu only (for early warning)
+          - os: ubuntu-latest
+            rust: beta
     
     steps:
       - uses: actions/checkout@v4
@@ -96,7 +97,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-22.04, ubuntu-24.04, macos-13, macos-14, macos-latest]
+        # Things 3 is macOS/iOS only, but library useful on Linux for CI/server-side processing
+        os: [ubuntu-latest, macos-13, macos-latest]
     
     steps:
       - uses: actions/checkout@v4

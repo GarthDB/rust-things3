@@ -26,37 +26,48 @@ Rust 1.70.0 was chosen as the MSRV because it provides:
 
 ## Supported Platforms
 
+### Important Note: Things 3 Availability
+
+**Things 3 is an Apple ecosystem exclusive app**, available only on:
+- macOS
+- iOS (iPhone & iPad)  
+- Apple Watch
+- Apple Vision Pro
+
+However, this library is useful beyond just macOS for:
+- **Server-side processing** of exported Things 3 databases
+- **CI/CD pipelines** (GitHub Actions, etc.)
+- **Cross-platform tools** that process Things 3 data
+
 ### Tier 1: Fully Supported
 
 These platforms are tested in CI and guaranteed to work:
 
 | Platform | Architecture | Status | Notes |
 |----------|-------------|--------|-------|
-| macOS 13+ | x86_64 | ✅ Supported | Primary development platform |
-| macOS 14+ | ARM64 (Apple Silicon) | ✅ Supported | Native ARM support |
-| Ubuntu 22.04 LTS | x86_64 | ✅ Supported | CI/CD platform |
-| Ubuntu 24.04 LTS | x86_64 | ✅ Supported | Latest LTS |
+| macOS 13+ | x86_64 (Intel) | ✅ Supported | Primary platform - where Things 3 runs |
+| macOS 13+ | ARM64 (Apple Silicon) | ✅ Supported | Native ARM support |
+| Linux (Ubuntu) | x86_64 | ✅ Supported | For CI/CD and server-side processing |
 
-### Tier 2: Best Effort
+### Tier 2: Should Work
 
 These platforms should work but are not regularly tested:
 
 | Platform | Architecture | Status | Notes |
 |----------|-------------|--------|-------|
-| Windows 10/11 | x86_64 | ⚠️ Untested | May work with WSL2 |
 | Debian 11+ | x86_64 | ⚠️ Untested | Similar to Ubuntu |
 | Fedora 38+ | x86_64 | ⚠️ Untested | Should work |
 | Arch Linux | x86_64 | ⚠️ Untested | Should work |
 
-### Tier 3: Unsupported
+### Tier 3: Not Supported
 
 These platforms are not supported:
 
 | Platform | Status | Reason |
 |----------|--------|--------|
-| Windows (native) | ❌ Unsupported | Path handling differences, not tested |
-| 32-bit systems | ❌ Unsupported | Not tested, may have issues |
-| BSD variants | ❌ Unsupported | Not tested |
+| Windows | ❌ Not Supported | Things 3 doesn't run on Windows; library not tested |
+| 32-bit systems | ❌ Not Supported | Not tested, may have issues |
+| BSD variants | ❌ Not Supported | Not tested |
 
 ## SQLite Compatibility
 
