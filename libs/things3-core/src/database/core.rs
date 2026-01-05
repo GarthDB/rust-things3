@@ -1145,7 +1145,13 @@ impl ThingsDatabase {
     ///     title: "Buy groceries".to_string(),
     ///     notes: Some("Milk, eggs, bread".to_string()),
     ///     deadline: Some(NaiveDate::from_ymd_opt(2024, 12, 31).unwrap()),
-    ///     ..Default::default()
+    ///     start_date: None,
+    ///     project_uuid: None,
+    ///     area_uuid: None,
+    ///     parent_uuid: None,
+    ///     tags: None,
+    ///     task_type: None,
+    ///     status: None,
     /// };
     ///
     /// let task_uuid = db.create_task(request).await?;
