@@ -29,12 +29,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             println!("Notes: {}", notes);
         }
 
-        if let Some(project) = &task.project {
-            println!("Project: {}", project);
+        if let Some(project_uuid) = &task.project_uuid {
+            println!("Project UUID: {}", project_uuid);
         }
 
-        if let Some(area) = &task.area {
-            println!("Area: {}", area);
+        if let Some(area_uuid) = &task.area_uuid {
+            println!("Area UUID: {}", area_uuid);
         }
 
         println!();

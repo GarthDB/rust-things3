@@ -2,7 +2,7 @@
 //!
 //! Run with: cargo run --example export_data
 
-use things3_core::{DataExporter, ExportFormat, ThingsConfig, ThingsDatabase};
+use things3_core::{DataExporter, ExportData, ExportFormat, ThingsConfig, ThingsDatabase};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -25,22 +25,23 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Create exporter
     let exporter = DataExporter::new_default();
+    let export_data = ExportData::new(tasks, projects, areas);
 
     // Export to JSON
     println!("Exporting to JSON...");
-    let json = exporter.export_json(&tasks, &projects, &areas).await?;
+    let json = exporter.export(&export_data, ExportFormat::Json)?;
     std::fs::write("export.json", &json)?;
     println!("  ✓ Saved to export.json ({} bytes)", json.len());
 
     // Export to CSV
     println!("Exporting to CSV...");
-    let csv = exporter.export_csv(&tasks, &projects, &areas).await?;
+    let csv = exporter.export(&export_data, ExportFormat::Csv)?;
     std::fs::write("export.csv", &csv)?;
     println!("  ✓ Saved to export.csv ({} bytes)", csv.len());
 
     // Export to Markdown
     println!("Exporting to Markdown...");
-    let markdown = exporter.export_markdown(&tasks, &projects, &areas).await?;
+    let markdown = exporter.export(&export_data, ExportFormat::Markdown)?;
     std::fs::write("export.md", &markdown)?;
     println!("  ✓ Saved to export.md ({} bytes)", markdown.len());
 
