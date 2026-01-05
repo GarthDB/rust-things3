@@ -98,7 +98,8 @@ jobs:
       fail-fast: false
       matrix:
         # Things 3 is macOS/iOS only, but library useful on Linux for CI/server-side processing
-        os: [ubuntu-latest, macos-13, macos-latest]
+        # Note: macos-13 deprecated Dec 2025, using macos-14 (Intel) and macos-latest (Apple Silicon)
+        os: [ubuntu-latest, macos-14, macos-latest]
     
     steps:
       - uses: actions/checkout@v4
