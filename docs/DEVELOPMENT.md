@@ -6,6 +6,8 @@
 - [Testing](#testing)
 - [Debugging](#debugging)
 - [Performance](#performance)
+- [API Documentation](#api-documentation)
+- [Contributing Guidelines](#contributing-guidelines)
 - [Common Issues](#common-issues)
 
 ## Getting Started
@@ -256,6 +258,200 @@ cargo bench --package things3-core -- database
 3. **Limit query results** with LIMIT clause
 4. **Use indexes** for WHERE clauses
 5. **Profile before optimizing**
+
+## API Documentation
+
+### Writing Documentation
+
+All public APIs should have comprehensive documentation following these guidelines:
+
+```rust
+/// Brief one-line description
+///
+/// Longer description with more context and explanation.
+/// Use markdown for formatting.
+///
+/// # Examples
+///
+/// ```
+/// use things3_core::ThingsDatabase;
+///
+/// # async fn example() -> Result<(), things3_core::ThingsError> {
+/// let db = ThingsDatabase::new(path).await?;
+/// let tasks = db.get_inbox(Some(10)).await?;
+/// # Ok(())
+/// # }
+/// ```
+///
+/// # Errors
+///
+/// Returns `ThingsError::DatabaseNotFound` if the database doesn't exist.
+///
+/// # Panics
+///
+/// This function panics if... (only if applicable)
+pub async fn function_name() -> Result<()> {
+    // implementation
+}
+```
+
+### Documentation Best Practices
+
+1. **Start with a verb** - "Creates", "Returns", "Performs"
+2. **Add examples** - Show realistic usage
+3. **Document errors** - Explain when errors occur
+4. **Link related items** - Use `[`item`]` to link
+5. **Test doctests** - Run `cargo test --doc`
+
+### Generating Documentation
+
+```bash
+# Build documentation
+cargo doc --workspace --no-deps
+
+# Open in browser
+cargo doc --workspace --no-deps --open
+
+# Include private items
+cargo doc --workspace --document-private-items
+
+# Check for broken links
+cargo doc --workspace --no-deps 2>&1 | grep warning
+```
+
+### Documentation Coverage
+
+```bash
+# Check missing docs warnings
+cargo rustdoc --package things3-core -- -D missing-docs
+
+# Check all packages
+for pkg in things3-core things3-common things3-cli; do
+    echo "Checking $pkg..."
+    cargo rustdoc --package $pkg -- -D missing-docs
+done
+```
+
+## Contributing Guidelines
+
+### Code Style
+
+- **Follow Rust conventions** - Use `cargo fmt`
+- **Write idiomatic Rust** - Prefer iterators over loops
+- **Keep functions small** - Max 50-100 lines
+- **Use descriptive names** - `get_inbox_tasks` not `get_tasks`
+- **Add type annotations** - When clarity helps
+
+### Commit Messages
+
+Follow [Conventional Commits](https://www.conventionalcommits.org/):
+
+```
+<type>(<scope>): <subject>
+
+<body>
+
+<footer>
+```
+
+**Types**:
+- `feat` - New feature
+- `fix` - Bug fix
+- `docs` - Documentation only
+- `style` - Formatting
+- `refactor` - Code restructuring
+- `test` - Adding tests
+- `chore` - Maintenance
+
+**Examples**:
+```
+feat(database): add bulk delete operation
+
+Implements bulk_delete method with transaction support.
+Includes validation and error handling.
+
+Closes #123
+```
+
+```
+fix(mcp): handle empty response in tool call
+
+Empty responses were causing panics. Now returns
+proper error message.
+
+Fixes #456
+```
+
+### Pull Request Process
+
+1. **Create a feature branch**
+   ```bash
+   git checkout -b feature/your-feature-name
+   ```
+
+2. **Make your changes**
+   - Write tests first (TDD)
+   - Implement feature
+   - Update documentation
+
+3. **Verify locally**
+   ```bash
+   moon run :dev-pipeline
+   cargo test --workspace
+   ```
+
+4. **Commit your changes**
+   ```bash
+   git add .
+   git commit -m "feat: add your feature"
+   ```
+
+5. **Push and create PR**
+   ```bash
+   git push origin feature/your-feature-name
+   gh pr create
+   ```
+
+6. **Address review feedback**
+   - Respond to comments
+   - Make requested changes
+   - Update tests if needed
+
+### Code Review Checklist
+
+- [ ] Tests added/updated
+- [ ] Documentation updated
+- [ ] All tests pass
+- [ ] No clippy warnings
+- [ ] Coverage maintained (85%+)
+- [ ] Error handling implemented
+- [ ] Performance considered
+- [ ] Breaking changes noted
+
+### Release Process
+
+1. **Update version** in `Cargo.toml`
+2. **Update CHANGELOG.md**
+3. **Create release branch**
+   ```bash
+   git checkout -b release/v0.3.0
+   ```
+4. **Run full test suite**
+   ```bash
+   cargo test --workspace --all-features
+   ```
+5. **Create PR and merge**
+6. **Tag release**
+   ```bash
+   git tag -a v0.3.0 -m "Release v0.3.0"
+   git push origin v0.3.0
+   ```
+7. **Publish to crates.io**
+   ```bash
+   cargo publish --package things3-common
+   cargo publish --package things3-core
+   cargo publish --package things3-cli
+   ```
 
 ## Common Issues
 
