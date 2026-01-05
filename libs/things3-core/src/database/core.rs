@@ -262,6 +262,23 @@ pub struct ThingsDatabase {
 impl ThingsDatabase {
     /// Create a new database connection pool with default configuration
     ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use things3_core::{ThingsDatabase, ThingsError};
+    /// use std::path::Path;
+    ///
+    /// # async fn example() -> Result<(), ThingsError> {
+    /// // Connect to Things 3 database
+    /// let db = ThingsDatabase::new(Path::new("/path/to/things.db")).await?;
+    ///
+    /// // Get inbox tasks
+    /// let tasks = db.get_inbox(None).await?;
+    /// println!("Found {} tasks in inbox", tasks.len());
+    /// # Ok(())
+    /// # }
+    /// ```
+    ///
     /// # Errors
     ///
     /// Returns an error if the database connection fails or if `SQLite` configuration fails
@@ -271,6 +288,34 @@ impl ThingsDatabase {
     }
 
     /// Create a new database connection pool with custom configuration
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use things3_core::{ThingsDatabase, DatabasePoolConfig, ThingsError};
+    /// use std::path::Path;
+    /// use std::time::Duration;
+    ///
+    /// # async fn example() -> Result<(), ThingsError> {
+    /// // Create custom pool configuration
+    /// let config = DatabasePoolConfig {
+    ///     max_connections: 10,
+    ///     min_connections: 2,
+    ///     connect_timeout: Duration::from_secs(5),
+    ///     idle_timeout: Duration::from_secs(300),
+    ///     max_lifetime: Duration::from_secs(3600),
+    ///     test_before_acquire: true,
+    ///     sqlite_optimizations: Default::default(),
+    /// };
+    ///
+    /// // Connect with custom configuration
+    /// let db = ThingsDatabase::new_with_config(
+    ///     Path::new("/path/to/things.db"),
+    ///     config,
+    /// ).await?;
+    /// # Ok(())
+    /// # }
+    /// ```
     ///
     /// # Errors
     ///
@@ -569,7 +614,29 @@ impl ThingsDatabase {
         })
     }
 
-    /// Get all tasks
+    /// Get all tasks from the database
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use things3_core::{ThingsDatabase, ThingsError};
+    /// use std::path::Path;
+    ///
+    /// # async fn example() -> Result<(), ThingsError> {
+    /// let db = ThingsDatabase::new(Path::new("/path/to/things.db")).await?;
+    ///
+    /// // Get all tasks
+    /// let tasks = db.get_all_tasks().await?;
+    /// println!("Found {} total tasks", tasks.len());
+    ///
+    /// // Filter tasks by status
+    /// let incomplete: Vec<_> = tasks.iter()
+    ///     .filter(|t| t.status == things3_core::TaskStatus::Incomplete)
+    ///     .collect();
+    /// println!("Found {} incomplete tasks", incomplete.len());
+    /// # Ok(())
+    /// # }
+    /// ```
     ///
     /// # Errors
     ///
@@ -1059,8 +1126,39 @@ impl ThingsDatabase {
     /// - Project UUID exists if provided
     /// - Area UUID exists if provided
     /// - Parent task UUID exists if provided
+    /// - Date range (deadline >= start_date)
     ///
     /// Returns the UUID of the created task
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use things3_core::{ThingsDatabase, CreateTaskRequest, ThingsError};
+    /// use std::path::Path;
+    /// use chrono::NaiveDate;
+    ///
+    /// # async fn example() -> Result<(), ThingsError> {
+    /// let db = ThingsDatabase::new(Path::new("/path/to/things.db")).await?;
+    ///
+    /// // Create a simple task
+    /// let request = CreateTaskRequest {
+    ///     title: "Buy groceries".to_string(),
+    ///     notes: Some("Milk, eggs, bread".to_string()),
+    ///     deadline: Some(NaiveDate::from_ymd_opt(2024, 12, 31).unwrap()),
+    ///     start_date: None,
+    ///     project_uuid: None,
+    ///     area_uuid: None,
+    ///     parent_uuid: None,
+    ///     tags: None,
+    ///     task_type: None,
+    ///     status: None,
+    /// };
+    ///
+    /// let task_uuid = db.create_task(request).await?;
+    /// println!("Created task with UUID: {}", task_uuid);
+    /// # Ok(())
+    /// # }
+    /// ```
     ///
     /// # Errors
     ///

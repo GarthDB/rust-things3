@@ -69,7 +69,34 @@ cd rust-things3
 moon run :dev-pipeline
 ```
 
-## 📖 Usage
+## 📖 Quick Start
+
+Get started in under 5 minutes! See the [Quick Start Guide](docs/QUICKSTART.md) for detailed instructions.
+
+### Basic Library Usage
+
+```rust
+use things3_core::{ThingsDatabase, ThingsError};
+
+#[tokio::main]
+async fn main() -> Result<(), ThingsError> {
+    // Connect to database
+    let db_path = things3_core::get_default_database_path();
+    let db = ThingsDatabase::new(&db_path).await?;
+    
+    // Get inbox tasks
+    let tasks = db.get_inbox(Some(10)).await?;
+    for task in tasks {
+        println!("- {}", task.title);
+    }
+    
+    // Search for tasks
+    let results = db.search_tasks("meeting").await?;
+    println!("Found {} matching tasks", results.len());
+    
+    Ok(())
+}
+```
 
 ### CLI Commands
 
@@ -234,6 +261,12 @@ The MCP (Model Context Protocol) server provides 21 tools for AI/LLM integration
 
 ## Documentation
 
+### Getting Started
+
+- **[Quick Start Guide](docs/QUICKSTART.md)** - Get started in under 5 minutes
+- **[User Guide](docs/USER_GUIDE.md)** - Comprehensive usage guide
+- **[Error Handling Guide](docs/ERROR_HANDLING.md)** - Error handling patterns and recovery strategies
+
 ### Core Documentation
 
 - **[Architecture](docs/ARCHITECTURE.md)** - System design and component overview
@@ -241,17 +274,23 @@ The MCP (Model Context Protocol) server provides 21 tools for AI/LLM integration
 - **[Database Schema](docs/DATABASE_SCHEMA.md)** - Things 3 database structure
 - **[Development Guide](docs/DEVELOPMENT.md)** - Setup and development workflow
 - **[Coverage Analysis](docs/COVERAGE_ANALYSIS.md)** - Test coverage report
+- **[Migration Guide](docs/MIGRATION_GUIDE.md)** - Version migration instructions
+- **[Roadmap to 1.0.0](docs/ROADMAP_TO_1.0.0.md)** - Development roadmap
 
 ### Examples
 
-See the [`examples/`](examples/) directory for practical usage examples:
-- `basic_usage.rs` - Basic database operations
-- `search_tasks.rs` - Task search functionality
-- `export_data.rs` - Data export in multiple formats
+See the [`libs/things3-core/examples/`](libs/things3-core/examples/) directory for practical usage examples:
+- `basic_usage.rs` - Basic database operations (connect, query, create, update)
+- `bulk_operations.rs` - Bulk operation examples (move, complete, delete)
+- `search_tasks.rs` - Advanced search functionality
+- `export_data.rs` - Data export in multiple formats (JSON, CSV, Markdown)
 
 Run examples with:
 ```bash
-cargo run --example basic_usage
+cargo run --package things3-core --example basic_usage
+cargo run --package things3-core --example bulk_operations
+cargo run --package things3-core --example search_tasks
+cargo run --package things3-core --example export_data
 ```
 
 ### API Documentation

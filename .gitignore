@@ -27,3 +27,8 @@ CROSS_MACHINE_COMPATIBILITY_FIX.md
 THINGS3_DATABASE_ANALYSIS.md
 compare_machine_databases.sh
 diagnose_things3_database.sh
+
+# Example output files
+export.csv
+export.json
+export.md

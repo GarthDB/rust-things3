@@ -8,9 +8,7 @@ use things3_core::{ThingsConfig, ThingsDatabase};
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Get search query from command line
-    let query = env::args()
-        .nth(1)
-        .unwrap_or_else(|| "meeting".to_string());
+    let query = env::args().nth(1).unwrap_or_else(|| "meeting".to_string());
 
     println!("Searching for: '{}'\n", query);
 
@@ -26,22 +24,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     for task in results {
         println!("Title: {}", task.title);
         println!("UUID: {}", task.uuid);
-        
+
         if let Some(notes) = &task.notes {
             println!("Notes: {}", notes);
         }
-        
-        if let Some(project) = &task.project {
-            println!("Project: {}", project);
+
+        if let Some(project_uuid) = &task.project_uuid {
+            println!("Project UUID: {}", project_uuid);
         }
-        
-        if let Some(area) = &task.area {
-            println!("Area: {}", area);
+
+        if let Some(area_uuid) = &task.area_uuid {
+            println!("Area UUID: {}", area_uuid);
         }
-        
+
         println!();
     }
 
     Ok(())
 }
-

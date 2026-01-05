@@ -17,10 +17,10 @@ pub enum ThingsError {
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
 
-    #[error("Database not found: {path}")]
+    #[error("Database not found: {path}. Ensure Things 3 is installed and has been opened at least once, or specify a custom database path.")]
     DatabaseNotFound { path: String },
 
-    #[error("Invalid UUID: {uuid}")]
+    #[error("Invalid UUID: {uuid}. UUIDs must be in format: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx")]
     InvalidUuid { uuid: String },
 
     #[error("Invalid date: {date}")]
@@ -32,13 +32,13 @@ pub enum ThingsError {
     #[error("Date conversion failed: {0}")]
     DateConversion(#[from] crate::database::DateConversionError),
 
-    #[error("Task not found: {uuid}")]
+    #[error("Task not found: {uuid}. The task may have been deleted or moved. Try searching by title instead.")]
     TaskNotFound { uuid: String },
 
-    #[error("Project not found: {uuid}")]
+    #[error("Project not found: {uuid}. The project may have been deleted. Verify the UUID or list all projects to find the correct one.")]
     ProjectNotFound { uuid: String },
 
-    #[error("Area not found: {uuid}")]
+    #[error("Area not found: {uuid}. The area may have been deleted. Verify the UUID or list all areas to find the correct one.")]
     AreaNotFound { uuid: String },
 
     #[error("Validation error: {message}")]
