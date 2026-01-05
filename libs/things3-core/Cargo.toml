@@ -68,6 +68,17 @@ tempfile.workspace = true
 [dev-dependencies]
 criterion.workspace = true
 
-# [[bench]]
-# name = "database_bench"
-# harness = false
+[[bench]]
+name = "database_benchmarks"
+harness = false
+required-features = ["test-utils"]
+
+[[bench]]
+name = "bulk_operations_benchmarks"
+harness = false
+required-features = ["test-utils"]
+
+[[bench]]
+name = "cache_benchmarks"
+harness = false
+required-features = ["test-utils"]

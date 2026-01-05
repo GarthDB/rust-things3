@@ -1,0 +1,145 @@
+name: Compatibility Testing
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    # Run weekly on Monday at 00:00 UTC
+    - cron: '0 0 * * 1'
+  workflow_dispatch:
+
+jobs:
+  rust-versions:
+    name: Test Rust ${{ matrix.rust }} on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        rust:
+          - 1.70.0  # MSRV
+          - stable
+        include:
+          # Test beta on Ubuntu only (for early warning)
+          - os: ubuntu-latest
+            rust: beta
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Install Rust ${{ matrix.rust }}
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ matrix.rust }}
+      
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        continue-on-error: true
+        with:
+          path: ~/.cargo/registry
+          key: ${{ runner.os }}-${{ matrix.rust }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+      
+      - name: Cache cargo index
+        uses: actions/cache@v4
+        continue-on-error: true
+        with:
+          path: ~/.cargo/git
+          key: ${{ runner.os }}-${{ matrix.rust }}-cargo-index-${{ hashFiles('**/Cargo.lock') }}
+      
+      - name: Cache cargo build
+        uses: actions/cache@v4
+        continue-on-error: true
+        with:
+          path: target
+          key: ${{ runner.os }}-${{ matrix.rust }}-cargo-build-target-${{ hashFiles('**/Cargo.lock') }}
+      
+      - name: Check compilation
+        run: cargo check --workspace --all-features
+      
+      - name: Run tests
+        run: cargo test --workspace --features test-utils
+      
+      - name: Run clippy (stable only)
+        if: matrix.rust == 'stable'
+        run: cargo clippy --workspace -- -D warnings
+  
+  sqlite-versions:
+    name: Test with SQLite (bundled vs system)
+    runs-on: ubuntu-latest
+    
+    strategy:
+      fail-fast: false
+      matrix:
+        sqlite: [bundled, system]
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+      
+      - name: Install system SQLite
+        if: matrix.sqlite == 'system'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libsqlite3-dev
+      
+      - name: Test with ${{ matrix.sqlite }} SQLite
+        run: cargo test --workspace --features test-utils
+  
+  platform-compatibility:
+    name: Platform Compatibility
+    runs-on: ${{ matrix.os }}
+    
+    strategy:
+      fail-fast: false
+      matrix:
+        # Things 3 is macOS/iOS only, but library useful on Linux for CI/server-side processing
+        # Note: macos-13 deprecated Dec 2025, using macos-14 (Intel) and macos-latest (Apple Silicon)
+        os: [ubuntu-latest, macos-14, macos-latest]
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+      
+      - name: System Info
+        run: |
+          echo "OS: ${{ matrix.os }}"
+          rustc --version
+          cargo --version
+          uname -a
+      
+      - name: Run tests
+        run: cargo test --workspace --features test-utils
+      
+      - name: Run benchmarks (compile only)
+        run: cargo bench --package things3-core --features test-utils --no-run
+  
+  compatibility-summary:
+    name: Compatibility Summary
+    runs-on: ubuntu-latest
+    needs: [rust-versions, sqlite-versions, platform-compatibility]
+    if: always()
+    
+    steps:
+      - name: Check results
+        run: |
+          echo "## Compatibility Test Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "✅ Rust versions: ${{ needs.rust-versions.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "✅ SQLite versions: ${{ needs.sqlite-versions.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "✅ Platform compatibility: ${{ needs.platform-compatibility.result }}" >> $GITHUB_STEP_SUMMARY
+          
+          if [[ "${{ needs.rust-versions.result }}" == "failure" ]] || \
+             [[ "${{ needs.sqlite-versions.result }}" == "failure" ]] || \
+             [[ "${{ needs.platform-compatibility.result }}" == "failure" ]]; then
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "❌ Some compatibility tests failed" >> $GITHUB_STEP_SUMMARY
+            exit 1
+          fi
+

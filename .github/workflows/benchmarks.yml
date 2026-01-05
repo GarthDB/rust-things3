@@ -1,0 +1,123 @@
+name: Benchmarks
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  benchmark:
+    name: Run Benchmarks
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+      
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/registry
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+      
+      - name: Cache cargo index
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/git
+          key: ${{ runner.os }}-cargo-index-${{ hashFiles('**/Cargo.lock') }}
+      
+      - name: Cache cargo build
+        uses: actions/cache@v4
+        with:
+          path: target
+          key: ${{ runner.os }}-cargo-build-target-${{ hashFiles('**/Cargo.lock') }}
+      
+      - name: Run database benchmarks
+        run: cargo bench --package things3-core --bench database_benchmarks --features test-utils -- --output-format bencher | tee database_bench.txt
+      
+      - name: Run bulk operations benchmarks
+        run: cargo bench --package things3-core --bench bulk_operations_benchmarks --features test-utils -- --output-format bencher | tee bulk_bench.txt
+      
+      - name: Run cache benchmarks
+        run: cargo bench --package things3-core --bench cache_benchmarks --features test-utils -- --output-format bencher | tee cache_bench.txt
+      
+      - name: Store benchmark results
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-results
+          path: |
+            database_bench.txt
+            bulk_bench.txt
+            cache_bench.txt
+            target/criterion/
+      
+      - name: Download previous benchmark data
+        uses: actions/cache@v4
+        with:
+          path: ./cache
+          key: ${{ runner.os }}-benchmark
+      
+      - name: Compare with baseline (if exists)
+        run: |
+          if [ -f ./cache/database_bench.txt ]; then
+            echo "## Benchmark Comparison" >> $GITHUB_STEP_SUMMARY
+            echo "Comparing current benchmarks with baseline..." >> $GITHUB_STEP_SUMMARY
+            echo "Previous results found in cache" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "No baseline found, storing current results as baseline" >> $GITHUB_STEP_SUMMARY
+            mkdir -p ./cache
+            cp database_bench.txt ./cache/
+            cp bulk_bench.txt ./cache/
+            cp cache_bench.txt ./cache/
+          fi
+      
+      - name: Comment on PR (if applicable)
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        continue-on-error: true
+        with:
+          script: |
+            const fs = require('fs');
+            const databaseResults = fs.readFileSync('database_bench.txt', 'utf8');
+            const bulkResults = fs.readFileSync('bulk_bench.txt', 'utf8');
+            const cacheResults = fs.readFileSync('cache_bench.txt', 'utf8');
+            
+            const body = `## 📊 Benchmark Results
+            
+            <details>
+            <summary>Database Benchmarks</summary>
+            
+            \`\`\`
+            ${databaseResults.slice(0, 2000)}
+            \`\`\`
+            </details>
+            
+            <details>
+            <summary>Bulk Operations Benchmarks</summary>
+            
+            \`\`\`
+            ${bulkResults.slice(0, 2000)}
+            \`\`\`
+            </details>
+            
+            <details>
+            <summary>Cache Benchmarks</summary>
+            
+            \`\`\`
+            ${cacheResults.slice(0, 2000)}
+            \`\`\`
+            </details>
+            
+            Full results are available in the workflow artifacts.`;
+            
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: body
+            });
+
