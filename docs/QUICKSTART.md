@@ -184,12 +184,14 @@ let date = NaiveDate::from_ymd_opt(2024, 12, 31).unwrap();
 
 See the [examples directory](../libs/things3-core/examples/) for complete working examples:
 
-- `basic_usage.rs` - Basic operations
-- `bulk_operations.rs` - Bulk operations
+- `basic_usage.rs` - Basic database operations
+- `bulk_operations.rs` - Bulk operation examples
+- `search_tasks.rs` - Advanced search functionality
+- `export_data.rs` - Data export in multiple formats
 
 Run an example:
 
 ```bash
-cargo run --example basic_usage
+cargo run --package things3-core --example basic_usage
 ```
 
