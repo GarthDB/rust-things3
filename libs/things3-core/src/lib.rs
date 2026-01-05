@@ -2,6 +2,46 @@
 //!
 //! This library provides high-performance access to the Things 3 database,
 //! with comprehensive data models and efficient querying capabilities.
+//!
+//! # Features
+//!
+//! - **Async Database Access**: Built on SQLx for type-safe, async database operations
+//! - **Comprehensive Data Models**: Full support for Tasks, Projects, Areas, and Tags
+//! - **Bulk Operations**: Efficient batch operations with transactional guarantees
+//! - **Caching Layer**: High-performance caching with configurable TTL
+//! - **Export Support**: Multiple export formats (JSON, CSV, OPML, Markdown)
+//! - **Observability**: Built-in metrics, logging, and health checks
+//! - **Performance Monitoring**: Query performance tracking and optimization suggestions
+//!
+//! # Quick Start
+//!
+//! ```no_run
+//! use things3_core::{ThingsDatabase, ThingsError};
+//! use std::path::Path;
+//!
+//! # async fn example() -> Result<(), ThingsError> {
+//! // Connect to Things 3 database
+//! let db = ThingsDatabase::new(Path::new("/path/to/things.db")).await?;
+//!
+//! // Get inbox tasks
+//! let tasks = db.get_inbox(None).await?;
+//! println!("Found {} tasks in inbox", tasks.len());
+//!
+//! // Search for tasks
+//! let results = db.search_tasks("meeting").await?;
+//! println!("Found {} matching tasks", results.len());
+//! # Ok(())
+//! # }
+//! ```
+//!
+//! # Examples
+//!
+//! See the [examples directory](https://github.com/GarthDB/rust-things3/tree/main/examples)
+//! for more comprehensive usage examples.
+//!
+//! # Crate Features
+//!
+//! - `test-utils`: Enable test utilities (for testing only)
 
 pub mod backup;
 pub mod cache;
