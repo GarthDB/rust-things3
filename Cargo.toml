@@ -76,7 +76,7 @@ tower-http = { version = "0.5", features = ["cors", "trace"] }
 # Testing
 proptest = "1.0"
 tempfile = "3.0"
-criterion = "0.5"
+criterion = { version = "0.5", features = ["html_reports", "async_tokio"] }
 
 # Development
 xtask = { path = "tools/xtask" }
