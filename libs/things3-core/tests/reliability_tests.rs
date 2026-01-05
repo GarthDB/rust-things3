@@ -186,10 +186,10 @@ async fn test_empty_database() {
     let db = ThingsDatabase::new(&db_path).await.unwrap();
 
     // All queries should succeed (may have test data from schema)
-    let inbox = db.get_inbox(None).await.unwrap();
+    let _inbox = db.get_inbox(None).await.unwrap();
     // Just verify it doesn't error
 
-    let today = db.get_today(None).await.unwrap();
+    let _today = db.get_today(None).await.unwrap();
     // Just verify it doesn't error
 
     let search = db.search_tasks("nonexistent").await.unwrap();
@@ -198,15 +198,14 @@ async fn test_empty_database() {
         "Search for nonexistent should return empty"
     );
 
-    let projects = db.get_projects(None).await.unwrap();
+    let _projects = db.get_projects(None).await.unwrap();
     // Just verify it doesn't error
 
-    let areas = db.get_areas().await.unwrap();
+    let _areas = db.get_areas().await.unwrap();
     // Just verify it doesn't error
 
-    let stats = db.get_stats().await.unwrap();
+    let _stats = db.get_stats().await.unwrap();
     // Just verify stats are returned (may have test data)
-    assert!(stats.task_count >= 0);
 }
 
 /// Test database with large dataset
@@ -267,7 +266,7 @@ async fn test_resource_cleanup() {
 
     // Final connection should still work
     let db = ThingsDatabase::new(&db_path).await.unwrap();
-    let inbox = db.get_inbox(None).await.unwrap();
+    let _inbox = db.get_inbox(None).await.unwrap();
     // Just verify it doesn't error (may have test data)
 }
 
@@ -304,8 +303,8 @@ async fn test_multiple_database_instances() {
     let tasks3 = db3.get_inbox(None).await.unwrap();
 
     // Both should see the same data (at least 1 task)
-    assert!(tasks2.len() >= 1, "DB2 should see at least 1 task");
-    assert!(tasks3.len() >= 1, "DB3 should see at least 1 task");
+    assert!(!tasks2.is_empty(), "DB2 should see at least 1 task");
+    assert!(!tasks3.is_empty(), "DB3 should see at least 1 task");
 
     // Find our task in the results
     let found_in_db2 = tasks2.iter().any(|t| t.title == "Test Task from DB1");
@@ -330,7 +329,7 @@ async fn test_error_recovery() {
     assert!(result.is_err(), "Expected error for non-existent task");
 
     // Database should still be functional after error
-    let inbox = db.get_inbox(None).await.unwrap();
+    let _inbox = db.get_inbox(None).await.unwrap();
     // Just verify it doesn't error
 
     // Create a valid task
