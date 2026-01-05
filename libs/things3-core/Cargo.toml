@@ -5,7 +5,12 @@ edition.workspace = true
 authors.workspace = true
 license.workspace = true
 repository.workspace = true
+homepage.workspace = true
+documentation = "https://docs.rs/things3-core"
 description = "Core library for Things 3 database access and data models"
+readme = "../../README.md"
+keywords = ["things3", "productivity", "task-management", "sqlite", "async", "database"]
+categories = ["database", "development-tools"]
 
 [features]
 test-utils = []

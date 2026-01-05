@@ -5,7 +5,12 @@ edition.workspace = true
 authors.workspace = true
 license.workspace = true
 repository.workspace = true
+homepage.workspace = true
+documentation = "https://docs.rs/things3-cli"
 description = "CLI tool for Things 3 with integrated MCP server"
+readme = "../../README.md"
+keywords = ["things3", "cli", "mcp", "productivity-tool", "task-manager", "command-line"]
+categories = ["command-line-utilities", "development-tools"]
 
 [[bin]]
 name = "things3"
@@ -17,6 +22,7 @@ path = "src/bin/test_mcp_real_data.rs"
 
 [dependencies]
 # Core
+# Note: When publishing, cargo will automatically convert path dependencies to version dependencies
 things3-core = { path = "../../libs/things3-core", features = ["test-utils"] }
 things3-common = { path = "../../libs/things3-common" }
 

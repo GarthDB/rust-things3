@@ -156,7 +156,7 @@ The dashboard provides:
 
 ## 🤖 MCP Integration
 
-The MCP (Model Context Protocol) server provides 17 tools for AI/LLM integration:
+The MCP (Model Context Protocol) server provides 21 tools for AI/LLM integration:
 
 ### Available MCP Tools
 
@@ -265,8 +265,8 @@ cargo doc --workspace --no-deps --open
 
 ### Test Coverage
 
-- **Total Tests**: 554 tests
-- **Coverage**: ~78% (target: 85%+)
+- **Total Tests**: 438 tests
+- **Coverage**: ~85%+ (target: 85%+)
 - **Test Categories**:
   - Database operations (Phase 1)
   - MCP I/O layer (Phase 2)
@@ -615,4 +615,3 @@ MIT License - see [LICENSE](LICENSE) file for details.
 - Inspired by [things3](https://github.com/thingsapi/things3)
 - Built with [Moon](https://moonrepo.dev) workspace management
 - Follows [evelion-apps/things-api](https://github.com/evelion-apps/things-api) patterns
-# Test commit

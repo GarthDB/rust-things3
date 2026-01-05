@@ -23,7 +23,7 @@ pub fn parse_uuid_with_fallback(uuid_str: &str) -> Uuid {
 
 /// Parse an optional UUID string with fallback
 ///
-/// Handles Option<String> from database columns, returning None if the
+/// Handles `Option<String>` from database columns, returning None if the
 /// input is None, otherwise using the fallback UUID parsing logic.
 pub fn parse_optional_uuid(opt_str: Option<String>) -> Option<Uuid> {
     opt_str.map(|s| {

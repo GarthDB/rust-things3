@@ -5,7 +5,12 @@ edition.workspace = true
 authors.workspace = true
 license.workspace = true
 repository.workspace = true
+homepage.workspace = true
+documentation = "https://docs.rs/things3-common"
 description = "Shared utilities and types for Things 3 integration"
+readme = "../../README.md"
+keywords = ["things3", "utilities", "shared-types"]
+categories = ["development-tools"]
 
 [dependencies]
 # Core
