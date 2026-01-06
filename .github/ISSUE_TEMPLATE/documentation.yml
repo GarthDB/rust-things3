@@ -1,0 +1,73 @@
+name: Documentation Improvement
+description: Suggest improvements to documentation
+title: "[Docs]: "
+labels: ["documentation"]
+assignees: []
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping improve our documentation!
+
+  - type: dropdown
+    id: doc-type
+    attributes:
+      label: Documentation Type
+      description: What type of documentation needs improvement?
+      options:
+        - README.md
+        - API Documentation (rustdoc)
+        - User Guide
+        - Examples
+        - Integration Guides
+        - Architecture Documentation
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Issue with Current Documentation
+      description: What's wrong or missing?
+      placeholder: The current documentation...
+    validations:
+      required: true
+
+  - type: textarea
+    id: suggestion
+    attributes:
+      label: Suggested Improvement
+      description: How should it be improved?
+      placeholder: It should instead...
+    validations:
+      required: true
+
+  - type: input
+    id: location
+    attributes:
+      label: Location
+      description: Where is this documentation? (file path, URL, etc.)
+      placeholder: "docs/USER_GUIDE.md, line 123"
+
+  - type: textarea
+    id: example
+    attributes:
+      label: Example / Draft
+      description: If you have a draft or example of improved documentation, share it here
+      placeholder: |
+        # Improved Section
+        
+        Here's how I would write it...
+
+  - type: checkboxes
+    id: terms
+    attributes:
+      label: Checklist
+      options:
+        - label: I have checked that this documentation issue doesn't already exist
+          required: true
+        - label: I am willing to help write this documentation
+          required: false
+
