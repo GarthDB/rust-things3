@@ -46,10 +46,12 @@ fn test_observability_config_default() {
 fn test_observability_config_customization() {
     use things3_core::ObservabilityConfig;
 
-    let mut config = ObservabilityConfig::default();
-    config.log_level = "debug".to_string();
-    config.json_logs = true;
-    config.metrics_port = 9091;
+    let config = ObservabilityConfig {
+        log_level: "debug".to_string(),
+        json_logs: true,
+        metrics_port: 9091,
+        ..ObservabilityConfig::default()
+    };
 
     assert_eq!(config.log_level, "debug");
     assert!(config.json_logs);
