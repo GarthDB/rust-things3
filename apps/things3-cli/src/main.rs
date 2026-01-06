@@ -325,7 +325,7 @@ mod tests {
         let cli = Cli::try_parse_from(["things-cli", "health"]).unwrap();
         match cli.command {
             Commands::Health => {
-                health_check(&db).await.unwrap();
+                things3_cli::health_check(&db).await.unwrap();
             }
             _ => panic!("Expected health command"),
         }
