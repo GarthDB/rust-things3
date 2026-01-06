@@ -75,7 +75,7 @@ fn test_observability_feature_enabled() {
 
     // Verify we can create observability config
     let config = ObservabilityConfig::default();
-    assert_eq!(config.metrics_port, 9091);
+    assert_eq!(config.metrics_port, 9090);
 
     // Verify we can reference health status struct
     let _status: Option<HealthStatus> = None;
