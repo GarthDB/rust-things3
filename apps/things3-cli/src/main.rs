@@ -3,12 +3,14 @@
 use clap::Parser;
 use std::sync::Arc;
 // use things3_cli::bulk_operations::BulkOperationsManager; // Temporarily disabled
+#[cfg(feature = "mcp-server")]
 use things3_cli::mcp::{start_mcp_server, start_mcp_server_with_config};
 use things3_cli::{health_check, start_websocket_server, watch_updates, Cli, Commands};
-use things3_core::{
-    load_config, ObservabilityConfig, ObservabilityManager, Result, ThingsConfig, ThingsDatabase,
-};
+use things3_core::{Result, ThingsConfig, ThingsDatabase};
 use tracing::{error, info};
+
+#[cfg(feature = "observability")]
+use things3_core::{load_config, ObservabilityConfig, ObservabilityManager};
 
 #[tokio::main]
 #[allow(clippy::too_many_lines)]
@@ -16,9 +18,13 @@ async fn main() -> Result<()> {
     let cli = Cli::parse();
 
     // Check if we're in MCP mode - if so, skip observability entirely to ensure zero stderr output
+    #[cfg(feature = "mcp-server")]
     let is_mcp_mode = matches!(cli.command, Commands::Mcp);
+    #[cfg(not(feature = "mcp-server"))]
+    let is_mcp_mode = false;
 
     // Initialize observability (skip entirely for MCP mode to ensure zero stderr output)
+    #[cfg(feature = "observability")]
     let observability: Option<Arc<ObservabilityManager>> = if is_mcp_mode {
         // MCP mode: Skip observability entirely to ensure zero stderr output
         None
@@ -48,6 +54,9 @@ async fn main() -> Result<()> {
         info!("Things 3 CLI starting up");
         Some(Arc::new(obs))
     };
+
+    #[cfg(not(feature = "observability"))]
+    let observability: Option<Arc<()>> = None;
 
     // Create configuration
     let config = if let Some(db_path) = cli.database {
@@ -96,17 +105,25 @@ async fn main() -> Result<()> {
             };
             println!("{}", serde_json::to_string_pretty(&limited_tasks)?);
         }
+        #[cfg(feature = "mcp-server")]
         Commands::Mcp => {
             // MCP mode: No logging to avoid interfering with JSON-RPC protocol
             // Try to load comprehensive configuration first
-            match load_config() {
-                Ok(mcp_config) => {
-                    start_mcp_server_with_config(Arc::clone(&db), mcp_config).await?;
+            #[cfg(feature = "observability")]
+            {
+                match load_config() {
+                    Ok(mcp_config) => {
+                        start_mcp_server_with_config(Arc::clone(&db), mcp_config).await?;
+                    }
+                    Err(_e) => {
+                        // Silently fall back to basic config - no logging in MCP mode
+                        start_mcp_server(Arc::clone(&db), config).await?;
+                    }
                 }
-                Err(_e) => {
-                    // Silently fall back to basic config - no logging in MCP mode
-                    start_mcp_server(Arc::clone(&db), config).await?;
-                }
+            }
+            #[cfg(not(feature = "observability"))]
+            {
+                start_mcp_server(Arc::clone(&db), config).await?;
             }
         }
         Commands::Health => {

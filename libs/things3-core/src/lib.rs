@@ -41,6 +41,11 @@
 //!
 //! # Crate Features
 //!
+//! - `default`: Minimal feature set (core functionality only)
+//! - `export-csv`: Enable CSV export support
+//! - `export-opml`: Enable OPML export support
+//! - `observability`: Enable metrics, tracing, and health checks
+//! - `full`: Enable all optional features
 //! - `test-utils`: Enable test utilities (for testing only)
 
 pub mod backup;
@@ -52,11 +57,17 @@ pub mod config_loader;
 pub mod database;
 pub mod disk_cache;
 pub mod error;
+
+#[cfg(any(feature = "export-csv", feature = "export-opml"))]
 pub mod export;
+
 pub mod mcp_cache_middleware;
 pub mod mcp_config;
 pub mod models;
+
+#[cfg(feature = "observability")]
 pub mod observability;
+
 pub mod performance;
 pub mod query;
 pub mod query_cache;
@@ -83,16 +94,22 @@ pub use database::{
 };
 pub use disk_cache::{DiskCache, DiskCacheConfig, DiskCacheStats};
 pub use error::{Result, ThingsError};
+
+#[cfg(any(feature = "export-csv", feature = "export-opml"))]
 pub use export::{DataExporter, ExportConfig, ExportData, ExportFormat};
+
 pub use mcp_cache_middleware::{MCPCacheConfig, MCPCacheEntry, MCPCacheMiddleware, MCPCacheStats};
 pub use mcp_config::McpServerConfig;
 pub use models::*;
 // Explicitly re-export DeleteChildHandling for clarity
 pub use models::DeleteChildHandling;
+
+#[cfg(feature = "observability")]
 pub use observability::{
     CheckResult, HealthStatus, ObservabilityConfig, ObservabilityError, ObservabilityManager,
     ThingsMetrics,
 };
+
 pub use performance::{
     CacheMetrics, ComprehensivePerformanceSummary, OperationMetrics, PerformanceMonitor,
     PerformanceStats, PerformanceSummary, QueryMetrics,

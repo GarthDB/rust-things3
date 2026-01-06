@@ -80,6 +80,7 @@ pub enum Commands {
         limit: Option<usize>,
     },
     /// Start MCP server mode
+    #[cfg(feature = "mcp-server")]
     Mcp,
     /// Health check
     Health,
