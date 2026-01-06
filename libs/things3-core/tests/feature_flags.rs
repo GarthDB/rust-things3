@@ -137,7 +137,7 @@ fn test_all_features_enabled() {
     // Verify observability functionality
     let obs_config = ObservabilityConfig::default();
 
-    assert_eq!(obs_config.metrics_port, 9091);
+    assert_eq!(obs_config.metrics_port, 9090);
 
     // Verify we can reference the types
     let _status: Option<HealthStatus> = None;
@@ -191,7 +191,7 @@ fn test_default_features() {
 
         // Verify configs are created successfully
         let _ = export_config;
-        assert_eq!(obs_config.metrics_port, 9091);
+        assert_eq!(obs_config.metrics_port, 9090);
         assert!(true, "Default features are enabled");
     }
 
