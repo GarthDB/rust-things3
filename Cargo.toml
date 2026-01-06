@@ -6,6 +6,9 @@ members = [
     "apps/things3-cli",
     "tools/xtask",
 ]
+exclude = [
+    "examples/integration",
+]
 
 [workspace.package]
 version = "0.2.0"
