@@ -38,7 +38,6 @@ fn test_csv_export_feature_disabled() {
 
     // Note: We can't actually test that imports fail, but the fact that this
     // test compiles without importing export types proves the feature flag works
-    assert!(true, "CSV export feature correctly disabled");
 }
 
 #[cfg(feature = "export-opml")]
@@ -62,7 +61,7 @@ fn test_opml_export_feature_enabled() {
 #[test]
 fn test_opml_export_feature_disabled() {
     // When export-opml is disabled, we should not be able to import export types
-    assert!(true, "OPML export feature correctly disabled");
+    // The fact that this test compiles without import errors proves the feature flag works
 }
 
 #[cfg(feature = "observability")]
@@ -90,7 +89,7 @@ fn test_observability_feature_enabled() {
 #[test]
 fn test_observability_feature_disabled() {
     // When observability is disabled, we should not be able to import observability types
-    assert!(true, "Observability feature correctly disabled");
+    // The fact that this test compiles without import errors proves the feature flag works
 }
 
 #[cfg(all(feature = "export-csv", feature = "export-opml"))]
@@ -192,7 +191,6 @@ fn test_default_features() {
         // Verify configs are created successfully
         let _ = export_config;
         assert_eq!(obs_config.metrics_port, 9090);
-        assert!(true, "Default features are enabled");
     }
 
     #[cfg(not(all(
@@ -203,6 +201,6 @@ fn test_default_features() {
     {
         // If not all default features are enabled, that's ok - user might be
         // testing with a custom feature configuration
-        assert!(true, "Custom feature configuration detected");
+        // The fact that this compiles proves feature flags work correctly
     }
 }

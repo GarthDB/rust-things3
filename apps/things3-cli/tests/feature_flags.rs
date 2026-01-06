@@ -270,8 +270,6 @@ fn test_default_features() {
             mcp_cli.is_ok(),
             "MCP command should work with default features"
         );
-
-        assert!(true, "All default features are enabled and working");
     }
 
     #[cfg(not(all(
@@ -283,7 +281,7 @@ fn test_default_features() {
     {
         // If not all default features are enabled, that's ok - user might be
         // testing with a custom feature configuration
-        assert!(true, "Custom feature configuration detected");
+        // The fact that this compiles proves feature flags work correctly
     }
 }
 
