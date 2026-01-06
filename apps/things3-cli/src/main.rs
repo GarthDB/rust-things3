@@ -5,7 +5,7 @@ use std::sync::Arc;
 // use things3_cli::bulk_operations::BulkOperationsManager; // Temporarily disabled
 #[cfg(feature = "mcp-server")]
 use things3_cli::mcp::{start_mcp_server, start_mcp_server_with_config};
-use things3_cli::{health_check, start_websocket_server, watch_updates, Cli, Commands};
+use things3_cli::{start_websocket_server, watch_updates, Cli, Commands};
 use things3_core::{Result, ThingsConfig, ThingsDatabase};
 use tracing::{error, info};
 
@@ -128,8 +128,9 @@ async fn main() -> Result<()> {
         }
         Commands::Health => {
             info!("Performing health check");
-            health_check(&db).await?;
+            things3_cli::health_check(&db).await?;
         }
+        #[cfg(feature = "observability")]
         Commands::HealthServer { port } => {
             let obs = observability.ok_or_else(|| {
                 things3_core::ThingsError::unknown("Observability not initialized".to_string())
@@ -139,6 +140,7 @@ async fn main() -> Result<()> {
                 .await
                 .map_err(|e| things3_core::ThingsError::unknown(e.to_string()))?;
         }
+        #[cfg(feature = "observability")]
         Commands::Dashboard { port } => {
             let obs = observability.ok_or_else(|| {
                 things3_core::ThingsError::unknown("Observability not initialized".to_string())

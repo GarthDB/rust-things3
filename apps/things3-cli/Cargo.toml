@@ -23,7 +23,7 @@ required-features = ["mcp-server"]
 
 [features]
 default = ["mcp-server", "export-csv", "export-opml", "observability"]
-mcp-server = []
+mcp-server = ["export-csv", "export-opml"]  # MCP server needs export functionality
 export-csv = ["things3-core/export-csv"]
 export-opml = ["things3-core/export-opml"]
 observability = ["things3-core/observability", "dep:metrics", "dep:metrics-exporter-prometheus", "dep:metrics-exporter-tcp"]
