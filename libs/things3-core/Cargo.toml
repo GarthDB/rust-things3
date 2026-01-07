@@ -89,3 +89,7 @@ required-features = ["test-utils"]
 name = "cache_benchmarks"
 harness = false
 required-features = ["test-utils"]
+
+[[example]]
+name = "export_data"
+required-features = ["export-csv", "export-opml"]
