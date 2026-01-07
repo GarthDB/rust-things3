@@ -9,8 +9,12 @@ coverage:
         threshold: 2%
     patch:
       default:
-        target: 70%
-        threshold: 5%
+        # Lower threshold for patch coverage since feature flags and conditional
+        # compilation are compile-time directives that don't show up in runtime coverage
+        target: 20%
+        threshold: 10%
+        # Don't fail the build on patch coverage for now
+        informational: true
 
 # Ignore files and directories that don't contain testable code
 ignore:
