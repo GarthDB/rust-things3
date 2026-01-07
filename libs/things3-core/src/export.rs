@@ -101,8 +101,18 @@ impl DataExporter {
     pub fn export(&self, data: &ExportData, format: ExportFormat) -> Result<String> {
         match format {
             ExportFormat::Json => Self::export_json(data),
+            #[cfg(feature = "export-csv")]
             ExportFormat::Csv => Ok(Self::export_csv(data)),
+            #[cfg(not(feature = "export-csv"))]
+            ExportFormat::Csv => Err(anyhow::anyhow!(
+                "CSV export is not enabled. Enable the 'export-csv' feature."
+            )),
+            #[cfg(feature = "export-opml")]
             ExportFormat::Opml => Ok(Self::export_opml(data)),
+            #[cfg(not(feature = "export-opml"))]
+            ExportFormat::Opml => Err(anyhow::anyhow!(
+                "OPML export is not enabled. Enable the 'export-opml' feature."
+            )),
             ExportFormat::Markdown => Ok(Self::export_markdown(data)),
         }
     }
@@ -113,6 +123,7 @@ impl DataExporter {
     }
 
     /// Export as CSV
+    #[cfg(feature = "export-csv")]
     fn export_csv(data: &ExportData) -> String {
         let mut csv = String::new();
 
@@ -181,6 +192,7 @@ impl DataExporter {
     }
 
     /// Export as OPML
+    #[cfg(feature = "export-opml")]
     fn export_opml(data: &ExportData) -> String {
         let mut opml = String::new();
         opml.push_str("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n");

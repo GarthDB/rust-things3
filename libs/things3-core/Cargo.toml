@@ -13,7 +13,12 @@ keywords = ["things3", "productivity", "task-management", "sqlite", "async", "da
 categories = ["database", "development-tools"]
 
 [features]
+default = []
 test-utils = []
+export-csv = ["dep:csv"]
+export-opml = ["dep:quick-xml"]
+observability = ["dep:metrics"]
+full = ["export-csv", "export-opml", "observability"]
 
 [dependencies]
 # Core
@@ -41,9 +46,9 @@ parking_lot.workspace = true
 once_cell.workspace = true
 zstd = "0.13"
 
-# Export formats
-csv.workspace = true
-quick-xml.workspace = true
+# Export formats (optional)
+csv = { workspace = true, optional = true }
+quick-xml = { workspace = true, optional = true }
 
 # Configuration
 serde_yaml = "0.9"
@@ -52,10 +57,12 @@ async-trait = "0.1"
 # Performance monitoring
 sysinfo.workspace = true
 
-# Logging and Observability
+# Logging (always included for debugging)
 tracing.workspace = true
 tracing-subscriber.workspace = true
-metrics.workspace = true
+
+# Observability/Metrics (optional)
+metrics = { workspace = true, optional = true }
 # OpenTelemetry dependencies temporarily disabled
 # opentelemetry.workspace = true
 # opentelemetry_sdk.workspace = true
@@ -82,3 +89,7 @@ required-features = ["test-utils"]
 name = "cache_benchmarks"
 harness = false
 required-features = ["test-utils"]
+
+[[example]]
+name = "export_data"
+required-features = ["export-csv", "export-opml"]

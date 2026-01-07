@@ -20,10 +20,18 @@ path = "src/main.rs"
 name = "test-mcp-real-data"
 path = "src/bin/test_mcp_real_data.rs"
 
+[features]
+default = ["mcp-server", "export-csv", "export-opml", "observability"]
+mcp-server = []
+export-csv = ["things3-core/export-csv"]
+export-opml = ["things3-core/export-opml"]
+observability = ["things3-core/observability", "dep:metrics", "dep:metrics-exporter-prometheus", "dep:metrics-exporter-tcp"]
+full = ["mcp-server", "export-csv", "export-opml", "observability"]
+
 [dependencies]
 # Core
 # Note: When publishing, cargo will automatically convert path dependencies to version dependencies
-things3-core = { path = "../../libs/things3-core", features = ["test-utils"] }
+things3-core = { path = "../../libs/things3-core", features = ["test-utils"], default-features = false }
 things3-common = { path = "../../libs/things3-common" }
 
 # CLI
@@ -46,13 +54,15 @@ thiserror.workspace = true
 # Async traits
 async-trait = "0.1"
 
-# Logging and Observability
+# Logging (always included for debugging)
 tracing.workspace = true
 tracing-subscriber.workspace = true
 tracing-appender.workspace = true
-metrics.workspace = true
-metrics-exporter-prometheus.workspace = true
-metrics-exporter-tcp.workspace = true
+
+# Observability/Metrics (optional)
+metrics = { workspace = true, optional = true }
+metrics-exporter-prometheus = { workspace = true, optional = true }
+metrics-exporter-tcp = { workspace = true, optional = true }
 # OpenTelemetry dependencies temporarily disabled
 # opentelemetry.workspace = true
 # opentelemetry_sdk.workspace = true

@@ -41,6 +41,11 @@
 //!
 //! # Crate Features
 //!
+//! - `default`: Minimal feature set (core functionality only)
+//! - `export-csv`: Enable CSV export support
+//! - `export-opml`: Enable OPML export support
+//! - `observability`: Enable metrics, tracing, and health checks
+//! - `full`: Enable all optional features
 //! - `test-utils`: Enable test utilities (for testing only)
 
 pub mod backup;
