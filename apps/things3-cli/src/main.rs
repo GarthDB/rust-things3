@@ -112,17 +112,6 @@ async fn main() -> Result<()> {
             // MCP mode: No logging to avoid interfering with JSON-RPC protocol
             // Try to load comprehensive configuration first
             #[cfg(feature = "observability")]
-<<<<<<< HEAD
-            {
-                match load_config() {
-                    Ok(mcp_config) => {
-                        start_mcp_server_with_config(Arc::clone(&db), mcp_config).await?;
-                    }
-                    Err(_e) => {
-                        // Silently fall back to basic config - no logging in MCP mode
-                        start_mcp_server(Arc::clone(&db), config).await?;
-                    }
-=======
             match load_config() {
                 Ok(mcp_config) => {
                     start_mcp_server_with_config(Arc::clone(&db), mcp_config).await?;
@@ -130,22 +119,18 @@ async fn main() -> Result<()> {
                 Err(_e) => {
                     // Silently fall back to basic config - no logging in MCP mode
                     start_mcp_server(Arc::clone(&db), config).await?;
->>>>>>> main
                 }
             }
             #[cfg(not(feature = "observability"))]
             {
                 start_mcp_server(Arc::clone(&db), config).await?;
             }
-<<<<<<< HEAD
-=======
         }
         #[cfg(not(feature = "mcp-server"))]
         Commands::Mcp => {
             return Err(things3_core::ThingsError::Configuration(
                 "MCP server feature is not enabled. Enable the 'mcp-server' feature.".to_string(),
             ));
->>>>>>> main
         }
         Commands::Health => {
             info!("Performing health check");
