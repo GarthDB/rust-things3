@@ -11,6 +11,7 @@
 //! cargo run --example cli_extension
 //! ```
 
+use chrono::Datelike;
 use clap::{Parser, Subcommand};
 use std::sync::Arc;
 use things3_core::{ThingsDatabase, ThingsConfig};
@@ -154,7 +155,7 @@ async fn handle_overdue(
         .into_iter()
         .filter(|task| {
             if let Some(deadline) = task.deadline {
-                deadline < now && task.status == things3_core::TaskStatus::Open
+                deadline < now && task.status == things3_core::TaskStatus::Incomplete
             } else {
                 false
             }
@@ -223,18 +224,23 @@ async fn handle_weekly_report(
     }).count();
 
     let active_tasks = tasks.iter().filter(|t| {
-        t.status == things3_core::TaskStatus::Open
+        t.status == things3_core::TaskStatus::Incomplete
     }).count();
 
     let active_projects = projects.iter().filter(|p| {
-        p.status == things3_core::TaskStatus::Open
+        p.status == things3_core::TaskStatus::Incomplete
     }).count();
+
+    let now = chrono::Utc::now();
+    let date = now.date_naive();
+    let week = date.iso_week().week();
+    let year = date.iso_week().year();
 
     match format {
         "json" => {
             let report = serde_json::json!({
-                "week": chrono::Utc::now().iso_week().week(),
-                "year": chrono::Utc::now().year(),
+                "week": week,
+                "year": year,
                 "stats": {
                     "completed_tasks": completed_tasks,
                     "active_tasks": active_tasks,
@@ -247,7 +253,7 @@ async fn handle_weekly_report(
         }
         "markdown" => {
             println!("# Weekly Report\n");
-            println!("**Week**: {} of {}\n", chrono::Utc::now().iso_week().week(), chrono::Utc::now().year());
+            println!("**Week**: {} of {}\n", week, year);
             println!("## Statistics\n");
             println!("- ✅ Completed Tasks: {}", completed_tasks);
             println!("- 📝 Active Tasks: {}", active_tasks);
@@ -256,7 +262,7 @@ async fn handle_weekly_report(
             println!("- 📁 Total Projects: {}", projects.len());
         }
         _ => {
-            println!("Week: {} of {}", chrono::Utc::now().iso_week().week(), chrono::Utc::now().year());
+            println!("Week: {} of {}", week, year);
             println!("\nStatistics:");
             println!("  Completed Tasks: {}", completed_tasks);
             println!("  Active Tasks: {}", active_tasks);
@@ -310,7 +316,7 @@ async fn handle_project_health(
 
     let projects = if active_only {
         db.get_all_projects().await?.into_iter()
-            .filter(|p| p.status == things3_core::TaskStatus::Open)
+            .filter(|p| p.status == things3_core::TaskStatus::Incomplete)
             .collect()
     } else {
         db.get_all_projects().await?

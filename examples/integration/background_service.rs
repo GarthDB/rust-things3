@@ -192,7 +192,7 @@ impl BackgroundService {
             .iter()
             .filter(|task| {
                 if let Some(deadline) = task.deadline {
-                    deadline < now && task.status == things3_core::TaskStatus::Open
+                    deadline < now && task.status == things3_core::TaskStatus::Incomplete
                 } else {
                     false
                 }
@@ -242,12 +242,12 @@ impl BackgroundService {
             .iter()
             .filter(|t| {
                 t.status == things3_core::TaskStatus::Completed &&
-                t.modified.date() == chrono::Utc::now().naive_utc().date()
+                t.modified.date_naive() == chrono::Utc::now().date_naive()
             })
             .count();
 
-        let active_tasks = tasks.iter().filter(|t| t.status == things3_core::TaskStatus::Open).count();
-        let active_projects = projects.iter().filter(|p| p.status == things3_core::TaskStatus::Open).count();
+        let active_tasks = tasks.iter().filter(|t| t.status == things3_core::TaskStatus::Incomplete).count();
+        let active_projects = projects.iter().filter(|p| p.status == things3_core::TaskStatus::Incomplete).count();
 
         info!("📈 Report: {} tasks completed today, {} active tasks, {} active projects",
             completed_today, active_tasks, active_projects);
@@ -281,7 +281,7 @@ impl BackgroundService {
     /// Perform health check
     async fn check_health(db: &ThingsDatabase) -> Result<(), Box<dyn std::error::Error>> {
         // Simple health check: try to query database
-        let _ = db.get_database_stats().await?;
+        let _ = db.get_stats().await?;
         info!("💚 Health check passed");
         Ok(())
     }
@@ -304,7 +304,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let service_config = ServiceConfig::default();
 
     // Connect to database
-    info!("📦 Connecting to database: {}", db_config.database_path);
+    info!("📦 Connecting to database: {}", db_config.database_path.display());
     let db = ThingsDatabase::new(&db_config.database_path).await?;
     let db = Arc::new(db);
 

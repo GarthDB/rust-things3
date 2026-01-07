@@ -211,8 +211,9 @@ async fn get_project(
     };
 
     match state.db.get_project_by_uuid(&uuid).await {
-        Ok(project) => Ok(Json(ApiResponse::success(project))),
-        Err(_) => Err(StatusCode::NOT_FOUND),
+        Ok(Some(project)) => Ok(Json(ApiResponse::success(project))),
+        Ok(None) => Err(StatusCode::NOT_FOUND),
+        Err(_) => Err(StatusCode::INTERNAL_SERVER_ERROR),
     }
 }
 
@@ -261,8 +262,9 @@ async fn get_task(
     };
 
     match state.db.get_task_by_uuid(&uuid).await {
-        Ok(task) => Ok(Json(ApiResponse::success(task))),
-        Err(_) => Err(StatusCode::NOT_FOUND),
+        Ok(Some(task)) => Ok(Json(ApiResponse::success(task))),
+        Ok(None) => Err(StatusCode::NOT_FOUND),
+        Err(_) => Err(StatusCode::INTERNAL_SERVER_ERROR),
     }
 }
 
@@ -282,13 +284,19 @@ async fn create_task(
 
     let request = things3_core::CreateTaskRequest {
         title: payload.title,
+        task_type: None,
         notes: payload.notes,
+        start_date: None,
+        deadline: None,
         project_uuid,
-        ..Default::default()
+        area_uuid: None,
+        parent_uuid: None,
+        tags: None,
+        status: None,
     };
 
     match state.db.create_task(request).await {
-        Ok(task_uuid) => Ok(Json(ApiResponse::success(task_uuid))),
+        Ok(task_uuid) => Ok(Json(ApiResponse::success(task_uuid.to_string()))),
         Err(e) => {
             tracing::error!("Failed to create task: {}", e);
             Err(StatusCode::INTERNAL_SERVER_ERROR)
@@ -309,7 +317,7 @@ async fn get_stats(
     }).count();
 
     let active_tasks = tasks.iter().filter(|t| {
-        t.status == things3_core::TaskStatus::Open
+        t.status == things3_core::TaskStatus::Incomplete
     }).count();
 
     let stats = serde_json::json!({
@@ -320,7 +328,7 @@ async fn get_stats(
         },
         "projects": {
             "total": projects.len(),
-            "active": projects.iter().filter(|p| p.status == things3_core::TaskStatus::Open).count(),
+            "active": projects.iter().filter(|p| p.status == things3_core::TaskStatus::Incomplete).count(),
         },
         "areas": {
             "total": areas.len(),
