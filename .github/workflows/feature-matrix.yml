@@ -1,0 +1,101 @@
+name: Feature Matrix Tests
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  feature-matrix:
+    name: Test Feature Combinations
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Core library feature combinations
+          - package: things3-core
+            features: ""
+            name: "core: minimal (no features)"
+          - package: things3-core
+            features: "export-csv"
+            name: "core: CSV export only"
+          - package: things3-core
+            features: "export-opml"
+            name: "core: OPML export only"
+          - package: things3-core
+            features: "observability"
+            name: "core: observability only"
+          - package: things3-core
+            features: "export-csv,export-opml"
+            name: "core: both exports"
+          - package: things3-core
+            features: "full"
+            name: "core: all features"
+          
+          # CLI feature combinations
+          - package: things3-cli
+            features: ""
+            name: "cli: minimal (no features)"
+          - package: things3-cli
+            features: "mcp-server"
+            name: "cli: MCP server only"
+          - package: things3-cli
+            features: "observability"
+            name: "cli: observability only"
+          - package: things3-cli
+            features: "full"
+            name: "cli: all features"
+
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+      
+      - name: Cache Cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-feature-${{ matrix.package }}-${{ hashFiles('**/Cargo.lock') }}
+      
+      - name: Build ${{ matrix.name }}
+        run: |
+          if [ -z "${{ matrix.features }}" ]; then
+            cargo build --package ${{ matrix.package }} --no-default-features
+          else
+            cargo build --package ${{ matrix.package }} --no-default-features --features "${{ matrix.features }}"
+          fi
+      
+      - name: Test ${{ matrix.name }}
+        run: |
+          if [ -z "${{ matrix.features }}" ]; then
+            cargo test --package ${{ matrix.package }} --no-default-features
+          else
+            cargo test --package ${{ matrix.package }} --no-default-features --features "${{ matrix.features }}"
+          fi
+
+  feature-matrix-summary:
+    name: Feature Matrix Summary
+    runs-on: ubuntu-latest
+    needs: feature-matrix
+    if: always()
+    steps:
+      - name: Check feature matrix results
+        run: |
+          if [ "${{ needs.feature-matrix.result }}" = "success" ]; then
+            echo "✅ All feature combinations built and tested successfully"
+            exit 0
+          else
+            echo "❌ Some feature combinations failed"
+            exit 1
+          fi
+

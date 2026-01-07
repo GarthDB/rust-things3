@@ -3,6 +3,8 @@
 //! These tests verify that observability components work correctly together
 //! in realistic scenarios, complementing the unit tests in observability.rs
 
+#![cfg(feature = "observability")]
+
 use std::collections::HashMap;
 use std::time::Duration;
 use things3_core::observability::{
