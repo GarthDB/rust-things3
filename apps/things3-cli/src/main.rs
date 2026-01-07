@@ -5,7 +5,7 @@ use std::sync::Arc;
 // use things3_cli::bulk_operations::BulkOperationsManager; // Temporarily disabled
 #[cfg(feature = "mcp-server")]
 use things3_cli::mcp::{start_mcp_server, start_mcp_server_with_config};
-use things3_cli::{health_check, start_websocket_server, watch_updates, Cli, Commands};
+use things3_cli::{start_websocket_server, watch_updates, Cli, Commands};
 use things3_core::{Result, ThingsConfig, ThingsDatabase};
 
 #[cfg(feature = "observability")]
