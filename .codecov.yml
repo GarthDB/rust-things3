@@ -1,0 +1,37 @@
+# Codecov configuration
+# https://docs.codecov.io/docs/codecov-yaml
+
+coverage:
+  status:
+    project:
+      default:
+        target: 80%
+        threshold: 2%
+    patch:
+      default:
+        # Lower threshold for patch coverage since feature flags and conditional
+        # compilation are compile-time directives that don't show up in runtime coverage
+        target: 20%
+        threshold: 10%
+        # Don't fail the build on patch coverage for now
+        informational: true
+
+# Ignore files and directories that don't contain testable code
+ignore:
+  - "examples/**/*"           # Example code is for demonstration, not coverage
+  - "docs/**/*"               # Documentation files
+  - "*.md"                    # Markdown files
+  - ".github/**/*"            # GitHub templates and workflows
+  - "**/*_test.rs"            # Test files themselves
+  - "**/tests/**/*"           # Test directories
+  - "tools/xtask/**/*"        # Build tool, not part of library
+
+# Only measure coverage for actual library and application source code
+fixes:
+  - "before/::"
+
+comment:
+  layout: "reach,diff,flags,tree"
+  behavior: default
+  require_changes: false
+

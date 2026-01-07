@@ -1,0 +1,97 @@
+name: Question / Help
+description: Ask a question or request help
+title: "[Question]: "
+labels: ["question"]
+assignees: []
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Have a question? We're here to help!
+        
+        **Note**: For general discussions, consider using [GitHub Discussions](https://github.com/GarthDB/rust-things3/discussions) instead.
+
+  - type: textarea
+    id: question
+    attributes:
+      label: Your Question
+      description: What would you like to know?
+      placeholder: How do I...?
+    validations:
+      required: true
+
+  - type: dropdown
+    id: category
+    attributes:
+      label: Category
+      description: What is your question about?
+      options:
+        - Installation / Setup
+        - Usage / How-To
+        - API / Library
+        - CLI Tool
+        - MCP Server
+        - Performance
+        - Best Practices
+        - Troubleshooting
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Context
+      description: What are you trying to accomplish?
+      placeholder: I'm trying to...
+    validations:
+      required: true
+
+  - type: textarea
+    id: attempted
+    attributes:
+      label: What Have You Tried?
+      description: What have you tried so far?
+      placeholder: I've attempted...
+
+  - type: textarea
+    id: code
+    attributes:
+      label: Code Sample (if applicable)
+      description: Share relevant code
+      render: rust
+      placeholder: |
+        ```rust
+        // Your code here
+        ```
+
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: What version are you using?
+      placeholder: "0.5.0"
+
+  - type: textarea
+    id: resources
+    attributes:
+      label: Resources Checked
+      description: Which resources have you already checked?
+      placeholder: |
+        - [ ] README
+        - [ ] User Guide
+        - [ ] API Documentation
+        - [ ] Examples
+        - [ ] Existing Issues
+
+  - type: checkboxes
+    id: terms
+    attributes:
+      label: Checklist
+      options:
+        - label: I have searched existing issues and discussions
+          required: true
+        - label: This is a question, not a bug report
+          required: true
+

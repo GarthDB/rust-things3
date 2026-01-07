@@ -108,6 +108,7 @@ async fn test_health_check_integration() {
 
 /// Test MCP server creation and basic functionality
 #[tokio::test]
+#[cfg(feature = "mcp-server")]
 async fn test_mcp_server_integration() {
     // Create a test database
     let temp_file = NamedTempFile::new().unwrap();

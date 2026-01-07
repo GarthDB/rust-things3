@@ -1,3 +1,5 @@
+#![cfg(feature = "test-utils")]
+
 use std::sync::Arc;
 use things3_core::test_utils::create_test_database;
 use things3_core::{CreateTaskRequest, ThingsDatabase};

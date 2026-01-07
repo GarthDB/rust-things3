@@ -1,5 +1,7 @@
 //! Task lifecycle operation tests (complete, uncomplete, delete)
 
+#![cfg(feature = "test-utils")]
+
 use chrono::Utc;
 use things3_core::{
     test_utils::create_test_database_and_connect, CreateTaskRequest, DeleteChildHandling,

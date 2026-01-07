@@ -16,7 +16,7 @@ Thank you for your interest in contributing to Rust Things! This document provid
 
 ## Code of Conduct
 
-This project follows the [Rust Code of Conduct](https://www.rust-lang.org/policies/code-of-conduct). By participating, you are expected to uphold this code.
+This project adheres to the [Contributor Covenant Code of Conduct](CODE_OF_CONDUCT.md). By participating, you are expected to uphold this code. Please report unacceptable behavior to garthdb@gmail.com.
 
 ## Getting Started
 
@@ -354,7 +354,14 @@ We follow [Semantic Versioning](https://semver.org/):
 - **Discussions**: Use GitHub Discussions for questions
 - **Issues**: Use GitHub Issues for bugs and features
 - **Documentation**: Check the `docs/` directory
-- **Examples**: See `docs/examples/` for usage examples
+- **Examples**: See `examples/integration/` for integration examples
+
+## Community Resources
+
+- **[Code of Conduct](CODE_OF_CONDUCT.md)** - Community guidelines
+- **[Security Policy](SECURITY.md)** - How to report security issues
+- **[Issue Templates](.github/ISSUE_TEMPLATE/)** - Templates for bugs, features, docs, and questions
+- **[PR Template](.github/pull_request_template.md)** - Pull request guidelines
 
 ## Thank You
 

@@ -19,10 +19,101 @@ path = "src/main.rs"
 [[bin]]
 name = "test-mcp-real-data"
 path = "src/bin/test_mcp_real_data.rs"
+required-features = ["mcp-server"]
+
+[[test]]
+name = "mcp_bulk_operations_tests"
+path = "tests/mcp_bulk_operations_tests.rs"
+required-features = ["mcp-server"]
+
+[[test]]
+name = "mcp_date_handling_tests"
+path = "tests/mcp_date_handling_tests.rs"
+required-features = ["mcp-server"]
+
+[[test]]
+name = "mcp_integration_workflows"
+path = "tests/mcp_integration_workflows.rs"
+required-features = ["mcp-server"]
+
+[[test]]
+name = "mcp_io_tests"
+path = "tests/mcp_io_tests.rs"
+required-features = ["mcp-server"]
+
+[[test]]
+name = "mcp_lifecycle_tests"
+path = "tests/mcp_lifecycle_tests.rs"
+required-features = ["mcp-server"]
+
+[[test]]
+name = "mcp_load_tests"
+path = "tests/mcp_load_tests.rs"
+required-features = ["mcp-server"]
+
+[[test]]
+name = "mcp_logbook_tests"
+path = "tests/mcp_logbook_tests.rs"
+required-features = ["mcp-server"]
+
+[[test]]
+name = "mcp_project_area_tests"
+path = "tests/mcp_project_area_tests.rs"
+required-features = ["mcp-server"]
+
+[[test]]
+name = "mcp_protocol_edge_cases"
+path = "tests/mcp_protocol_edge_cases.rs"
+required-features = ["mcp-server"]
+
+[[test]]
+name = "mcp_tag_tests"
+path = "tests/mcp_tag_tests.rs"
+required-features = ["mcp-server"]
+
+[[test]]
+name = "mcp_testing_framework_tests"
+path = "tests/mcp_testing_framework_tests.rs"
+required-features = ["mcp-server"]
+
+[[test]]
+name = "mcp_tests_legacy"
+path = "tests/mcp_tests_legacy.rs"
+required-features = ["mcp-server"]
+
+[[test]]
+name = "mcp_write_operations_tests"
+path = "tests/mcp_write_operations_tests.rs"
+required-features = ["mcp-server"]
+
+[[test]]
+name = "middleware_integration_tests"
+path = "tests/middleware_integration_tests.rs"
+required-features = ["mcp-server"]
+
+[[test]]
+name = "middleware_tests"
+path = "tests/middleware_tests.rs"
+required-features = ["mcp-server"]
+
+[[test]]
+name = "error_message_format_tests"
+path = "tests/error_message_format_tests.rs"
+required-features = ["mcp-server"]
+
+[[test]]
+name = "integration_tests"
+path = "tests/integration_tests.rs"
+required-features = ["mcp-server"]
+
+[[test]]
+name = "cli_error_handling"
+path = "tests/cli_error_handling.rs"
+required-features = ["mcp-server"]
 
 [features]
 default = ["mcp-server", "export-csv", "export-opml", "observability"]
-mcp-server = []
+mcp-server = ["export-csv", "export-opml"]  # MCP server needs export functionality
 export-csv = ["things3-core/export-csv"]
 export-opml = ["things3-core/export-opml"]
 observability = ["things3-core/observability", "dep:metrics", "dep:metrics-exporter-prometheus", "dep:metrics-exporter-tcp"]
@@ -91,9 +182,9 @@ dashmap.workspace = true
 parking_lot.workspace = true
 once_cell.workspace = true
 
-# Export formats
-csv.workspace = true
-quick-xml.workspace = true
+# Export formats (optional)
+csv = { workspace = true, optional = true }
+quick-xml = { workspace = true, optional = true }
 
 # Performance monitoring
 sysinfo.workspace = true

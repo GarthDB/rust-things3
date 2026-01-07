@@ -4,12 +4,16 @@ use clap::Parser;
 use std::sync::Arc;
 // use things3_cli::bulk_operations::BulkOperationsManager; // Temporarily disabled
 #[cfg(feature = "mcp-server")]
-use things3_cli::mcp::{start_mcp_server, start_mcp_server_with_config};
-use things3_cli::{health_check, start_websocket_server, watch_updates, Cli, Commands};
+use things3_cli::mcp::start_mcp_server;
+#[cfg(all(feature = "mcp-server", feature = "observability"))]
+use things3_cli::mcp::start_mcp_server_with_config;
+use things3_cli::{start_websocket_server, watch_updates, Cli, Commands};
 use things3_core::{Result, ThingsConfig, ThingsDatabase};
 
+#[cfg(all(feature = "mcp-server", feature = "observability"))]
+use things3_core::load_config;
 #[cfg(feature = "observability")]
-use things3_core::{load_config, ObservabilityConfig, ObservabilityManager};
+use things3_core::{ObservabilityConfig, ObservabilityManager};
 use tracing::{error, info};
 
 #[tokio::main]
@@ -18,10 +22,12 @@ async fn main() -> Result<()> {
     let cli = Cli::parse();
 
     // Check if we're in MCP mode - if so, skip observability entirely to ensure zero stderr output
-    #[cfg(feature = "mcp-server")]
+    #[cfg(all(feature = "mcp-server", feature = "observability"))]
     let is_mcp_mode = matches!(cli.command, Commands::Mcp);
-    #[cfg(not(feature = "mcp-server"))]
+    #[cfg(all(feature = "observability", not(feature = "mcp-server")))]
     let is_mcp_mode = false;
+    #[cfg(not(feature = "observability"))]
+    let _is_mcp_mode = false;
 
     // Initialize observability (skip entirely for MCP mode to ensure zero stderr output)
     #[cfg(feature = "observability")]
@@ -54,8 +60,6 @@ async fn main() -> Result<()> {
         info!("Things 3 CLI starting up");
         Some(Arc::new(obs))
     };
-    #[cfg(not(feature = "observability"))]
-    let observability: Option<()> = None;
 
     // Create configuration
     let config = if let Some(db_path) = cli.database {
@@ -123,16 +127,11 @@ async fn main() -> Result<()> {
                 start_mcp_server(Arc::clone(&db), config).await?;
             }
         }
-        #[cfg(not(feature = "mcp-server"))]
-        Commands::Mcp => {
-            return Err(things3_core::ThingsError::Configuration(
-                "MCP server feature is not enabled. Enable the 'mcp-server' feature.".to_string(),
-            ));
-        }
         Commands::Health => {
             info!("Performing health check");
-            health_check(&db).await?;
+            things3_cli::health_check(&db).await?;
         }
+        #[cfg(feature = "observability")]
         Commands::HealthServer { port } => {
             let obs = observability.ok_or_else(|| {
                 things3_core::ThingsError::unknown("Observability not initialized".to_string())
@@ -142,6 +141,7 @@ async fn main() -> Result<()> {
                 .await
                 .map_err(|e| things3_core::ThingsError::unknown(e.to_string()))?;
         }
+        #[cfg(feature = "observability")]
         Commands::Dashboard { port } => {
             let obs = observability.ok_or_else(|| {
                 things3_core::ThingsError::unknown("Observability not initialized".to_string())
@@ -326,13 +326,14 @@ mod tests {
         let cli = Cli::try_parse_from(["things-cli", "health"]).unwrap();
         match cli.command {
             Commands::Health => {
-                health_check(&db).await.unwrap();
+                things3_cli::health_check(&db).await.unwrap();
             }
             _ => panic!("Expected health command"),
         }
     }
 
     #[tokio::test]
+    #[cfg(feature = "mcp-server")]
     async fn test_main_mcp_command() {
         let temp_file = NamedTempFile::new().unwrap();
         let db_path = temp_file.path();

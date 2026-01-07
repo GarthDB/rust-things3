@@ -33,43 +33,36 @@ async fn test_database_connection() -> Result<()> {
 // Removed test_default_database_path - method no longer exists
 
 #[tokio::test]
+#[cfg(feature = "test-utils")]
 async fn test_mock_database() {
     // Create a temporary database with mock data
     let temp_file = NamedTempFile::new().unwrap();
-    let _db_path = temp_file.path();
+    let db_path = temp_file.path();
 
     // Create test database with mock data
-    #[cfg(feature = "test-utils")]
-    {
-        test_utils::create_test_database(_db_path).await.unwrap();
+    test_utils::create_test_database(db_path).await.unwrap();
 
-        // Test that we can connect to the mock database
-        let db = ThingsDatabase::new(_db_path).await.unwrap();
+    // Test that we can connect to the mock database
+    let db = ThingsDatabase::new(db_path).await.unwrap();
 
-        // Test basic queries
-        let inbox_tasks = db.get_inbox(Some(10)).await.unwrap();
-        println!("Found {} inbox tasks in mock database", inbox_tasks.len());
+    // Test basic queries
+    let inbox_tasks = db.get_inbox(Some(10)).await.unwrap();
+    println!("Found {} inbox tasks in mock database", inbox_tasks.len());
 
-        let today_tasks = db.get_today(Some(10)).await.unwrap();
-        println!("Found {} today tasks in mock database", today_tasks.len());
+    let today_tasks = db.get_today(Some(10)).await.unwrap();
+    println!("Found {} today tasks in mock database", today_tasks.len());
 
-        let projects = db.get_projects(None).await.unwrap();
-        println!("Found {} projects in mock database", projects.len());
+    let projects = db.get_projects(None).await.unwrap();
+    println!("Found {} projects in mock database", projects.len());
 
-        let areas = db.get_areas().await.unwrap();
-        println!("Found {} areas in mock database", areas.len());
+    let areas = db.get_areas().await.unwrap();
+    println!("Found {} areas in mock database", areas.len());
 
-        // Test search functionality
-        let search_results = db.search_tasks("review").await.unwrap();
-        println!("Found {} search results for 'review'", search_results.len());
+    // Test search functionality
+    let search_results = db.search_tasks("review").await.unwrap();
+    println!("Found {} search results for 'review'", search_results.len());
 
-        println!("✅ Mock database test successful");
-    }
-
-    #[cfg(not(feature = "test-utils"))]
-    {
-        panic!("test-utils feature not enabled");
-    }
+    println!("✅ Mock database test successful");
 }
 
 #[tokio::test]

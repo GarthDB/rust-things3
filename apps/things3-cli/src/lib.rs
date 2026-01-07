@@ -2,13 +2,26 @@
 //! This module provides real-time updates and progress tracking capabilities
 
 pub mod bulk_operations;
+
+#[cfg(feature = "observability")]
 pub mod dashboard;
+
 pub mod events;
+
+#[cfg(feature = "observability")]
 pub mod health;
+
 pub mod logging;
+
+#[cfg(feature = "mcp-server")]
 pub mod mcp;
+
+#[cfg(feature = "observability")]
 pub mod metrics;
+
+#[cfg(feature = "observability")]
 pub mod monitoring;
+
 pub mod progress;
 // pub mod thread_safe_db; // Removed - ThingsDatabase is now Send + Sync
 pub mod websocket;
@@ -80,16 +93,19 @@ pub enum Commands {
         limit: Option<usize>,
     },
     /// Start MCP server mode
+    #[cfg(feature = "mcp-server")]
     Mcp,
     /// Health check
     Health,
     /// Start health check server
+    #[cfg(feature = "observability")]
     HealthServer {
         /// Port to listen on
         #[arg(long, short, default_value = "8080")]
         port: u16,
     },
     /// Start monitoring dashboard
+    #[cfg(feature = "observability")]
     Dashboard {
         /// Port to listen on
         #[arg(long, short, default_value = "3000")]
@@ -399,6 +415,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[cfg(feature = "mcp-server")]
     async fn test_start_mcp_server() {
         let temp_file = tempfile::NamedTempFile::new().unwrap();
         let db_path = temp_file.path();
