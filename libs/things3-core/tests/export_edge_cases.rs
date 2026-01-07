@@ -56,7 +56,7 @@ fn test_export_with_mock_data() {
     let json = exporter.export(&data, ExportFormat::Json).unwrap();
     assert!(!json.is_empty(), "JSON should contain data");
 
-    // CSV should work (if feature enabled)
+    // CSV should work (only if feature is enabled)
     #[cfg(feature = "export-csv")]
     {
         let csv = exporter.export(&data, ExportFormat::Csv).unwrap();

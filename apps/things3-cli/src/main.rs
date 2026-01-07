@@ -5,12 +5,12 @@ use std::sync::Arc;
 // use things3_cli::bulk_operations::BulkOperationsManager; // Temporarily disabled
 #[cfg(feature = "mcp-server")]
 use things3_cli::mcp::{start_mcp_server, start_mcp_server_with_config};
-use things3_cli::{start_websocket_server, watch_updates, Cli, Commands};
+use things3_cli::{health_check, start_websocket_server, watch_updates, Cli, Commands};
 use things3_core::{Result, ThingsConfig, ThingsDatabase};
-use tracing::{error, info};
 
 #[cfg(feature = "observability")]
 use things3_core::{load_config, ObservabilityConfig, ObservabilityManager};
+use tracing::{error, info};
 
 #[tokio::main]
 #[allow(clippy::too_many_lines)]
@@ -54,6 +54,8 @@ async fn main() -> Result<()> {
         info!("Things 3 CLI starting up");
         Some(Arc::new(obs))
     };
+    #[cfg(not(feature = "observability"))]
+    let observability: Option<()> = None;
 
     #[cfg(not(feature = "observability"))]
     let observability: Option<Arc<()>> = None;
@@ -110,6 +112,7 @@ async fn main() -> Result<()> {
             // MCP mode: No logging to avoid interfering with JSON-RPC protocol
             // Try to load comprehensive configuration first
             #[cfg(feature = "observability")]
+<<<<<<< HEAD
             {
                 match load_config() {
                     Ok(mcp_config) => {
@@ -119,12 +122,30 @@ async fn main() -> Result<()> {
                         // Silently fall back to basic config - no logging in MCP mode
                         start_mcp_server(Arc::clone(&db), config).await?;
                     }
+=======
+            match load_config() {
+                Ok(mcp_config) => {
+                    start_mcp_server_with_config(Arc::clone(&db), mcp_config).await?;
+                }
+                Err(_e) => {
+                    // Silently fall back to basic config - no logging in MCP mode
+                    start_mcp_server(Arc::clone(&db), config).await?;
+>>>>>>> main
                 }
             }
             #[cfg(not(feature = "observability"))]
             {
                 start_mcp_server(Arc::clone(&db), config).await?;
             }
+<<<<<<< HEAD
+=======
+        }
+        #[cfg(not(feature = "mcp-server"))]
+        Commands::Mcp => {
+            return Err(things3_core::ThingsError::Configuration(
+                "MCP server feature is not enabled. Enable the 'mcp-server' feature.".to_string(),
+            ));
+>>>>>>> main
         }
         Commands::Health => {
             info!("Performing health check");

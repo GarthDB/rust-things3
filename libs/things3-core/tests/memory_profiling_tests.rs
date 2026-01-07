@@ -116,7 +116,10 @@ fn memory_test_export_operations() {
     for _ in 0..10 {
         let data = ExportData::new(tasks.clone(), vec![], vec![]);
         let _json = exporter.export(&data, ExportFormat::Json).unwrap();
-        let _csv = exporter.export(&data, ExportFormat::Csv).unwrap();
+        #[cfg(feature = "export-csv")]
+        {
+            let _csv = exporter.export(&data, ExportFormat::Csv).unwrap();
+        }
         let _markdown = exporter.export(&data, ExportFormat::Markdown).unwrap();
         // Export results should be cleaned up
     }

@@ -120,12 +120,12 @@ thiserror.workspace = true
 # Async traits
 async-trait = "0.1"
 
-# Logging (always included)
+# Logging (always included for debugging)
 tracing.workspace = true
 tracing-subscriber.workspace = true
 tracing-appender.workspace = true
 
-# Observability/Metrics (optional with 'observability' feature)
+# Observability/Metrics (optional)
 metrics = { workspace = true, optional = true }
 metrics-exporter-prometheus = { workspace = true, optional = true }
 metrics-exporter-tcp = { workspace = true, optional = true }
