@@ -21,7 +21,7 @@ async fn main() -> Result<()> {
     #[cfg(feature = "mcp-server")]
     let is_mcp_mode = matches!(cli.command, Commands::Mcp);
     #[cfg(not(feature = "mcp-server"))]
-    let is_mcp_mode = false;
+    let _is_mcp_mode = false;
 
     // Initialize observability (skip entirely for MCP mode to ensure zero stderr output)
     #[cfg(feature = "observability")]
@@ -55,10 +55,7 @@ async fn main() -> Result<()> {
         Some(Arc::new(obs))
     };
     #[cfg(not(feature = "observability"))]
-    let observability: Option<()> = None;
-
-    #[cfg(not(feature = "observability"))]
-    let observability: Option<Arc<()>> = None;
+    let _observability: Option<()> = None;
 
     // Create configuration
     let config = if let Some(db_path) = cli.database {
@@ -125,12 +122,6 @@ async fn main() -> Result<()> {
             {
                 start_mcp_server(Arc::clone(&db), config).await?;
             }
-        }
-        #[cfg(not(feature = "mcp-server"))]
-        Commands::Mcp => {
-            return Err(things3_core::ThingsError::Configuration(
-                "MCP server feature is not enabled. Enable the 'mcp-server' feature.".to_string(),
-            ));
         }
         Commands::Health => {
             info!("Performing health check");
@@ -338,6 +329,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[cfg(feature = "mcp-server")]
     async fn test_main_mcp_command() {
         let temp_file = NamedTempFile::new().unwrap();
         let db_path = temp_file.path();
