@@ -9,7 +9,7 @@ homepage.workspace = true
 documentation = "https://docs.rs/things3-cli"
 description = "CLI tool for Things 3 with integrated MCP server"
 readme = "../../README.md"
-keywords = ["things3", "cli", "mcp", "productivity-tool", "task-manager", "command-line"]
+keywords = ["things3", "cli", "mcp", "productivity-tool", "task-manager"]
 categories = ["command-line-utilities", "development-tools"]
 
 [[bin]]

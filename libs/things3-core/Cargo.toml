@@ -9,7 +9,7 @@ homepage.workspace = true
 documentation = "https://docs.rs/things3-core"
 description = "Core library for Things 3 database access and data models"
 readme = "../../README.md"
-keywords = ["things3", "productivity", "task-management", "sqlite", "async", "database"]
+keywords = ["things3", "productivity", "task-management", "sqlite", "async"]
 categories = ["database", "development-tools"]
 
 [features]
