@@ -122,8 +122,8 @@ full = ["mcp-server", "export-csv", "export-opml", "observability"]
 [dependencies]
 # Core
 # Note: When publishing, cargo will automatically convert path dependencies to version dependencies
-things3-core = { path = "../../libs/things3-core", features = ["test-utils"], default-features = false }
-things3-common = { path = "../../libs/things3-common" }
+things3-core = { path = "../../libs/things3-core", version = "1.0.0", features = ["test-utils"], default-features = false }
+things3-common = { path = "../../libs/things3-common", version = "1.0.0" }
 
 # CLI
 clap.workspace = true
