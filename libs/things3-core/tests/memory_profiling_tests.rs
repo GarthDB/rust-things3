@@ -5,9 +5,10 @@
 
 use std::sync::Arc;
 use tempfile::NamedTempFile;
-use things3_core::{
-    CacheConfig, DataExporter, ExportData, ExportFormat, ThingsCache, ThingsDatabase,
-};
+use things3_core::{CacheConfig, ThingsCache, ThingsDatabase};
+
+#[cfg(any(feature = "export-csv", feature = "export-opml"))]
+use things3_core::{DataExporter, ExportData, ExportFormat};
 
 #[cfg(feature = "test-utils")]
 use things3_core::test_utils::{create_mock_tasks, create_test_database};
@@ -103,7 +104,10 @@ async fn memory_test_repeated_operations() {
 
 /// Test memory usage with export operations
 #[test]
-#[cfg(feature = "test-utils")]
+#[cfg(all(
+    feature = "test-utils",
+    any(feature = "export-csv", feature = "export-opml")
+))]
 fn memory_test_export_operations() {
     let tasks = create_mock_tasks();
     let exporter = DataExporter::new_default();

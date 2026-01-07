@@ -2,6 +2,8 @@
 //!
 //! These tests actually execute export code to increase coverage
 
+#![cfg(any(feature = "export-csv", feature = "export-opml"))]
+
 fn create_test_export_data() -> things3_core::ExportData {
     things3_core::ExportData::new(vec![], vec![], vec![])
 }

@@ -150,6 +150,7 @@ fn test_validate_no_dates() {
 }
 
 #[test]
+#[cfg(feature = "test-utils")]
 fn test_validate_task_dates_via_builder() {
     // Test validation through TaskRequestBuilder
     let start = NaiveDate::from_ymd_opt(2024, 1, 1).unwrap();
@@ -166,6 +167,7 @@ fn test_validate_task_dates_via_builder() {
 }
 
 #[test]
+#[cfg(feature = "test-utils")]
 fn test_validate_task_dates_invalid_via_builder() {
     // Test validation catches invalid dates
     let start = NaiveDate::from_ymd_opt(2024, 12, 31).unwrap();

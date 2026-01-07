@@ -3,6 +3,8 @@
 //! Tests various edge cases in data export functionality to ensure
 //! robust handling of empty data, special characters, and extreme values.
 
+#![cfg(any(feature = "export-csv", feature = "export-opml"))]
+
 use things3_core::{DataExporter, ExportData, ExportFormat};
 
 /// Test exporting empty data set
