@@ -4,12 +4,16 @@ use clap::Parser;
 use std::sync::Arc;
 // use things3_cli::bulk_operations::BulkOperationsManager; // Temporarily disabled
 #[cfg(feature = "mcp-server")]
-use things3_cli::mcp::{start_mcp_server, start_mcp_server_with_config};
+use things3_cli::mcp::start_mcp_server;
+#[cfg(all(feature = "mcp-server", feature = "observability"))]
+use things3_cli::mcp::start_mcp_server_with_config;
 use things3_cli::{start_websocket_server, watch_updates, Cli, Commands};
 use things3_core::{Result, ThingsConfig, ThingsDatabase};
 
+#[cfg(all(feature = "mcp-server", feature = "observability"))]
+use things3_core::load_config;
 #[cfg(feature = "observability")]
-use things3_core::{load_config, ObservabilityConfig, ObservabilityManager};
+use things3_core::{ObservabilityConfig, ObservabilityManager};
 use tracing::{error, info};
 
 #[tokio::main]
@@ -18,9 +22,9 @@ async fn main() -> Result<()> {
     let cli = Cli::parse();
 
     // Check if we're in MCP mode - if so, skip observability entirely to ensure zero stderr output
-    #[cfg(feature = "mcp-server")]
+    #[cfg(all(feature = "mcp-server", feature = "observability"))]
     let is_mcp_mode = matches!(cli.command, Commands::Mcp);
-    #[cfg(not(feature = "mcp-server"))]
+    #[cfg(not(all(feature = "mcp-server", feature = "observability")))]
     let _is_mcp_mode = false;
 
     // Initialize observability (skip entirely for MCP mode to ensure zero stderr output)
@@ -54,8 +58,6 @@ async fn main() -> Result<()> {
         info!("Things 3 CLI starting up");
         Some(Arc::new(obs))
     };
-    #[cfg(not(feature = "observability"))]
-    let _observability: Option<()> = None;
 
     // Create configuration
     let config = if let Some(db_path) = cli.database {
