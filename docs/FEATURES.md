@@ -210,6 +210,66 @@ cargo build --package things3-cli --no-default-features \
 - When metrics/monitoring not needed
 - To reduce dependencies
 
+## Feature Compatibility Matrix
+
+This matrix shows which features work together and their dependencies:
+
+| Feature Combination | things3-core | things3-cli | Notes |
+|---------------------|--------------|-------------|-------|
+| `export-csv` | ✅ Works standalone | ✅ Works standalone | Independent feature |
+| `export-opml` | ✅ Works standalone | ✅ Works standalone | Independent feature |
+| `observability` | ✅ Works standalone | ✅ Works standalone | Independent feature |
+| `mcp-server` | N/A | ⚠️ Requires `export-csv` + `export-opml` | See explanation below |
+| `export-csv` + `export-opml` | ✅ Compatible | ✅ Compatible | Common combination |
+| `export-csv` + `observability` | ✅ Compatible | ✅ Compatible | All features independent |
+| `export-opml` + `observability` | ✅ Compatible | ✅ Compatible | All features independent |
+| All features (`full`) | ✅ Compatible | ✅ Compatible | Default for CLI |
+
+### Why `mcp-server` Requires Export Features
+
+The MCP (Model Context Protocol) server requires both `export-csv` and `export-opml` features because:
+
+1. **MCP Tool Implementation**: Several MCP tools expose export functionality to AI clients:
+   - `export_to_csv` - Exports tasks/projects to CSV format
+   - `export_to_opml` - Exports tasks/projects to OPML format
+   - `bulk_export` - Exports all data in specified format
+
+2. **AI Client Expectations**: AI/LLM clients using the MCP protocol expect to be able to:
+   - Extract data for analysis (CSV format)
+   - Import into other tools (OPML format)
+   - Generate reports (both formats)
+
+3. **API Consistency**: The MCP server exposes the same export capabilities as the CLI, maintaining a consistent API surface.
+
+**Building MCP Server with All Features:**
+```bash
+# Default - includes MCP with all exports
+cargo build --package things3-cli
+
+# Explicit - same as above
+cargo build --package things3-cli --features "mcp-server,export-csv,export-opml"
+```
+
+**Why You Can't Build MCP Without Exports:**
+```bash
+# ❌ This will fail - mcp-server depends on exports
+cargo build --package things3-cli --no-default-features --features "mcp-server"
+
+# The feature definition in Cargo.toml:
+# mcp-server = ["export-csv", "export-opml"]
+```
+
+**Alternative: Use CLI Without MCP:**
+If you don't need the MCP server, you can build a minimal CLI:
+```bash
+# Minimal CLI - no MCP, no observability
+cargo build --package things3-cli --no-default-features
+
+# CLI with exports but no MCP
+cargo build --package things3-cli --no-default-features \
+    --features "export-csv,export-opml"
+```
+
 ## Feature Combinations
 
 ### Minimal Core Library
