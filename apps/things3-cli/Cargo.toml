@@ -21,6 +21,71 @@ name = "test-mcp-real-data"
 path = "src/bin/test_mcp_real_data.rs"
 required-features = ["mcp-server"]
 
+[[test]]
+name = "mcp_bulk_operations_tests"
+path = "tests/mcp_bulk_operations_tests.rs"
+required-features = ["mcp-server"]
+
+[[test]]
+name = "mcp_date_handling_tests"
+path = "tests/mcp_date_handling_tests.rs"
+required-features = ["mcp-server"]
+
+[[test]]
+name = "mcp_integration_workflows"
+path = "tests/mcp_integration_workflows.rs"
+required-features = ["mcp-server"]
+
+[[test]]
+name = "mcp_io_tests"
+path = "tests/mcp_io_tests.rs"
+required-features = ["mcp-server"]
+
+[[test]]
+name = "mcp_lifecycle_tests"
+path = "tests/mcp_lifecycle_tests.rs"
+required-features = ["mcp-server"]
+
+[[test]]
+name = "mcp_load_tests"
+path = "tests/mcp_load_tests.rs"
+required-features = ["mcp-server"]
+
+[[test]]
+name = "mcp_logbook_tests"
+path = "tests/mcp_logbook_tests.rs"
+required-features = ["mcp-server"]
+
+[[test]]
+name = "mcp_project_area_tests"
+path = "tests/mcp_project_area_tests.rs"
+required-features = ["mcp-server"]
+
+[[test]]
+name = "mcp_protocol_edge_cases"
+path = "tests/mcp_protocol_edge_cases.rs"
+required-features = ["mcp-server"]
+
+[[test]]
+name = "mcp_tag_tests"
+path = "tests/mcp_tag_tests.rs"
+required-features = ["mcp-server"]
+
+[[test]]
+name = "mcp_testing_framework_tests"
+path = "tests/mcp_testing_framework_tests.rs"
+required-features = ["mcp-server"]
+
+[[test]]
+name = "mcp_tests_legacy"
+path = "tests/mcp_tests_legacy.rs"
+required-features = ["mcp-server"]
+
+[[test]]
+name = "mcp_write_operations_tests"
+path = "tests/mcp_write_operations_tests.rs"
+required-features = ["mcp-server"]
+
 [features]
 default = ["mcp-server", "export-csv", "export-opml", "observability"]
 mcp-server = ["export-csv", "export-opml"]  # MCP server needs export functionality

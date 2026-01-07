@@ -469,6 +469,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "export-csv")]
     fn test_export_csv_empty() {
         let exporter = DataExporter::new_default();
         let data = ExportData::new(vec![], vec![], vec![]);
@@ -480,6 +481,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "export-csv")]
     fn test_export_csv_with_data() {
         let exporter = DataExporter::new_default();
         let tasks = create_mock_tasks();
@@ -535,6 +537,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "export-opml")]
     fn test_export_opml_empty() {
         let exporter = DataExporter::new_default();
         let data = ExportData::new(vec![], vec![], vec![]);
@@ -550,6 +553,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "export-opml")]
     fn test_export_opml_with_data() {
         let exporter = DataExporter::new_default();
         let tasks = create_mock_tasks();
