@@ -150,7 +150,7 @@ fn test_observability_cli_commands_unavailable() {
     );
 }
 
-#[cfg(feature = "mcp-server")]
+#[cfg(all(feature = "mcp-server", feature = "observability"))]
 #[test]
 fn test_multiple_cli_features_enabled() {
     // When multiple features are enabled, all commands should be available
@@ -161,7 +161,7 @@ fn test_multiple_cli_features_enabled() {
     let mcp_cli = Cli::try_parse_from(mcp_args);
     assert!(mcp_cli.is_ok(), "MCP command should be available");
 
-    // Test health-server command (always parseable)
+    // Test health-server command (requires observability)
     let health_args = vec!["things3", "health-server"];
     let health_cli = Cli::try_parse_from(health_args);
     assert!(
@@ -169,7 +169,7 @@ fn test_multiple_cli_features_enabled() {
         "Health server command should be parseable"
     );
 
-    // Test dashboard command (always parseable)
+    // Test dashboard command (requires observability)
     let dashboard_args = vec!["things3", "dashboard"];
     let dashboard_cli = Cli::try_parse_from(dashboard_args);
     assert!(
