@@ -1,3 +1,5 @@
+#![cfg(feature = "test-utils")]
+
 use things3_core::{
     test_utils::create_test_database_and_connect, CreateTaskRequest, DeleteChildHandling,
     TaskStatus, TaskType,

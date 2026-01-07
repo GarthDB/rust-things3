@@ -1,3 +1,5 @@
+#![cfg(feature = "test-utils")]
+
 use chrono::Utc;
 use things3_core::{
     database::ThingsDatabase,

@@ -1,5 +1,7 @@
 //! Comprehensive tests for bulk operations
 
+#![cfg(feature = "test-utils")]
+
 use chrono::NaiveDate;
 use things3_core::models::{
     BulkCompleteRequest, BulkDeleteRequest, BulkMoveRequest, BulkUpdateDatesRequest,

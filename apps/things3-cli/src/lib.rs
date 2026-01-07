@@ -415,6 +415,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[cfg(feature = "mcp-server")]
     async fn test_start_mcp_server() {
         let temp_file = tempfile::NamedTempFile::new().unwrap();
         let db_path = temp_file.path();
