@@ -2,11 +2,14 @@
 
 A high-performance Rust library and CLI for Things 3 integration with integrated MCP (Model Context Protocol) server support for AI/LLM environments.
 
+**📦 Version 1.0.0 - Production Ready!**
+
 [![CI/CD Pipeline](https://github.com/GarthDB/rust-things3/actions/workflows/ci.yml/badge.svg)](https://github.com/GarthDB/rust-things3/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/gh/GarthDB/rust-things3/branch/main/graph/badge.svg)](https://codecov.io/gh/GarthDB/rust-things3)
 [![Crates.io](https://img.shields.io/crates/v/things3-cli.svg)](https://crates.io/crates/things3-cli)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Rust](https://img.shields.io/badge/rust-1.70+-orange.svg)](https://www.rust-lang.org)
+[![Version](https://img.shields.io/badge/version-1.0.0-blue.svg)](RELEASE_NOTES.md)
 
 ## ✨ Features
 
@@ -68,6 +71,47 @@ git clone https://github.com/GarthDB/rust-things3
 cd rust-things3
 moon run :dev-pipeline
 ```
+
+## ⚙️ Feature Flags
+
+**New in 1.0.0**: Modular compilation with feature flags! Choose only what you need.
+
+### Library (`things3-core`)
+
+```toml
+[dependencies]
+# Minimal (core functionality only - 24% smaller binary)
+things3-core = { version = "1.0", default-features = false }
+
+# With specific features
+things3-core = { version = "1.0", features = ["export-csv", "observability"] }
+
+# Full features (recommended for most users)
+things3-core = { version = "1.0", features = ["full"] }
+```
+
+**Available Features:**
+- `export-csv`: CSV export support
+- `export-opml`: OPML export support  
+- `observability`: Metrics, tracing, and health checks
+- `full`: Enable all features
+- `test-utils`: Testing utilities (development only)
+
+### CLI (`things3-cli`)
+
+```toml
+[dependencies]
+# CLI with all features
+things3-cli = { version = "1.0", features = ["full"] }
+
+# CLI with specific features
+things3-cli = { version = "1.0", features = ["mcp-server", "export-csv"] }
+```
+
+**Additional CLI Features:**
+- `mcp-server`: MCP server functionality (requires export features)
+
+📚 **See [FEATURES.md](docs/FEATURES.md) for detailed feature documentation and compatibility matrix.**
 
 ## 📖 Quick Start
 
@@ -267,6 +311,15 @@ The MCP (Model Context Protocol) server provides 21 tools for AI/LLM integration
 - **[User Guide](docs/USER_GUIDE.md)** - Comprehensive usage guide
 - **[Error Handling Guide](docs/ERROR_HANDLING.md)** - Error handling patterns and recovery strategies
 
+### Release Documentation (1.0.0)
+
+- **[Release Notes](RELEASE_NOTES.md)** - What's new in 1.0.0
+- **[Migration Guide](docs/MIGRATION.md)** - Upgrade from 0.x to 1.0.0
+- **[Feature Flags Guide](docs/FEATURES.md)** - Modular compilation with feature flags
+- **[Security Audit](docs/SECURITY_AUDIT.md)** - Security audit results
+- **[Post-1.0 Roadmap](docs/POST_1.0_ROADMAP.md)** - Future development plans
+- **[Changelog](CHANGELOG.md)** - Complete version history
+
 ### Core Documentation
 
 - **[Architecture](docs/ARCHITECTURE.md)** - System design and component overview
@@ -276,10 +329,10 @@ The MCP (Model Context Protocol) server provides 21 tools for AI/LLM integration
 - **[Database Schema](docs/DATABASE_SCHEMA.md)** - Things 3 database structure
 - **[Development Guide](docs/DEVELOPMENT.md)** - Setup and development workflow
 - **[Coverage Analysis](docs/COVERAGE_ANALYSIS.md)** - Test coverage report
-- **[Migration Guide](docs/MIGRATION_GUIDE.md)** - Version migration instructions
-- **[Roadmap to 1.0.0](docs/ROADMAP_TO_1.0.0.md)** - Development roadmap
 
 ### Examples
+
+#### Basic Examples
 
 See the [`libs/things3-core/examples/`](libs/things3-core/examples/) directory for practical usage examples:
 - `basic_usage.rs` - Basic database operations (connect, query, create, update)
@@ -287,13 +340,33 @@ See the [`libs/things3-core/examples/`](libs/things3-core/examples/) directory f
 - `search_tasks.rs` - Advanced search functionality
 - `export_data.rs` - Data export in multiple formats (JSON, CSV, Markdown)
 
-Run examples with:
 ```bash
 cargo run --package things3-core --example basic_usage
 cargo run --package things3-core --example bulk_operations
 cargo run --package things3-core --example search_tasks
 cargo run --package things3-core --example export_data
 ```
+
+#### Integration Examples (New in 1.0.0)
+
+Real-world integration patterns in [`examples/integration/`](examples/integration/):
+
+- **`mcp_client.rs`** - Custom MCP client implementation
+- **`cli_extension.rs`** - Extending the CLI with custom commands
+- **`web_api.rs`** - REST API with Axum web framework
+- **`background_service.rs`** - Long-running service with graceful shutdown
+- **`custom_middleware.rs`** - Custom middleware for cross-cutting concerns
+
+```bash
+cd examples/integration
+cargo run --example mcp_client
+cargo run --example cli_extension -- today
+cargo run --example web_api
+cargo run --example background_service
+cargo run --example custom_middleware
+```
+
+See [`examples/integration/README.md`](examples/integration/README.md) for detailed documentation.
 
 ### API Documentation
 

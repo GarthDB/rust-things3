@@ -30,8 +30,8 @@ thiserror.workspace = true
 anyhow.workspace = true
 
 # Database
-sqlx = { version = "0.8", features = ["runtime-tokio-rustls", "sqlite", "chrono", "uuid", "json"], default-features = false }
-rusqlite = { version = "0.31", features = ["bundled"] }
+sqlx = { version = "0.8.1", features = ["runtime-tokio-rustls", "sqlite", "chrono", "uuid", "json"], default-features = false }
+rusqlite = { version = "0.32", features = ["bundled"] }
 
 # String similarity (for tag fuzzy matching)
 strsim.workspace = true

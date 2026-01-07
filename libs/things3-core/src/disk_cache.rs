@@ -797,7 +797,7 @@ mod tests {
         let config = DiskCacheConfig {
             db_path: db_path.to_string_lossy().to_string(),
             max_size: 1024 * 1024,
-            ttl: Duration::from_millis(1000), // 1 second TTL
+            ttl: Duration::from_secs(2), // 2 second TTL (must be >= 1 sec due to timestamp granularity)
             compression: false,
             cleanup_interval: Duration::from_millis(50),
             max_entries: 100,
@@ -812,8 +812,8 @@ mod tests {
         let initial: Option<Vec<String>> = cache.get("key1").await.unwrap();
         assert_eq!(initial, Some(vec!["data1".to_string()]));
 
-        // Wait for TTL to expire
-        tokio::time::sleep(Duration::from_millis(1200)).await;
+        // Wait for TTL to expire with buffer time
+        tokio::time::sleep(Duration::from_secs(3)).await;
 
         // Manually trigger cleanup to ensure expired entries are removed
         DiskCache::cleanup_expired_entries(&cache.config).unwrap();
