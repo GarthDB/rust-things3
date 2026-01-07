@@ -22,16 +22,22 @@ fn test_export_empty_data() {
         "Should have empty arrays"
     );
 
-    // CSV export of empty data
-    let _csv = exporter.export(&data, ExportFormat::Csv).unwrap();
+    // CSV export of empty data (only if feature is enabled)
+    #[cfg(feature = "export-csv")]
+    {
+        let _csv = exporter.export(&data, ExportFormat::Csv).unwrap();
+    }
 
     // Markdown export of empty data
     let markdown = exporter.export(&data, ExportFormat::Markdown).unwrap();
     assert!(markdown.contains("# Things 3 Export"), "Should have title");
 
-    // OPML export of empty data
-    let opml = exporter.export(&data, ExportFormat::Opml).unwrap();
-    assert!(opml.contains("<?xml"), "Should have XML header");
+    // OPML export of empty data (only if feature is enabled)
+    #[cfg(feature = "export-opml")]
+    {
+        let opml = exporter.export(&data, ExportFormat::Opml).unwrap();
+        assert!(opml.contains("<?xml"), "Should have XML header");
+    }
 }
 
 /// Test exporting data with mock data
@@ -50,9 +56,12 @@ fn test_export_with_mock_data() {
     let json = exporter.export(&data, ExportFormat::Json).unwrap();
     assert!(!json.is_empty(), "JSON should contain data");
 
-    // CSV should work
-    let csv = exporter.export(&data, ExportFormat::Csv).unwrap();
-    assert!(!csv.is_empty(), "CSV should contain data");
+    // CSV should work (if feature enabled)
+    #[cfg(feature = "export-csv")]
+    {
+        let csv = exporter.export(&data, ExportFormat::Csv).unwrap();
+        assert!(!csv.is_empty(), "CSV should contain data");
+    }
 
     // Markdown should work
     let markdown = exporter.export(&data, ExportFormat::Markdown).unwrap();
@@ -79,8 +88,11 @@ fn test_export_large_dataset() {
     let json = exporter.export(&data, ExportFormat::Json).unwrap();
     assert!(json.len() > 1000, "JSON should be substantial");
 
-    let csv = exporter.export(&data, ExportFormat::Csv).unwrap();
-    assert!(csv.lines().count() > 100, "CSV should have many lines");
+    #[cfg(feature = "export-csv")]
+    {
+        let csv = exporter.export(&data, ExportFormat::Csv).unwrap();
+        assert!(csv.lines().count() > 100, "CSV should have many lines");
+    }
 
     let markdown = exporter.export(&data, ExportFormat::Markdown).unwrap();
     assert!(markdown.contains("Total Items:"), "Should show item count");
@@ -96,8 +108,11 @@ fn test_export_only_empty_data() {
     let json = exporter.export(&data, ExportFormat::Json).unwrap();
     assert!(!json.is_empty(), "JSON should handle empty data");
 
-    let _csv = exporter.export(&data, ExportFormat::Csv).unwrap();
-    // CSV might be empty or have headers only
+    #[cfg(feature = "export-csv")]
+    {
+        let _csv = exporter.export(&data, ExportFormat::Csv).unwrap();
+        // CSV might be empty or have headers only
+    }
 
     let markdown = exporter.export(&data, ExportFormat::Markdown).unwrap();
     assert!(!markdown.is_empty(), "Markdown should handle empty data");
@@ -126,6 +141,7 @@ fn test_json_export_validity() {
 
 /// Test CSV export format
 #[test]
+#[cfg(feature = "export-csv")]
 fn test_csv_export_format() {
     let exporter = DataExporter::new_default();
     let data = ExportData::new(vec![], vec![], vec![]);
@@ -151,8 +167,11 @@ fn test_export_mixed_data() {
     let json = exporter.export(&data, ExportFormat::Json).unwrap();
     assert!(!json.is_empty());
 
-    let csv = exporter.export(&data, ExportFormat::Csv).unwrap();
-    assert!(!csv.is_empty());
+    #[cfg(feature = "export-csv")]
+    {
+        let csv = exporter.export(&data, ExportFormat::Csv).unwrap();
+        assert!(!csv.is_empty());
+    }
 
     let markdown = exporter.export(&data, ExportFormat::Markdown).unwrap();
     assert!(!markdown.is_empty());
