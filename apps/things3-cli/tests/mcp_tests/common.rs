@@ -1,5 +1,7 @@
 //! Common test utilities and setup functions for MCP tests
 
+#![cfg(feature = "mcp-server")]
+
 use sqlx::SqlitePool;
 pub(crate) use things3_cli::mcp::ThingsMcpServer;
 use things3_core::{config::ThingsConfig, database::ThingsDatabase};
