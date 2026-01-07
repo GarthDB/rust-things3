@@ -24,7 +24,9 @@ async fn main() -> Result<()> {
     // Check if we're in MCP mode - if so, skip observability entirely to ensure zero stderr output
     #[cfg(all(feature = "mcp-server", feature = "observability"))]
     let is_mcp_mode = matches!(cli.command, Commands::Mcp);
-    #[cfg(not(all(feature = "mcp-server", feature = "observability")))]
+    #[cfg(all(feature = "observability", not(feature = "mcp-server")))]
+    let is_mcp_mode = false;
+    #[cfg(not(feature = "observability"))]
     let _is_mcp_mode = false;
 
     // Initialize observability (skip entirely for MCP mode to ensure zero stderr output)

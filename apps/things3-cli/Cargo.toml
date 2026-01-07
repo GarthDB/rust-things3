@@ -86,6 +86,31 @@ name = "mcp_write_operations_tests"
 path = "tests/mcp_write_operations_tests.rs"
 required-features = ["mcp-server"]
 
+[[test]]
+name = "middleware_integration_tests"
+path = "tests/middleware_integration_tests.rs"
+required-features = ["mcp-server"]
+
+[[test]]
+name = "middleware_tests"
+path = "tests/middleware_tests.rs"
+required-features = ["mcp-server"]
+
+[[test]]
+name = "error_message_format_tests"
+path = "tests/error_message_format_tests.rs"
+required-features = ["mcp-server"]
+
+[[test]]
+name = "integration_tests"
+path = "tests/integration_tests.rs"
+required-features = ["mcp-server"]
+
+[[test]]
+name = "cli_error_handling"
+path = "tests/cli_error_handling.rs"
+required-features = ["mcp-server"]
+
 [features]
 default = ["mcp-server", "export-csv", "export-opml", "observability"]
 mcp-server = ["export-csv", "export-opml"]  # MCP server needs export functionality
