@@ -286,13 +286,10 @@ impl PerformanceMonitor {
                 0.0
             },
             total_duration,
-            average_operation_duration: if total_operations > 0 {
-                Duration::from_nanos(
-                    u64::try_from(total_duration.as_nanos()).unwrap_or(0) / total_operations,
-                )
-            } else {
-                Duration::ZERO
-            },
+            average_operation_duration: u64::try_from(total_duration.as_nanos())
+                .unwrap_or(0)
+                .checked_div(total_operations)
+                .map_or(Duration::ZERO, Duration::from_nanos),
             operation_count: stats.len(),
         }
     }

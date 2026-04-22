@@ -75,11 +75,22 @@ impl ThingsConfig {
 
     /// Create configuration from environment variables
     ///
-    /// Reads `THINGS_DATABASE_PATH` and `THINGS_FALLBACK_TO_DEFAULT` environment variables
+    /// Reads the database path from `THINGS_DB_PATH` (preferred) or the legacy
+    /// `THINGS_DATABASE_PATH`, and the fallback flag from `THINGS_FALLBACK_TO_DEFAULT`.
     #[must_use]
     pub fn from_env() -> Self {
-        let database_path = std::env::var("THINGS_DATABASE_PATH")
-            .map_or_else(|_| Self::get_default_database_path(), PathBuf::from);
+        let database_path = match std::env::var("THINGS_DB_PATH") {
+            Ok(v) => PathBuf::from(v),
+            Err(_) => match std::env::var("THINGS_DATABASE_PATH") {
+                Ok(v) => {
+                    tracing::warn!(
+                        "THINGS_DATABASE_PATH is deprecated; please use THINGS_DB_PATH instead"
+                    );
+                    PathBuf::from(v)
+                }
+                Err(_) => Self::get_default_database_path(),
+            },
+        };
 
         let fallback_to_default = if let Ok(v) = std::env::var("THINGS_FALLBACK_TO_DEFAULT") {
             let lower = v.to_lowercase();
@@ -163,6 +174,81 @@ mod tests {
             std::env::set_var("THINGS_FALLBACK_TO_DEFAULT", fallback);
         } else {
             std::env::remove_var("THINGS_FALLBACK_TO_DEFAULT");
+        }
+    }
+
+    #[test]
+    #[ignore = "Mutates env vars; must run serially (cargo test -- --ignored --test-threads=1)"]
+    fn test_from_env_reads_things_db_path() {
+        let test_path = "/custom/path/via_db_path.sqlite";
+
+        let original_db_path = std::env::var("THINGS_DB_PATH").ok();
+        let original_legacy = std::env::var("THINGS_DATABASE_PATH").ok();
+
+        std::env::remove_var("THINGS_DATABASE_PATH");
+        std::env::set_var("THINGS_DB_PATH", test_path);
+
+        let config = ThingsConfig::from_env();
+        assert_eq!(config.database_path, PathBuf::from(test_path));
+
+        if let Some(v) = original_db_path {
+            std::env::set_var("THINGS_DB_PATH", v);
+        } else {
+            std::env::remove_var("THINGS_DB_PATH");
+        }
+        if let Some(v) = original_legacy {
+            std::env::set_var("THINGS_DATABASE_PATH", v);
+        }
+    }
+
+    #[test]
+    #[ignore = "Mutates env vars; must run serially (cargo test -- --ignored --test-threads=1)"]
+    fn test_from_env_prefers_things_db_path_over_legacy() {
+        let new_path = "/new/preferred.sqlite";
+        let legacy_path = "/legacy/ignored.sqlite";
+
+        let original_db_path = std::env::var("THINGS_DB_PATH").ok();
+        let original_legacy = std::env::var("THINGS_DATABASE_PATH").ok();
+
+        std::env::set_var("THINGS_DB_PATH", new_path);
+        std::env::set_var("THINGS_DATABASE_PATH", legacy_path);
+
+        let config = ThingsConfig::from_env();
+        assert_eq!(config.database_path, PathBuf::from(new_path));
+
+        if let Some(v) = original_db_path {
+            std::env::set_var("THINGS_DB_PATH", v);
+        } else {
+            std::env::remove_var("THINGS_DB_PATH");
+        }
+        if let Some(v) = original_legacy {
+            std::env::set_var("THINGS_DATABASE_PATH", v);
+        } else {
+            std::env::remove_var("THINGS_DATABASE_PATH");
+        }
+    }
+
+    #[test]
+    #[ignore = "Mutates env vars; must run serially (cargo test -- --ignored --test-threads=1)"]
+    fn test_from_env_falls_back_to_legacy_things_database_path() {
+        let legacy_path = "/legacy/only.sqlite";
+
+        let original_db_path = std::env::var("THINGS_DB_PATH").ok();
+        let original_legacy = std::env::var("THINGS_DATABASE_PATH").ok();
+
+        std::env::remove_var("THINGS_DB_PATH");
+        std::env::set_var("THINGS_DATABASE_PATH", legacy_path);
+
+        let config = ThingsConfig::from_env();
+        assert_eq!(config.database_path, PathBuf::from(legacy_path));
+
+        if let Some(v) = original_db_path {
+            std::env::set_var("THINGS_DB_PATH", v);
+        }
+        if let Some(v) = original_legacy {
+            std::env::set_var("THINGS_DATABASE_PATH", v);
+        } else {
+            std::env::remove_var("THINGS_DATABASE_PATH");
         }
     }
 
