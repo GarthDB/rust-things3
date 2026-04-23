@@ -268,6 +268,7 @@ pub fn load_config_from_env() -> Result<McpServerConfig> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serial_test::serial;
     use std::sync::Mutex;
     use tempfile::TempDir;
 
@@ -591,6 +592,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_config_loader_create_all_sample_configs() {
         let temp_dir = TempDir::new().unwrap();
         let original_dir = std::env::current_dir().unwrap();

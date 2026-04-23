@@ -743,6 +743,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_config_effective_database_path_fallback_enabled_but_default_missing() {
         // Temporarily change HOME to a non-existent directory to ensure default path doesn't exist
         let original_home = std::env::var("HOME").ok();
@@ -1052,6 +1053,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_config_home_env_var_fallback() {
         // Test with HOME environment variable
         let original_home = std::env::var("HOME").ok();
