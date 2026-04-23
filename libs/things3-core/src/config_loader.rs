@@ -596,20 +596,27 @@ mod tests {
     fn test_config_loader_create_all_sample_configs() {
         let temp_dir = TempDir::new().unwrap();
         let original_dir = std::env::current_dir().unwrap();
+        // create_all_sample_configs reads HOME; pin it to the temp dir so leaked
+        // values from other serial tests (e.g. "/nonexistent/home") don't fail the write.
+        let original_home = std::env::var("HOME").ok();
+        std::env::set_var("HOME", temp_dir.path());
 
-        // Change to temp directory
         std::env::set_current_dir(temp_dir.path()).unwrap();
 
-        // Create sample configs
         let result = ConfigLoader::create_all_sample_configs();
-        assert!(result.is_ok());
+        let cwd_json_exists = PathBuf::from("mcp-config.json").exists();
+        let cwd_yaml_exists = PathBuf::from("mcp-config.yaml").exists();
 
-        // Check that files were created
-        assert!(PathBuf::from("mcp-config.json").exists());
-        assert!(PathBuf::from("mcp-config.yaml").exists());
-
-        // Restore original directory
         std::env::set_current_dir(original_dir).unwrap();
+        if let Some(v) = original_home {
+            std::env::set_var("HOME", v);
+        } else {
+            std::env::remove_var("HOME");
+        }
+
+        assert!(result.is_ok());
+        assert!(cwd_json_exists);
+        assert!(cwd_yaml_exists);
     }
 
     #[test]

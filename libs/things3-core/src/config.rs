@@ -545,21 +545,30 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_from_env_without_variables() {
-        // Test from_env when no environment variables are set
-        // Clear any existing environment variables
+        let original_db_path = std::env::var("THINGS_DB_PATH").ok();
+        let original_legacy = std::env::var("THINGS_DATABASE_PATH").ok();
+        let original_fallback = std::env::var("THINGS_FALLBACK_TO_DEFAULT").ok();
+
+        std::env::remove_var("THINGS_DB_PATH");
         std::env::remove_var("THINGS_DATABASE_PATH");
         std::env::remove_var("THINGS_FALLBACK_TO_DEFAULT");
 
         let config = ThingsConfig::from_env();
+        let expected_path = ThingsConfig::get_default_database_path();
 
-        // Should use default database path
-        assert_eq!(
-            config.database_path,
-            ThingsConfig::get_default_database_path()
-        );
+        if let Some(v) = original_db_path {
+            std::env::set_var("THINGS_DB_PATH", v);
+        }
+        if let Some(v) = original_legacy {
+            std::env::set_var("THINGS_DATABASE_PATH", v);
+        }
+        if let Some(v) = original_fallback {
+            std::env::set_var("THINGS_FALLBACK_TO_DEFAULT", v);
+        }
 
-        // Should default to true for fallback (as per the implementation)
+        assert_eq!(config.database_path, expected_path);
         assert!(config.fallback_to_default);
     }
 
@@ -797,53 +806,33 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_config_from_env_without_variables() {
-        // Store original values
-        let original_db_path = std::env::var("THINGS_DATABASE_PATH").ok();
+        let original_db_path = std::env::var("THINGS_DB_PATH").ok();
+        let original_legacy = std::env::var("THINGS_DATABASE_PATH").ok();
         let original_fallback = std::env::var("THINGS_FALLBACK_TO_DEFAULT").ok();
 
-        // Clear environment variables multiple times to ensure they're gone
+        std::env::remove_var("THINGS_DB_PATH");
         std::env::remove_var("THINGS_DATABASE_PATH");
         std::env::remove_var("THINGS_FALLBACK_TO_DEFAULT");
-        std::env::remove_var("THINGS_DATABASE_PATH");
-        std::env::remove_var("THINGS_FALLBACK_TO_DEFAULT");
-
-        // Debug: Check if environment variables are actually cleared
-        let db_path =
-            std::env::var("THINGS_DATABASE_PATH").unwrap_or_else(|_| "NOT_SET".to_string());
-        let fallback =
-            std::env::var("THINGS_FALLBACK_TO_DEFAULT").unwrap_or_else(|_| "NOT_SET".to_string());
-        println!("DEBUG: THINGS_DATABASE_PATH = '{db_path}'");
-        println!("DEBUG: THINGS_FALLBACK_TO_DEFAULT = '{fallback}'");
 
         let config = ThingsConfig::from_env();
-        println!(
-            "DEBUG: config.fallback_to_default = {}",
-            config.fallback_to_default
-        );
-
-        // Restore original values
-        if let Some(original) = original_db_path {
-            std::env::set_var("THINGS_DATABASE_PATH", original);
-        }
-        if let Some(original) = original_fallback {
-            std::env::set_var("THINGS_FALLBACK_TO_DEFAULT", original);
-        }
-
-        assert!(config
+        let contains_default = config
             .database_path
             .to_string_lossy()
-            .contains("Things Database.thingsdatabase"));
+            .contains("Things Database.thingsdatabase");
 
-        // In CI, environment variables can be set by parallel tests, so we can't reliably test
-        // the default behavior. Instead, just verify that the config was created successfully
-        // and that the fallback behavior is consistent with what we expect from the environment
-        println!("WARNING: Skipping default behavior test due to potential CI environment variable interference");
-        // Just verify that the config was created successfully
-        assert!(config
-            .database_path
-            .to_string_lossy()
-            .contains("Things Database.thingsdatabase"));
+        if let Some(v) = original_db_path {
+            std::env::set_var("THINGS_DB_PATH", v);
+        }
+        if let Some(v) = original_legacy {
+            std::env::set_var("THINGS_DATABASE_PATH", v);
+        }
+        if let Some(v) = original_fallback {
+            std::env::set_var("THINGS_FALLBACK_TO_DEFAULT", v);
+        }
+
+        assert!(contains_default);
     }
 
     #[test]
@@ -1055,22 +1044,35 @@ mod tests {
     #[test]
     #[serial]
     fn test_config_home_env_var_fallback() {
-        // Test with HOME environment variable
+        // Snapshot all env vars from_env() reads, so we can assert the default
+        // HOME-based path and restore cleanly even if prior serial tests leaked state.
         let original_home = std::env::var("HOME").ok();
+        let original_db_path = std::env::var("THINGS_DB_PATH").ok();
+        let original_legacy = std::env::var("THINGS_DATABASE_PATH").ok();
+
+        std::env::remove_var("THINGS_DB_PATH");
+        std::env::remove_var("THINGS_DATABASE_PATH");
         std::env::set_var("HOME", "/test/home");
 
         let config = ThingsConfig::from_env();
-        assert!(config
+        let contains_default = config
             .database_path
             .to_string_lossy()
-            .contains("Things Database.thingsdatabase"));
+            .contains("Things Database.thingsdatabase");
 
-        // Restore original HOME
         if let Some(home) = original_home {
             std::env::set_var("HOME", home);
         } else {
             std::env::remove_var("HOME");
         }
+        if let Some(v) = original_db_path {
+            std::env::set_var("THINGS_DB_PATH", v);
+        }
+        if let Some(v) = original_legacy {
+            std::env::set_var("THINGS_DATABASE_PATH", v);
+        }
+
+        assert!(contains_default);
     }
 
     #[test]
