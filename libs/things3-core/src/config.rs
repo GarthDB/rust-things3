@@ -149,33 +149,36 @@ mod tests {
     #[test]
     #[serial]
     fn test_config_from_env() {
-        // Test the from_env function by temporarily setting environment variables
-        // and ensuring they are properly cleaned up
         let test_path = "/custom/path/db.sqlite";
 
-        // Save original values
-        let original_db_path = std::env::var("THINGS_DATABASE_PATH").ok();
+        let original_db_path = std::env::var("THINGS_DB_PATH").ok();
+        let original_legacy = std::env::var("THINGS_DATABASE_PATH").ok();
         let original_fallback = std::env::var("THINGS_FALLBACK_TO_DEFAULT").ok();
 
-        // Set test values
+        std::env::remove_var("THINGS_DB_PATH");
         std::env::set_var("THINGS_DATABASE_PATH", test_path);
         std::env::set_var("THINGS_FALLBACK_TO_DEFAULT", "true");
 
         let config = ThingsConfig::from_env();
-        assert_eq!(config.database_path, PathBuf::from(test_path));
-        assert!(config.fallback_to_default);
+        let path_matches = config.database_path == PathBuf::from(test_path);
+        let fallback_set = config.fallback_to_default;
 
-        // Clean up immediately
-        if let Some(path) = original_db_path {
-            std::env::set_var("THINGS_DATABASE_PATH", path);
+        if let Some(v) = original_db_path {
+            std::env::set_var("THINGS_DB_PATH", v);
+        }
+        if let Some(v) = original_legacy {
+            std::env::set_var("THINGS_DATABASE_PATH", v);
         } else {
             std::env::remove_var("THINGS_DATABASE_PATH");
         }
-        if let Some(fallback) = original_fallback {
-            std::env::set_var("THINGS_FALLBACK_TO_DEFAULT", fallback);
+        if let Some(v) = original_fallback {
+            std::env::set_var("THINGS_FALLBACK_TO_DEFAULT", v);
         } else {
             std::env::remove_var("THINGS_FALLBACK_TO_DEFAULT");
         }
+
+        assert!(path_matches);
+        assert!(fallback_set);
     }
 
     #[test]
@@ -302,118 +305,108 @@ mod tests {
     fn test_config_from_env_with_custom_path() {
         let test_path = "/test/env/custom/path";
 
-        // Save original values
-        let original_db_path = std::env::var("THINGS_DATABASE_PATH").ok();
+        let original_db_path = std::env::var("THINGS_DB_PATH").ok();
+        let original_legacy = std::env::var("THINGS_DATABASE_PATH").ok();
         let original_fallback = std::env::var("THINGS_FALLBACK_TO_DEFAULT").ok();
 
-        // Set test values
+        std::env::remove_var("THINGS_DB_PATH");
         std::env::set_var("THINGS_DATABASE_PATH", test_path);
         std::env::set_var("THINGS_FALLBACK_TO_DEFAULT", "false");
 
         let config = ThingsConfig::from_env();
-        assert_eq!(config.database_path, PathBuf::from(test_path));
-        assert!(!config.fallback_to_default);
+        let path_matches = config.database_path == PathBuf::from(test_path);
+        let fallback_off = !config.fallback_to_default;
 
-        // Clean up immediately
-        if let Some(path) = original_db_path {
-            std::env::set_var("THINGS_DATABASE_PATH", path);
+        if let Some(v) = original_db_path {
+            std::env::set_var("THINGS_DB_PATH", v);
+        }
+        if let Some(v) = original_legacy {
+            std::env::set_var("THINGS_DATABASE_PATH", v);
         } else {
             std::env::remove_var("THINGS_DATABASE_PATH");
         }
-        if let Some(fallback) = original_fallback {
-            std::env::set_var("THINGS_FALLBACK_TO_DEFAULT", fallback);
+        if let Some(v) = original_fallback {
+            std::env::set_var("THINGS_FALLBACK_TO_DEFAULT", v);
         } else {
             std::env::remove_var("THINGS_FALLBACK_TO_DEFAULT");
         }
+
+        assert!(path_matches);
+        assert!(fallback_off);
     }
 
     #[test]
     #[serial]
     fn test_config_from_env_with_fallback() {
-        // Use a unique test identifier to avoid conflicts
         let test_id = std::thread::current().id();
         let test_path = format!("/test/env/path/fallback_{test_id:?}");
 
-        // Clear any existing environment variables first
-        std::env::remove_var("THINGS_DATABASE_PATH");
-        std::env::remove_var("THINGS_FALLBACK_TO_DEFAULT");
-
-        // Save original values
-        let original_db_path = std::env::var("THINGS_DATABASE_PATH").ok();
+        let original_db_path = std::env::var("THINGS_DB_PATH").ok();
+        let original_legacy = std::env::var("THINGS_DATABASE_PATH").ok();
         let original_fallback = std::env::var("THINGS_FALLBACK_TO_DEFAULT").ok();
 
-        // Set test values with a unique path to avoid conflicts
+        std::env::remove_var("THINGS_DB_PATH");
         std::env::set_var("THINGS_DATABASE_PATH", &test_path);
         std::env::set_var("THINGS_FALLBACK_TO_DEFAULT", "true");
 
         let config = ThingsConfig::from_env();
+        let path_matches =
+            config.database_path.to_string_lossy() == PathBuf::from(&test_path).to_string_lossy();
+        let fallback_set = config.fallback_to_default;
 
-        // Check that the database path is set to what we specified
-        // In CI environments, paths might be resolved differently, so we check the string representation
-        let expected_path = PathBuf::from(test_path);
-        let actual_path = config.database_path;
-        assert_eq!(
-            actual_path.to_string_lossy(),
-            expected_path.to_string_lossy()
-        );
-        assert!(config.fallback_to_default);
-
-        // Restore original values
-        if let Some(db_path) = original_db_path {
-            std::env::set_var("THINGS_DATABASE_PATH", db_path);
+        if let Some(v) = original_db_path {
+            std::env::set_var("THINGS_DB_PATH", v);
+        }
+        if let Some(v) = original_legacy {
+            std::env::set_var("THINGS_DATABASE_PATH", v);
         } else {
             std::env::remove_var("THINGS_DATABASE_PATH");
         }
-
-        if let Some(fallback) = original_fallback {
-            std::env::set_var("THINGS_FALLBACK_TO_DEFAULT", fallback);
+        if let Some(v) = original_fallback {
+            std::env::set_var("THINGS_FALLBACK_TO_DEFAULT", v);
         } else {
             std::env::remove_var("THINGS_FALLBACK_TO_DEFAULT");
         }
+
+        assert!(path_matches);
+        assert!(fallback_set);
     }
 
     #[test]
     #[serial]
     fn test_config_from_env_with_invalid_fallback() {
-        // Use a unique test identifier to avoid conflicts
         let test_id = std::thread::current().id();
         let test_path = format!("/test/env/path/invalid_{test_id:?}");
 
-        // Clear any existing environment variables first
-        std::env::remove_var("THINGS_DATABASE_PATH");
-        std::env::remove_var("THINGS_FALLBACK_TO_DEFAULT");
-
-        // Save original values
-        let original_db_path = std::env::var("THINGS_DATABASE_PATH").ok();
+        let original_db_path = std::env::var("THINGS_DB_PATH").ok();
+        let original_legacy = std::env::var("THINGS_DATABASE_PATH").ok();
         let original_fallback = std::env::var("THINGS_FALLBACK_TO_DEFAULT").ok();
 
+        std::env::remove_var("THINGS_DB_PATH");
         std::env::set_var("THINGS_DATABASE_PATH", &test_path);
         std::env::set_var("THINGS_FALLBACK_TO_DEFAULT", "invalid");
+
         let config = ThingsConfig::from_env();
+        let path_matches =
+            config.database_path.to_string_lossy() == PathBuf::from(&test_path).to_string_lossy();
+        let fallback_off = !config.fallback_to_default;
 
-        // Check that the database path is set to what we specified
-        // Use canonicalize to handle path resolution differences in CI
-        let expected_path = PathBuf::from(&test_path);
-        let actual_path = config.database_path;
-
-        // In CI environments, paths might be resolved differently, so we check the string representation
-        assert_eq!(
-            actual_path.to_string_lossy(),
-            expected_path.to_string_lossy()
-        );
-        assert!(!config.fallback_to_default); // Should default to false for invalid value
-
-        // Restore original values
-        if let Some(path) = original_db_path {
-            std::env::set_var("THINGS_DATABASE_PATH", path);
+        if let Some(v) = original_db_path {
+            std::env::set_var("THINGS_DB_PATH", v);
+        }
+        if let Some(v) = original_legacy {
+            std::env::set_var("THINGS_DATABASE_PATH", v);
         } else {
             std::env::remove_var("THINGS_DATABASE_PATH");
         }
-        if let Some(fallback) = original_fallback {
-            std::env::set_var("THINGS_FALLBACK_TO_DEFAULT", fallback);
+        if let Some(v) = original_fallback {
+            std::env::set_var("THINGS_FALLBACK_TO_DEFAULT", v);
         } else {
             std::env::remove_var("THINGS_FALLBACK_TO_DEFAULT");
         }
+
+        assert!(path_matches);
+        assert!(fallback_off);
     }
 
     #[test]
