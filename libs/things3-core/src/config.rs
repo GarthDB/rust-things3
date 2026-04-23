@@ -126,6 +126,7 @@ impl Default for ThingsConfig {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serial_test::serial;
     use tempfile::NamedTempFile;
 
     #[test]
@@ -146,7 +147,7 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "Flaky test due to environment variable conflicts in parallel execution"]
+    #[serial]
     fn test_config_from_env() {
         // Test the from_env function by temporarily setting environment variables
         // and ensuring they are properly cleaned up
@@ -178,7 +179,7 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "Mutates env vars; must run serially (cargo test -- --ignored --test-threads=1)"]
+    #[serial]
     fn test_from_env_reads_things_db_path() {
         let test_path = "/custom/path/via_db_path.sqlite";
 
@@ -202,7 +203,7 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "Mutates env vars; must run serially (cargo test -- --ignored --test-threads=1)"]
+    #[serial]
     fn test_from_env_prefers_things_db_path_over_legacy() {
         let new_path = "/new/preferred.sqlite";
         let legacy_path = "/legacy/ignored.sqlite";
@@ -229,7 +230,7 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "Mutates env vars; must run serially (cargo test -- --ignored --test-threads=1)"]
+    #[serial]
     fn test_from_env_falls_back_to_legacy_things_database_path() {
         let legacy_path = "/legacy/only.sqlite";
 
@@ -297,7 +298,7 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "Flaky test due to environment variable conflicts in parallel execution"]
+    #[serial]
     fn test_config_from_env_with_custom_path() {
         let test_path = "/test/env/custom/path";
 
@@ -327,7 +328,7 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "Flaky test due to environment variable conflicts in parallel execution"]
+    #[serial]
     fn test_config_from_env_with_fallback() {
         // Use a unique test identifier to avoid conflicts
         let test_id = std::thread::current().id();
@@ -372,7 +373,7 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "Flaky test due to environment variable conflicts in parallel execution"]
+    #[serial]
     fn test_config_from_env_with_invalid_fallback() {
         // Use a unique test identifier to avoid conflicts
         let test_id = std::thread::current().id();
@@ -994,7 +995,7 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "Flaky test due to environment variable conflicts in parallel execution"]
+    #[serial]
     fn test_config_from_env_fallback_parsing_with_env_vars() {
         // Save original value
         let original_value = std::env::var("THINGS_FALLBACK_TO_DEFAULT").ok();
