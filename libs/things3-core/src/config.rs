@@ -160,7 +160,7 @@ mod tests {
         std::env::set_var("THINGS_FALLBACK_TO_DEFAULT", "true");
 
         let config = ThingsConfig::from_env();
-        let path_matches = config.database_path == PathBuf::from(test_path);
+        let path_matches = config.database_path.as_os_str() == test_path;
         let fallback_set = config.fallback_to_default;
 
         if let Some(v) = original_db_path {
@@ -314,7 +314,7 @@ mod tests {
         std::env::set_var("THINGS_FALLBACK_TO_DEFAULT", "false");
 
         let config = ThingsConfig::from_env();
-        let path_matches = config.database_path == PathBuf::from(test_path);
+        let path_matches = config.database_path.as_os_str() == test_path;
         let fallback_off = !config.fallback_to_default;
 
         if let Some(v) = original_db_path {
