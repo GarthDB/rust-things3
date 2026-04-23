@@ -195,7 +195,6 @@ base64 = "0.21"
 sha2 = "0.10"
 hmac = "0.12"
 ring = "0.17"
-oauth2 = "4.4"
 url = "2.4"
 
 # Rate limiting
