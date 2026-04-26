@@ -2264,7 +2264,7 @@ impl ThingsDatabase {
         let mut all_tags = self.get_all_tags().await?;
 
         // Sort by usage count (highest first)
-        all_tags.sort_by(|a, b| b.usage_count.cmp(&a.usage_count));
+        all_tags.sort_by_key(|t| std::cmp::Reverse(t.usage_count));
 
         // Take the top N
         all_tags.truncate(limit);
@@ -3061,7 +3061,7 @@ impl ThingsDatabase {
 
         // Sort related tags by co-occurrence count
         let mut related_vec: Vec<(String, u32)> = related_tags.into_iter().collect();
-        related_vec.sort_by(|a, b| b.1.cmp(&a.1));
+        related_vec.sort_by_key(|r| std::cmp::Reverse(r.1));
 
         Ok(crate::models::TagStatistics {
             uuid: *uuid,
