@@ -1,3 +1,5 @@
+#[cfg(feature = "advanced-queries")]
+use crate::models::TaskFilters;
 use crate::{
     database::{mappers::map_task_row, query_builders::TaskUpdateBuilder, validators},
     error::{Result as ThingsResult, ThingsError},
@@ -906,6 +908,152 @@ impl ThingsDatabase {
             .collect::<ThingsResult<Vec<Task>>>()?;
 
         debug!("Found {} tasks matching query: {}", tasks.len(), query);
+        Ok(tasks)
+    }
+
+    /// Query tasks using a [`TaskFilters`] struct produced by [`crate::query::TaskQueryBuilder`].
+    ///
+    /// All filter fields are optional and combined with AND semantics in SQL.
+    /// Tag and search-query filters are applied in Rust after the SQL query returns
+    /// (Things 3 stores tags as a BLOB). When those post-filters are active,
+    /// `LIMIT`/`OFFSET` is also applied in Rust so pagination counts only
+    /// matching rows; without post-filters it is applied in SQL for efficiency.
+    ///
+    /// Filtering by [`TaskStatus::Trashed`] queries rows where `trashed = 1`
+    /// rather than adding a `status` condition, matching Things 3's soft-delete
+    /// semantics (trashed rows keep their original status value).
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database query fails or task data cannot be mapped.
+    #[cfg(feature = "advanced-queries")]
+    pub async fn query_tasks(&self, filters: &TaskFilters) -> ThingsResult<Vec<Task>> {
+        const COLS: &str = "uuid, title, type, status, notes, startDate, deadline, stopDate, \
+                            creationDate, userModificationDate, project, area, heading, cachedTags";
+
+        // Things 3 soft-deletes by setting trashed = 1; the status column is unchanged.
+        // Requesting Trashed means "show trashed rows", not a status = 3 predicate.
+        let trashed_val = i32::from(matches!(filters.status, Some(TaskStatus::Trashed)));
+        let mut conditions: Vec<String> = vec![format!("trashed = {trashed_val}")];
+
+        if let Some(status) = filters.status {
+            let n = match status {
+                TaskStatus::Incomplete => Some(0),
+                TaskStatus::Completed => Some(1),
+                TaskStatus::Canceled => Some(2),
+                TaskStatus::Trashed => None, // handled via trashed = 1 above
+            };
+            if let Some(n) = n {
+                conditions.push(format!("status = {n}"));
+            }
+        }
+
+        if let Some(task_type) = filters.task_type {
+            let n = match task_type {
+                TaskType::Todo => 0,
+                TaskType::Project => 1,
+                TaskType::Heading => 2,
+                TaskType::Area => 3,
+            };
+            conditions.push(format!("type = {n}"));
+        }
+
+        if let Some(ref uuid) = filters.project_uuid {
+            conditions.push(format!("project = '{uuid}'"));
+        }
+
+        if let Some(ref uuid) = filters.area_uuid {
+            conditions.push(format!("area = '{uuid}'"));
+        }
+
+        if let Some(from) = filters.start_date_from {
+            conditions.push(format!(
+                "startDate >= {}",
+                naive_date_to_things_timestamp(from)
+            ));
+        }
+        if let Some(to) = filters.start_date_to {
+            conditions.push(format!(
+                "startDate <= {}",
+                naive_date_to_things_timestamp(to)
+            ));
+        }
+
+        if let Some(from) = filters.deadline_from {
+            conditions.push(format!(
+                "deadline >= {}",
+                naive_date_to_things_timestamp(from)
+            ));
+        }
+        if let Some(to) = filters.deadline_to {
+            conditions.push(format!(
+                "deadline <= {}",
+                naive_date_to_things_timestamp(to)
+            ));
+        }
+
+        let where_clause = conditions.join(" AND ");
+        let mut sql =
+            format!("SELECT {COLS} FROM TMTask WHERE {where_clause} ORDER BY creationDate DESC");
+
+        // When tags or search_query are active, LIMIT/OFFSET must be applied in Rust after
+        // post-filtering, because SQL LIMIT would count non-matching rows and produce incorrect pages.
+        let has_post_filters =
+            filters.tags.as_ref().is_some_and(|t| !t.is_empty()) || filters.search_query.is_some();
+
+        if !has_post_filters {
+            match (filters.limit, filters.offset) {
+                (Some(limit), Some(offset)) => {
+                    sql.push_str(&format!(" LIMIT {limit} OFFSET {offset}"));
+                }
+                (Some(limit), None) => {
+                    sql.push_str(&format!(" LIMIT {limit}"));
+                }
+                (None, Some(offset)) => {
+                    // SQLite requires LIMIT when OFFSET is used; -1 means unlimited
+                    sql.push_str(&format!(" LIMIT -1 OFFSET {offset}"));
+                }
+                (None, None) => {}
+            }
+        }
+
+        let rows = sqlx::query(&sql)
+            .fetch_all(&self.pool)
+            .await
+            .map_err(|e| ThingsError::unknown(format!("Failed to query tasks: {e}")))?;
+
+        let mut tasks = rows
+            .iter()
+            .map(map_task_row)
+            .collect::<ThingsResult<Vec<Task>>>()?;
+
+        if let Some(ref filter_tags) = filters.tags {
+            if !filter_tags.is_empty() {
+                tasks.retain(|task| filter_tags.iter().all(|f| task.tags.contains(f)));
+            }
+        }
+
+        if let Some(ref q) = filters.search_query {
+            let q_lower = q.to_lowercase();
+            tasks.retain(|task| {
+                task.title.to_lowercase().contains(&q_lower)
+                    || task
+                        .notes
+                        .as_deref()
+                        .unwrap_or("")
+                        .to_lowercase()
+                        .contains(&q_lower)
+            });
+        }
+
+        if has_post_filters {
+            let offset = filters.offset.unwrap_or(0);
+            tasks = tasks.into_iter().skip(offset).collect();
+            if let Some(limit) = filters.limit {
+                tasks.truncate(limit);
+            }
+        }
+
         Ok(tasks)
     }
 
@@ -4343,6 +4491,176 @@ mod tests {
                 month,
                 day
             );
+        }
+    }
+
+    #[cfg(feature = "advanced-queries")]
+    mod query_tasks_tests {
+        use super::*;
+        use crate::models::TaskFilters;
+        use tempfile::NamedTempFile;
+
+        async fn open_test_db() -> (ThingsDatabase, NamedTempFile) {
+            let f = NamedTempFile::new().unwrap();
+            crate::test_utils::create_test_database(f.path())
+                .await
+                .unwrap();
+            let db = ThingsDatabase::new(f.path()).await.unwrap();
+            (db, f)
+        }
+
+        #[tokio::test]
+        async fn test_query_tasks_no_filters() {
+            let (db, _f) = open_test_db().await;
+            let result = db.query_tasks(&TaskFilters::default()).await;
+            assert!(result.is_ok());
+        }
+
+        #[tokio::test]
+        async fn test_query_tasks_status_filter() {
+            let (db, _f) = open_test_db().await;
+            let filters = TaskFilters {
+                status: Some(TaskStatus::Completed),
+                ..TaskFilters::default()
+            };
+            let tasks = db.query_tasks(&filters).await.unwrap();
+            assert!(tasks.iter().all(|t| t.status == TaskStatus::Completed));
+        }
+
+        #[tokio::test]
+        async fn test_query_tasks_limit() {
+            let (db, _f) = open_test_db().await;
+            let filters = TaskFilters {
+                limit: Some(1),
+                ..TaskFilters::default()
+            };
+            let tasks = db.query_tasks(&filters).await.unwrap();
+            assert!(tasks.len() <= 1);
+        }
+
+        #[tokio::test]
+        async fn test_query_tasks_tag_filter_and_semantics() {
+            let (db, _f) = open_test_db().await;
+            let filters = TaskFilters {
+                tags: Some(vec!["nonexistent-tag-xyz".to_string()]),
+                ..TaskFilters::default()
+            };
+            let tasks = db.query_tasks(&filters).await.unwrap();
+            assert!(tasks.is_empty());
+        }
+
+        #[tokio::test]
+        async fn test_query_tasks_search_query() {
+            let (db, _f) = open_test_db().await;
+            let filters = TaskFilters {
+                search_query: Some("zzznomatch".to_string()),
+                ..TaskFilters::default()
+            };
+            let tasks = db.query_tasks(&filters).await.unwrap();
+            assert!(tasks.is_empty());
+        }
+
+        #[tokio::test]
+        async fn test_query_tasks_trashed_status() {
+            use sqlx::SqlitePool;
+            use uuid::Uuid;
+
+            // Create a DB, insert one soft-deleted row (trashed = 1), then verify:
+            // - default query (trashed = 0) does NOT return it
+            // - TaskStatus::Trashed filter DOES return it
+            let f = NamedTempFile::new().unwrap();
+            crate::test_utils::create_test_database(f.path())
+                .await
+                .unwrap();
+            let pool = SqlitePool::connect(&format!("sqlite:{}", f.path().display()))
+                .await
+                .unwrap();
+            let trashed_uuid = Uuid::new_v4().to_string();
+            sqlx::query(
+                "INSERT INTO TMTask \
+                 (uuid, title, type, status, trashed, creationDate, userModificationDate) \
+                 VALUES (?, ?, 0, 0, 1, 0, 0)",
+            )
+            .bind(&trashed_uuid)
+            .bind("Trashed Task")
+            .execute(&pool)
+            .await
+            .unwrap();
+            pool.close().await;
+
+            let db = ThingsDatabase::new(f.path()).await.unwrap();
+
+            // Default query must not surface the trashed row
+            let active = db.query_tasks(&TaskFilters::default()).await.unwrap();
+            assert!(active.iter().all(|t| t.uuid.to_string() != trashed_uuid));
+
+            // Trashed filter must surface it
+            let trashed = db
+                .query_tasks(&TaskFilters {
+                    status: Some(TaskStatus::Trashed),
+                    ..TaskFilters::default()
+                })
+                .await
+                .unwrap();
+            assert!(
+                trashed.iter().any(|t| t.uuid.to_string() == trashed_uuid),
+                "expected trashed row to be returned by TaskStatus::Trashed filter"
+            );
+        }
+
+        #[tokio::test]
+        async fn test_query_tasks_offset_without_limit() {
+            // Bug fix: offset must not be silently ignored when limit is absent
+            let (db, _f) = open_test_db().await;
+            let all = db.query_tasks(&TaskFilters::default()).await.unwrap();
+            if all.len() < 2 {
+                return; // not enough rows to test pagination
+            }
+            let filters = TaskFilters {
+                offset: Some(1),
+                ..TaskFilters::default()
+            };
+            let offset_tasks = db.query_tasks(&filters).await.unwrap();
+            assert_eq!(offset_tasks.len(), all.len() - 1);
+            assert_eq!(offset_tasks[0].uuid, all[1].uuid);
+        }
+
+        #[tokio::test]
+        async fn test_query_tasks_pagination_with_post_filter() {
+            // Bug fix: LIMIT/OFFSET must count post-filter matches, not raw SQL rows
+            let (db, _f) = open_test_db().await;
+            // Fetch all tasks matching search (may be 0 in empty test DB — that's fine)
+            let all_matching = db
+                .query_tasks(&TaskFilters {
+                    search_query: Some(String::new()),
+                    ..TaskFilters::default()
+                })
+                .await
+                .unwrap();
+            if all_matching.len() < 2 {
+                return;
+            }
+            let page0 = db
+                .query_tasks(&TaskFilters {
+                    search_query: Some(String::new()),
+                    limit: Some(1),
+                    offset: Some(0),
+                    ..TaskFilters::default()
+                })
+                .await
+                .unwrap();
+            let page1 = db
+                .query_tasks(&TaskFilters {
+                    search_query: Some(String::new()),
+                    limit: Some(1),
+                    offset: Some(1),
+                    ..TaskFilters::default()
+                })
+                .await
+                .unwrap();
+            assert_eq!(page0.len(), 1);
+            assert_eq!(page1.len(), 1);
+            assert_ne!(page0[0].uuid, page1[0].uuid);
         }
     }
 }

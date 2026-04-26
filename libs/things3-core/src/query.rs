@@ -100,6 +100,21 @@ impl TaskQueryBuilder {
     pub fn build(self) -> TaskFilters {
         self.filters
     }
+
+    /// Execute the query against a live database connection.
+    ///
+    /// Requires the `advanced-queries` feature flag.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database query fails or task data cannot be mapped.
+    #[cfg(feature = "advanced-queries")]
+    pub async fn execute(
+        &self,
+        db: &crate::database::ThingsDatabase,
+    ) -> crate::error::Result<Vec<crate::models::Task>> {
+        db.query_tasks(&self.filters).await
+    }
 }
 
 impl Default for TaskQueryBuilder {
@@ -230,6 +245,45 @@ mod tests {
         let filters = builder.build();
 
         assert_eq!(filters.offset, Some(10));
+    }
+
+    #[cfg(feature = "advanced-queries")]
+    mod execute_tests {
+        use super::*;
+        use tempfile::NamedTempFile;
+
+        #[tokio::test]
+        async fn test_execute_empty_builder() {
+            let f = NamedTempFile::new().unwrap();
+            crate::test_utils::create_test_database(f.path())
+                .await
+                .unwrap();
+            let db = crate::database::ThingsDatabase::new(f.path())
+                .await
+                .unwrap();
+            let result = TaskQueryBuilder::new().execute(&db).await;
+            assert!(result.is_ok());
+        }
+
+        #[tokio::test]
+        async fn test_execute_with_status_filter() {
+            let f = NamedTempFile::new().unwrap();
+            crate::test_utils::create_test_database(f.path())
+                .await
+                .unwrap();
+            let db = crate::database::ThingsDatabase::new(f.path())
+                .await
+                .unwrap();
+            let result = TaskQueryBuilder::new()
+                .status(TaskStatus::Incomplete)
+                .execute(&db)
+                .await;
+            assert!(result.is_ok());
+            assert!(result
+                .unwrap()
+                .iter()
+                .all(|t| t.status == TaskStatus::Incomplete));
+        }
     }
 
     #[test]
