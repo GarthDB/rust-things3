@@ -986,10 +986,24 @@ impl ThingsDatabase {
         let mut sql =
             format!("SELECT {COLS} FROM TMTask WHERE {where_clause} ORDER BY creationDate DESC");
 
-        if let Some(limit) = filters.limit {
-            sql.push_str(&format!(" LIMIT {limit}"));
-            if let Some(offset) = filters.offset {
-                sql.push_str(&format!(" OFFSET {offset}"));
+        // When tags or search_query are active, LIMIT/OFFSET must be applied in Rust after
+        // post-filtering, because SQL LIMIT would count non-matching rows and produce incorrect pages.
+        let has_post_filters =
+            filters.tags.as_ref().is_some_and(|t| !t.is_empty()) || filters.search_query.is_some();
+
+        if !has_post_filters {
+            match (filters.limit, filters.offset) {
+                (Some(limit), Some(offset)) => {
+                    sql.push_str(&format!(" LIMIT {limit} OFFSET {offset}"));
+                }
+                (Some(limit), None) => {
+                    sql.push_str(&format!(" LIMIT {limit}"));
+                }
+                (None, Some(offset)) => {
+                    // SQLite requires LIMIT when OFFSET is used; -1 means unlimited
+                    sql.push_str(&format!(" LIMIT -1 OFFSET {offset}"));
+                }
+                (None, None) => {}
             }
         }
 
@@ -1020,6 +1034,14 @@ impl ThingsDatabase {
                         .to_lowercase()
                         .contains(&q_lower)
             });
+        }
+
+        if has_post_filters {
+            let offset = filters.offset.unwrap_or(0);
+            tasks = tasks.into_iter().skip(offset).collect();
+            if let Some(limit) = filters.limit {
+                tasks.truncate(limit);
+            }
         }
 
         Ok(tasks)
@@ -4526,6 +4548,61 @@ mod tests {
             };
             let tasks = db.query_tasks(&filters).await.unwrap();
             assert!(tasks.is_empty());
+        }
+
+        #[tokio::test]
+        async fn test_query_tasks_offset_without_limit() {
+            // Bug fix: offset must not be silently ignored when limit is absent
+            let (db, _f) = open_test_db().await;
+            let all = db.query_tasks(&TaskFilters::default()).await.unwrap();
+            if all.len() < 2 {
+                return; // not enough rows to test pagination
+            }
+            let filters = TaskFilters {
+                offset: Some(1),
+                ..TaskFilters::default()
+            };
+            let offset_tasks = db.query_tasks(&filters).await.unwrap();
+            assert_eq!(offset_tasks.len(), all.len() - 1);
+            assert_eq!(offset_tasks[0].uuid, all[1].uuid);
+        }
+
+        #[tokio::test]
+        async fn test_query_tasks_pagination_with_post_filter() {
+            // Bug fix: LIMIT/OFFSET must count post-filter matches, not raw SQL rows
+            let (db, _f) = open_test_db().await;
+            // Fetch all tasks matching search (may be 0 in empty test DB — that's fine)
+            let all_matching = db
+                .query_tasks(&TaskFilters {
+                    search_query: Some(String::new()),
+                    ..TaskFilters::default()
+                })
+                .await
+                .unwrap();
+            if all_matching.len() < 2 {
+                return;
+            }
+            let page0 = db
+                .query_tasks(&TaskFilters {
+                    search_query: Some(String::new()),
+                    limit: Some(1),
+                    offset: Some(0),
+                    ..TaskFilters::default()
+                })
+                .await
+                .unwrap();
+            let page1 = db
+                .query_tasks(&TaskFilters {
+                    search_query: Some(String::new()),
+                    limit: Some(1),
+                    offset: Some(1),
+                    ..TaskFilters::default()
+                })
+                .await
+                .unwrap();
+            assert_eq!(page0.len(), 1);
+            assert_eq!(page1.len(), 1);
+            assert_ne!(page0[0].uuid, page1[0].uuid);
         }
     }
 }
