@@ -4468,24 +4468,25 @@ mod tests {
         use crate::models::TaskFilters;
         use tempfile::NamedTempFile;
 
-        async fn open_test_db() -> ThingsDatabase {
+        async fn open_test_db() -> (ThingsDatabase, NamedTempFile) {
             let f = NamedTempFile::new().unwrap();
             crate::test_utils::create_test_database(f.path())
                 .await
                 .unwrap();
-            ThingsDatabase::new(f.path()).await.unwrap()
+            let db = ThingsDatabase::new(f.path()).await.unwrap();
+            (db, f)
         }
 
         #[tokio::test]
         async fn test_query_tasks_no_filters() {
-            let db = open_test_db().await;
+            let (db, _f) = open_test_db().await;
             let result = db.query_tasks(&TaskFilters::default()).await;
             assert!(result.is_ok());
         }
 
         #[tokio::test]
         async fn test_query_tasks_status_filter() {
-            let db = open_test_db().await;
+            let (db, _f) = open_test_db().await;
             let filters = TaskFilters {
                 status: Some(TaskStatus::Completed),
                 ..TaskFilters::default()
@@ -4496,7 +4497,7 @@ mod tests {
 
         #[tokio::test]
         async fn test_query_tasks_limit() {
-            let db = open_test_db().await;
+            let (db, _f) = open_test_db().await;
             let filters = TaskFilters {
                 limit: Some(1),
                 ..TaskFilters::default()
@@ -4507,7 +4508,7 @@ mod tests {
 
         #[tokio::test]
         async fn test_query_tasks_tag_filter_and_semantics() {
-            let db = open_test_db().await;
+            let (db, _f) = open_test_db().await;
             let filters = TaskFilters {
                 tags: Some(vec!["nonexistent-tag-xyz".to_string()]),
                 ..TaskFilters::default()
@@ -4518,7 +4519,7 @@ mod tests {
 
         #[tokio::test]
         async fn test_query_tasks_search_query() {
-            let db = open_test_db().await;
+            let (db, _f) = open_test_db().await;
             let filters = TaskFilters {
                 search_query: Some("zzznomatch".to_string()),
                 ..TaskFilters::default()
