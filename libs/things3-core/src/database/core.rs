@@ -914,9 +914,14 @@ impl ThingsDatabase {
     /// Query tasks using a [`TaskFilters`] struct produced by [`crate::query::TaskQueryBuilder`].
     ///
     /// All filter fields are optional and combined with AND semantics in SQL.
-    /// Tag and search-query filters are applied in Rust after the query returns
-    /// (Things 3 stores tags as a BLOB). `LIMIT` is applied in SQL, so pages may
-    /// be smaller than requested when tag/search filters are also active.
+    /// Tag and search-query filters are applied in Rust after the SQL query returns
+    /// (Things 3 stores tags as a BLOB). When those post-filters are active,
+    /// `LIMIT`/`OFFSET` is also applied in Rust so pagination counts only
+    /// matching rows; without post-filters it is applied in SQL for efficiency.
+    ///
+    /// Filtering by [`TaskStatus::Trashed`] queries rows where `trashed = 1`
+    /// rather than adding a `status` condition, matching Things 3's soft-delete
+    /// semantics (trashed rows keep their original status value).
     ///
     /// # Errors
     ///
@@ -926,16 +931,21 @@ impl ThingsDatabase {
         const COLS: &str = "uuid, title, type, status, notes, startDate, deadline, stopDate, \
                             creationDate, userModificationDate, project, area, heading, cachedTags";
 
-        let mut conditions: Vec<String> = vec!["trashed = 0".to_string()];
+        // Things 3 soft-deletes by setting trashed = 1; the status column is unchanged.
+        // Requesting Trashed means "show trashed rows", not a status = 3 predicate.
+        let trashed_val = i32::from(matches!(filters.status, Some(TaskStatus::Trashed)));
+        let mut conditions: Vec<String> = vec![format!("trashed = {trashed_val}")];
 
         if let Some(status) = filters.status {
             let n = match status {
-                TaskStatus::Incomplete => 0,
-                TaskStatus::Completed => 1,
-                TaskStatus::Canceled => 2,
-                TaskStatus::Trashed => 3,
+                TaskStatus::Incomplete => Some(0),
+                TaskStatus::Completed => Some(1),
+                TaskStatus::Canceled => Some(2),
+                TaskStatus::Trashed => None, // handled via trashed = 1 above
             };
-            conditions.push(format!("status = {n}"));
+            if let Some(n) = n {
+                conditions.push(format!("status = {n}"));
+            }
         }
 
         if let Some(task_type) = filters.task_type {
@@ -4548,6 +4558,54 @@ mod tests {
             };
             let tasks = db.query_tasks(&filters).await.unwrap();
             assert!(tasks.is_empty());
+        }
+
+        #[tokio::test]
+        async fn test_query_tasks_trashed_status() {
+            use sqlx::SqlitePool;
+            use uuid::Uuid;
+
+            // Create a DB, insert one soft-deleted row (trashed = 1), then verify:
+            // - default query (trashed = 0) does NOT return it
+            // - TaskStatus::Trashed filter DOES return it
+            let f = NamedTempFile::new().unwrap();
+            crate::test_utils::create_test_database(f.path())
+                .await
+                .unwrap();
+            let pool = SqlitePool::connect(&format!("sqlite:{}", f.path().display()))
+                .await
+                .unwrap();
+            let trashed_uuid = Uuid::new_v4().to_string();
+            sqlx::query(
+                "INSERT INTO TMTask \
+                 (uuid, title, type, status, trashed, creationDate, userModificationDate) \
+                 VALUES (?, ?, 0, 0, 1, 0, 0)",
+            )
+            .bind(&trashed_uuid)
+            .bind("Trashed Task")
+            .execute(&pool)
+            .await
+            .unwrap();
+            pool.close().await;
+
+            let db = ThingsDatabase::new(f.path()).await.unwrap();
+
+            // Default query must not surface the trashed row
+            let active = db.query_tasks(&TaskFilters::default()).await.unwrap();
+            assert!(active.iter().all(|t| t.uuid.to_string() != trashed_uuid));
+
+            // Trashed filter must surface it
+            let trashed = db
+                .query_tasks(&TaskFilters {
+                    status: Some(TaskStatus::Trashed),
+                    ..TaskFilters::default()
+                })
+                .await
+                .unwrap();
+            assert!(
+                trashed.iter().any(|t| t.uuid.to_string() == trashed_uuid),
+                "expected trashed row to be returned by TaskStatus::Trashed filter"
+            );
         }
 
         #[tokio::test]
