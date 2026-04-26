@@ -1,7 +1,7 @@
 //! Query builder for filtering and searching tasks
 
 use crate::models::{TaskFilters, TaskStatus, TaskType};
-use chrono::NaiveDate;
+use chrono::{Datelike, Duration, NaiveDate, Utc};
 use uuid::Uuid;
 
 /// Builder for constructing task queries with filters
@@ -95,6 +95,68 @@ impl TaskQueryBuilder {
         self
     }
 
+    /// Filter to tasks whose deadline is today.
+    #[must_use]
+    pub fn due_today(self) -> Self {
+        let today = today();
+        self.deadline_range(Some(today), Some(today))
+    }
+
+    /// Filter to tasks whose deadline falls between today and the upcoming Sunday
+    /// (Monday-Sunday week).
+    #[must_use]
+    pub fn due_this_week(self) -> Self {
+        let today = today();
+        self.deadline_range(Some(today), Some(end_of_week(today)))
+    }
+
+    /// Filter to tasks whose deadline falls in next calendar week (next Monday
+    /// through Sunday, Monday-Sunday week).
+    #[must_use]
+    pub fn due_next_week(self) -> Self {
+        let today = today();
+        let next_monday = end_of_week(today) + Duration::days(1);
+        self.deadline_range(Some(next_monday), Some(end_of_week(next_monday)))
+    }
+
+    /// Filter to tasks whose deadline is between today and `days` days from now (inclusive).
+    #[must_use]
+    pub fn due_in(self, days: i64) -> Self {
+        let today = today();
+        self.deadline_range(Some(today), Some(today + Duration::days(days)))
+    }
+
+    /// Filter to overdue tasks: deadline strictly before today.
+    ///
+    /// If no `status` filter has already been set, this also restricts results
+    /// to incomplete tasks (a completed task isn't meaningfully overdue). An
+    /// explicit `.status(...)` call before this helper is preserved.
+    #[must_use]
+    pub fn overdue(mut self) -> Self {
+        let yesterday = today() - Duration::days(1);
+        self.filters.deadline_from = None;
+        self.filters.deadline_to = Some(yesterday);
+        if self.filters.status.is_none() {
+            self.filters.status = Some(TaskStatus::Incomplete);
+        }
+        self
+    }
+
+    /// Filter to tasks with a start date of today.
+    #[must_use]
+    pub fn starting_today(self) -> Self {
+        let today = today();
+        self.start_date_range(Some(today), Some(today))
+    }
+
+    /// Filter to tasks with a start date between today and the upcoming Sunday
+    /// (Monday-Sunday week).
+    #[must_use]
+    pub fn starting_this_week(self) -> Self {
+        let today = today();
+        self.start_date_range(Some(today), Some(end_of_week(today)))
+    }
+
     /// Build the final filters
     #[must_use]
     pub fn build(self) -> TaskFilters {
@@ -121,6 +183,15 @@ impl Default for TaskQueryBuilder {
     fn default() -> Self {
         Self::new()
     }
+}
+
+fn today() -> NaiveDate {
+    Utc::now().date_naive()
+}
+
+fn end_of_week(d: NaiveDate) -> NaiveDate {
+    let days_from_monday = i64::from(d.weekday().num_days_from_monday());
+    d + Duration::days(6 - days_from_monday)
 }
 
 #[cfg(test)]
@@ -314,5 +385,111 @@ mod tests {
         assert_eq!(filters.search_query, Some("test".to_string()));
         assert_eq!(filters.limit, Some(25));
         assert_eq!(filters.offset, Some(5));
+    }
+
+    mod date_helper_tests {
+        use super::*;
+
+        #[test]
+        fn test_due_today_sets_deadline_range_to_today() {
+            let filters = TaskQueryBuilder::new().due_today().build();
+            let today = today();
+            assert_eq!(filters.deadline_from, Some(today));
+            assert_eq!(filters.deadline_to, Some(today));
+        }
+
+        #[test]
+        fn test_due_this_week_ends_on_sunday() {
+            let filters = TaskQueryBuilder::new().due_this_week().build();
+            let today = today();
+            assert_eq!(filters.deadline_from, Some(today));
+            let to = filters.deadline_to.unwrap();
+            assert_eq!(to.weekday(), chrono::Weekday::Sun);
+            assert!(to >= today);
+        }
+
+        #[test]
+        fn test_due_next_week_spans_monday_to_sunday() {
+            let filters = TaskQueryBuilder::new().due_next_week().build();
+            let from = filters.deadline_from.unwrap();
+            let to = filters.deadline_to.unwrap();
+            assert_eq!(from.weekday(), chrono::Weekday::Mon);
+            assert_eq!(to.weekday(), chrono::Weekday::Sun);
+            assert_eq!(to - from, Duration::days(6));
+            assert!(from > today());
+        }
+
+        #[test]
+        fn test_due_in_n_days() {
+            let filters = TaskQueryBuilder::new().due_in(7).build();
+            let today = today();
+            assert_eq!(filters.deadline_from, Some(today));
+            assert_eq!(filters.deadline_to, Some(today + Duration::days(7)));
+        }
+
+        #[test]
+        fn test_due_in_zero_days_is_today() {
+            let filters = TaskQueryBuilder::new().due_in(0).build();
+            let today = today();
+            assert_eq!(filters.deadline_from, Some(today));
+            assert_eq!(filters.deadline_to, Some(today));
+        }
+
+        #[test]
+        fn test_overdue_sets_deadline_to_yesterday_with_no_lower_bound() {
+            let filters = TaskQueryBuilder::new().overdue().build();
+            let yesterday = today() - Duration::days(1);
+            assert_eq!(filters.deadline_from, None);
+            assert_eq!(filters.deadline_to, Some(yesterday));
+        }
+
+        #[test]
+        fn test_overdue_implicitly_sets_status_incomplete_when_unset() {
+            let filters = TaskQueryBuilder::new().overdue().build();
+            assert_eq!(filters.status, Some(TaskStatus::Incomplete));
+        }
+
+        #[test]
+        fn test_overdue_does_not_override_explicit_status() {
+            let filters = TaskQueryBuilder::new()
+                .status(TaskStatus::Canceled)
+                .overdue()
+                .build();
+            assert_eq!(filters.status, Some(TaskStatus::Canceled));
+        }
+
+        #[test]
+        fn test_starting_today_sets_start_date_range() {
+            let filters = TaskQueryBuilder::new().starting_today().build();
+            let today = today();
+            assert_eq!(filters.start_date_from, Some(today));
+            assert_eq!(filters.start_date_to, Some(today));
+        }
+
+        #[test]
+        fn test_starting_this_week_ends_on_sunday() {
+            let filters = TaskQueryBuilder::new().starting_this_week().build();
+            let today = today();
+            assert_eq!(filters.start_date_from, Some(today));
+            let to = filters.start_date_to.unwrap();
+            assert_eq!(to.weekday(), chrono::Weekday::Sun);
+            assert!(to >= today);
+        }
+
+        #[test]
+        fn test_end_of_week_on_monday_returns_following_sunday() {
+            let monday = NaiveDate::from_ymd_opt(2026, 4, 27).unwrap();
+            assert_eq!(monday.weekday(), chrono::Weekday::Mon);
+            let eow = end_of_week(monday);
+            assert_eq!(eow, NaiveDate::from_ymd_opt(2026, 5, 3).unwrap());
+            assert_eq!(eow.weekday(), chrono::Weekday::Sun);
+        }
+
+        #[test]
+        fn test_end_of_week_on_sunday_returns_same_day() {
+            let sunday = NaiveDate::from_ymd_opt(2026, 5, 3).unwrap();
+            assert_eq!(sunday.weekday(), chrono::Weekday::Sun);
+            assert_eq!(end_of_week(sunday), sunday);
+        }
     }
 }

@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`advanced-queries` feature flag** — gates new query execution APIs so existing builds are unaffected.
 - **`ThingsDatabase::query_tasks(filters: &TaskFilters)`** — executes a dynamic SQL query driven by all `TaskFilters` fields: status, type, project, area, start date range, deadline range, limit, and offset. Tag and search-query filters are applied in Rust after the database fetch.
 - **`TaskQueryBuilder::execute(&ThingsDatabase)`** — end-to-end shorthand that calls `.build()` and `query_tasks()` in one step.
+- **Natural-language date helpers on `TaskQueryBuilder`** — `due_today`, `due_this_week`, `due_next_week`, `due_in(days)`, `overdue`, `starting_today`, `starting_this_week`. Pure builder sugar that delegates to existing `deadline_range` / `start_date_range` setters. Weeks are Monday-Sunday. `overdue()` also implies `status = Incomplete` when no status filter has been set.
 
 ## [1.0.1] - 2026-04-22
 
