@@ -18,7 +18,8 @@ test-utils = []
 export-csv = ["dep:csv"]
 export-opml = ["dep:quick-xml"]
 observability = ["dep:metrics"]
-full = ["export-csv", "export-opml", "observability"]
+advanced-queries = []
+full = ["export-csv", "export-opml", "observability", "advanced-queries"]
 
 [dependencies]
 # Core

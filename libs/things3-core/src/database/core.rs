@@ -1,3 +1,5 @@
+#[cfg(feature = "advanced-queries")]
+use crate::models::TaskFilters;
 use crate::{
     database::{mappers::map_task_row, query_builders::TaskUpdateBuilder, validators},
     error::{Result as ThingsResult, ThingsError},
@@ -906,6 +908,120 @@ impl ThingsDatabase {
             .collect::<ThingsResult<Vec<Task>>>()?;
 
         debug!("Found {} tasks matching query: {}", tasks.len(), query);
+        Ok(tasks)
+    }
+
+    /// Query tasks using a [`TaskFilters`] struct produced by [`crate::query::TaskQueryBuilder`].
+    ///
+    /// All filter fields are optional and combined with AND semantics in SQL.
+    /// Tag and search-query filters are applied in Rust after the query returns
+    /// (Things 3 stores tags as a BLOB). `LIMIT` is applied in SQL, so pages may
+    /// be smaller than requested when tag/search filters are also active.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database query fails or task data cannot be mapped.
+    #[cfg(feature = "advanced-queries")]
+    pub async fn query_tasks(&self, filters: &TaskFilters) -> ThingsResult<Vec<Task>> {
+        const COLS: &str = "uuid, title, type, status, notes, startDate, deadline, stopDate, \
+                            creationDate, userModificationDate, project, area, heading, cachedTags";
+
+        let mut conditions: Vec<String> = vec!["trashed = 0".to_string()];
+
+        if let Some(status) = filters.status {
+            let n = match status {
+                TaskStatus::Incomplete => 0,
+                TaskStatus::Completed => 1,
+                TaskStatus::Canceled => 2,
+                TaskStatus::Trashed => 3,
+            };
+            conditions.push(format!("status = {n}"));
+        }
+
+        if let Some(task_type) = filters.task_type {
+            let n = match task_type {
+                TaskType::Todo => 0,
+                TaskType::Project => 1,
+                TaskType::Heading => 2,
+                TaskType::Area => 3,
+            };
+            conditions.push(format!("type = {n}"));
+        }
+
+        if let Some(ref uuid) = filters.project_uuid {
+            conditions.push(format!("project = '{uuid}'"));
+        }
+
+        if let Some(ref uuid) = filters.area_uuid {
+            conditions.push(format!("area = '{uuid}'"));
+        }
+
+        if let Some(from) = filters.start_date_from {
+            conditions.push(format!(
+                "startDate >= {}",
+                naive_date_to_things_timestamp(from)
+            ));
+        }
+        if let Some(to) = filters.start_date_to {
+            conditions.push(format!(
+                "startDate <= {}",
+                naive_date_to_things_timestamp(to)
+            ));
+        }
+
+        if let Some(from) = filters.deadline_from {
+            conditions.push(format!(
+                "deadline >= {}",
+                naive_date_to_things_timestamp(from)
+            ));
+        }
+        if let Some(to) = filters.deadline_to {
+            conditions.push(format!(
+                "deadline <= {}",
+                naive_date_to_things_timestamp(to)
+            ));
+        }
+
+        let where_clause = conditions.join(" AND ");
+        let mut sql =
+            format!("SELECT {COLS} FROM TMTask WHERE {where_clause} ORDER BY creationDate DESC");
+
+        if let Some(limit) = filters.limit {
+            sql.push_str(&format!(" LIMIT {limit}"));
+            if let Some(offset) = filters.offset {
+                sql.push_str(&format!(" OFFSET {offset}"));
+            }
+        }
+
+        let rows = sqlx::query(&sql)
+            .fetch_all(&self.pool)
+            .await
+            .map_err(|e| ThingsError::unknown(format!("Failed to query tasks: {e}")))?;
+
+        let mut tasks = rows
+            .iter()
+            .map(map_task_row)
+            .collect::<ThingsResult<Vec<Task>>>()?;
+
+        if let Some(ref filter_tags) = filters.tags {
+            if !filter_tags.is_empty() {
+                tasks.retain(|task| filter_tags.iter().all(|f| task.tags.contains(f)));
+            }
+        }
+
+        if let Some(ref q) = filters.search_query {
+            let q_lower = q.to_lowercase();
+            tasks.retain(|task| {
+                task.title.to_lowercase().contains(&q_lower)
+                    || task
+                        .notes
+                        .as_deref()
+                        .unwrap_or("")
+                        .to_lowercase()
+                        .contains(&q_lower)
+            });
+        }
+
         Ok(tasks)
     }
 
@@ -4343,6 +4459,72 @@ mod tests {
                 month,
                 day
             );
+        }
+    }
+
+    #[cfg(feature = "advanced-queries")]
+    mod query_tasks_tests {
+        use super::*;
+        use crate::models::TaskFilters;
+        use tempfile::NamedTempFile;
+
+        async fn open_test_db() -> ThingsDatabase {
+            let f = NamedTempFile::new().unwrap();
+            crate::test_utils::create_test_database(f.path())
+                .await
+                .unwrap();
+            ThingsDatabase::new(f.path()).await.unwrap()
+        }
+
+        #[tokio::test]
+        async fn test_query_tasks_no_filters() {
+            let db = open_test_db().await;
+            let result = db.query_tasks(&TaskFilters::default()).await;
+            assert!(result.is_ok());
+        }
+
+        #[tokio::test]
+        async fn test_query_tasks_status_filter() {
+            let db = open_test_db().await;
+            let filters = TaskFilters {
+                status: Some(TaskStatus::Completed),
+                ..TaskFilters::default()
+            };
+            let tasks = db.query_tasks(&filters).await.unwrap();
+            assert!(tasks.iter().all(|t| t.status == TaskStatus::Completed));
+        }
+
+        #[tokio::test]
+        async fn test_query_tasks_limit() {
+            let db = open_test_db().await;
+            let filters = TaskFilters {
+                limit: Some(1),
+                ..TaskFilters::default()
+            };
+            let tasks = db.query_tasks(&filters).await.unwrap();
+            assert!(tasks.len() <= 1);
+        }
+
+        #[tokio::test]
+        async fn test_query_tasks_tag_filter_and_semantics() {
+            let db = open_test_db().await;
+            let filters = TaskFilters {
+                tags: Some(vec!["nonexistent-tag-xyz".to_string()]),
+                ..TaskFilters::default()
+            };
+            let tasks = db.query_tasks(&filters).await.unwrap();
+            assert!(tasks.is_empty());
+        }
+
+        #[tokio::test]
+        async fn test_query_tasks_search_query() {
+            let db = open_test_db().await;
+            let filters = TaskFilters {
+                search_query: Some("zzznomatch".to_string()),
+                ..TaskFilters::default()
+            };
+            let tasks = db.query_tasks(&filters).await.unwrap();
+            assert!(tasks.is_empty());
         }
     }
 }

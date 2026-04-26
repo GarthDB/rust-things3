@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- **`advanced-queries` feature flag** — gates new query execution APIs so existing builds are unaffected.
+- **`ThingsDatabase::query_tasks(filters: &TaskFilters)`** — executes a dynamic SQL query driven by all `TaskFilters` fields: status, type, project, area, start date range, deadline range, limit, and offset. Tag and search-query filters are applied in Rust after the database fetch.
+- **`TaskQueryBuilder::execute(&ThingsDatabase)`** — end-to-end shorthand that calls `.build()` and `query_tasks()` in one step.
+
 ## [1.0.1] - 2026-04-22
 
 ### Fixed
