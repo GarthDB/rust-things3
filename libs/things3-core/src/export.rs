@@ -442,6 +442,7 @@ fn escape_csv(s: &str) -> String {
 ///
 /// TaskPaper tags are `@word` tokens — no spaces, parens, or `@`.
 /// Whitespace runs become `-`; `@`, `(`, `)`, and control characters are stripped.
+#[cfg(feature = "export-taskpaper")]
 fn sanitize_taskpaper_tag(s: &str) -> String {
     let mut result = String::with_capacity(s.len());
     let mut prev_was_space = false;
@@ -469,6 +470,7 @@ fn sanitize_taskpaper_tag(s: &str) -> String {
 /// Titles must be one line; newlines are replaced with a space.
 /// A trailing `:` would make the line look like a project header — append a
 /// trailing space to prevent that.
+#[cfg(feature = "export-taskpaper")]
 fn escape_taskpaper_title(s: &str) -> String {
     let single_line = s.replace(['\n', '\r'], " ");
     if single_line.ends_with(':') {
@@ -479,6 +481,7 @@ fn escape_taskpaper_title(s: &str) -> String {
 }
 
 /// Format a `NaiveDate` as `YYYY-MM-DD`.
+#[cfg(feature = "export-taskpaper")]
 fn format_date_taskpaper(date: chrono::NaiveDate) -> String {
     date.format("%Y-%m-%d").to_string()
 }
@@ -1200,6 +1203,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "export-taskpaper")]
     fn test_sanitize_taskpaper_tag() {
         assert_eq!(sanitize_taskpaper_tag("work"), "work");
         assert_eq!(sanitize_taskpaper_tag("high priority"), "high-priority");
@@ -1211,6 +1215,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "export-taskpaper")]
     fn test_escape_taskpaper_title() {
         assert_eq!(escape_taskpaper_title("Normal title"), "Normal title");
         assert_eq!(escape_taskpaper_title("Multi\nline"), "Multi line");
