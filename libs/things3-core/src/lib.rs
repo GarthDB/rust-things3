@@ -89,7 +89,7 @@ pub mod saved_queries;
 pub mod test_utils;
 
 pub use backup::{BackupManager, BackupMetadata, BackupStats};
-pub use cache::{CacheConfig, CacheStats, ThingsCache};
+pub use cache::{CacheConfig, CachePreloader, CacheStats, DefaultPreloader, ThingsCache};
 pub use cache_invalidation_middleware::{
     CacheInvalidationHandler, CacheInvalidationMiddleware, InvalidationConfig, InvalidationEvent,
     InvalidationEventType, InvalidationRule, InvalidationStats, InvalidationStrategy,

@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Predictive cache preloading** — new `CachePreloader` trait registered on `ThingsCache` via `set_preloader`/`clear_preloader`. After every `get_*` access the cache calls `predict(key)` to enqueue follow-up keys for warming; the warming-loop tick then calls `warm(key)` for each top-priority queued entry (replacing the previous no-op stub at `start_cache_warming`). Ships a `DefaultPreloader { Weak<ThingsCache>, Arc<ThingsDatabase> }` with three hardcoded heuristics over existing keys: `inbox:all → today:all`, `today:all → inbox:all`, `areas:all → projects:all`. `CacheStats` gains `warmed_keys` and `warming_runs` counters so tests and operators can confirm the loop is doing work. Default behavior unchanged for callers that don't register a preloader.
 - **Dependency-based cache invalidation** — `ThingsCache::invalidate_by_entity` / `invalidate_by_operation` now consult the `CacheDependency` list attached to each cached entry and evict only matching entries instead of nuking every cache. New `CacheDependency::matches` and `CacheDependency::matches_operation` helpers expose the matching rules. New `ThingsCacheInvalidationHandler` bridges `CacheInvalidationMiddleware` events into the cache so registering it makes `process_event(...)` actually evict dependent entries; cascade invalidation now reads `project_uuid` / `area_uuid` from `event.metadata` to populate concrete `entity_id`s on dependent events instead of `None`.
 
 ### Changed

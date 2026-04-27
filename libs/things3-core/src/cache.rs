@@ -178,6 +178,35 @@ pub struct CacheStats {
     pub misses: u64,
     pub entries: u64,
     pub hit_rate: f64,
+    /// Total number of times the warming loop has called `preloader.warm(key)`.
+    pub warmed_keys: u64,
+    /// Total number of warming loop ticks that dispatched at least one key to the registered preloader.
+    pub warming_runs: u64,
+}
+
+/// Hook for predictive cache preloading.
+///
+/// `ThingsCache` calls [`CachePreloader::predict`] after every `get_*` access
+/// (hit or miss) to ask "given that key X was just accessed, what should we
+/// queue for background warming?" The returned `(key, priority)` pairs are
+/// pushed into the cache's priority queue via [`ThingsCache::add_to_warming`].
+///
+/// On each warming-loop tick, the cache picks the top-priority queued keys
+/// and calls [`CachePreloader::warm`] for each. The implementor is expected
+/// to fetch the data and populate the cache (typically by `tokio::spawn`ing
+/// a task that calls back into `cache.get_*(key, fetcher)`). `warm` is
+/// fire-and-forget — errors must be handled internally.
+///
+/// The trait is synchronous to stay dyn-compatible without `async-trait`.
+/// Implementors that need async work should spawn it inside `warm`.
+pub trait CachePreloader: Send + Sync + 'static {
+    /// Called after a cache access. Returns `(key, priority)` pairs to enqueue
+    /// for background warming. Return `vec![]` to opt out for this access.
+    fn predict(&self, accessed_key: &str) -> Vec<(String, u32)>;
+
+    /// Called by the warming loop for each top-priority queued key.
+    /// Implementor fetches and populates the cache, typically via `tokio::spawn`.
+    fn warm(&self, key: &str);
 }
 
 impl CacheStats {
@@ -210,6 +239,9 @@ pub struct ThingsCache {
     config: CacheConfig,
     /// Cache warming entries (key -> priority)
     warming_entries: Arc<RwLock<HashMap<String, u32>>>,
+    /// Optional preloader consulted on every `get_*` access and on every
+    /// warming-loop tick. `None` means no predictive preloading.
+    preloader: Arc<RwLock<Option<Arc<dyn CachePreloader>>>>,
     /// Cache warming task handle
     warming_task: Option<tokio::task::JoinHandle<()>>,
 }
@@ -250,6 +282,7 @@ impl ThingsCache {
             stats: Arc::new(RwLock::new(CacheStats::default())),
             config: config.clone(),
             warming_entries: Arc::new(RwLock::new(HashMap::new())),
+            preloader: Arc::new(RwLock::new(None)),
             warming_task: None,
         };
 
@@ -288,6 +321,7 @@ impl ThingsCache {
                     self.add_to_warming(key.to_string(), cached.warming_priority + 1);
                 }
 
+                self.notify_preloader(key);
                 return Ok(cached.data);
             }
         }
@@ -311,6 +345,7 @@ impl ThingsCache {
         cached_data.update_warming_priority(priority);
 
         self.tasks.insert(key.to_string(), cached_data).await;
+        self.notify_preloader(key);
         Ok(data)
     }
 
@@ -335,6 +370,7 @@ impl ThingsCache {
                     self.add_to_warming(key.to_string(), cached.warming_priority + 1);
                 }
 
+                self.notify_preloader(key);
                 return Ok(cached.data);
             }
         }
@@ -352,6 +388,7 @@ impl ThingsCache {
         cached_data.update_warming_priority(priority);
 
         self.projects.insert(key.to_string(), cached_data).await;
+        self.notify_preloader(key);
         Ok(data)
     }
 
@@ -376,6 +413,7 @@ impl ThingsCache {
                     self.add_to_warming(key.to_string(), cached.warming_priority + 1);
                 }
 
+                self.notify_preloader(key);
                 return Ok(cached.data);
             }
         }
@@ -393,6 +431,7 @@ impl ThingsCache {
         cached_data.update_warming_priority(priority);
 
         self.areas.insert(key.to_string(), cached_data).await;
+        self.notify_preloader(key);
         Ok(data)
     }
 
@@ -417,6 +456,7 @@ impl ThingsCache {
                     self.add_to_warming(key.to_string(), cached.warming_priority + 1);
                 }
 
+                self.notify_preloader(key);
                 return Ok(cached.data);
             }
         }
@@ -436,6 +476,7 @@ impl ThingsCache {
         self.search_results
             .insert(key.to_string(), cached_data)
             .await;
+        self.notify_preloader(key);
         Ok(data)
     }
 
@@ -576,9 +617,16 @@ impl ThingsCache {
         dependencies
     }
 
-    /// Start cache warming background task
+    /// Start cache warming background task.
+    ///
+    /// Each tick, drains the top-priority queued keys and dispatches each to
+    /// the registered [`CachePreloader`] (if any). Keys are removed from the
+    /// queue after dispatch — the preloader's own `predict` calls re-add them
+    /// later if they remain hot.
     fn start_cache_warming(&mut self) {
         let warming_entries = Arc::clone(&self.warming_entries);
+        let preloader = Arc::clone(&self.preloader);
+        let stats = Arc::clone(&self.stats);
         let warming_interval = self.config.warming_interval;
         let max_entries = self.config.max_warming_entries;
 
@@ -587,7 +635,6 @@ impl ThingsCache {
             loop {
                 interval.tick().await;
 
-                // Get top priority entries for warming
                 let entries_to_warm = {
                     let entries = warming_entries.read();
                     let mut sorted_entries: Vec<_> = entries.iter().collect();
@@ -599,15 +646,70 @@ impl ThingsCache {
                         .collect::<Vec<_>>()
                 };
 
-                // In a real implementation, you would warm these entries
-                // by calling the appropriate fetcher functions
-                if !entries_to_warm.is_empty() {
-                    tracing::debug!("Cache warming {} entries", entries_to_warm.len());
+                if entries_to_warm.is_empty() {
+                    continue;
+                }
+
+                let p_snapshot = preloader.read().clone();
+                if let Some(p) = p_snapshot {
+                    for key in &entries_to_warm {
+                        p.warm(key);
+                    }
+                    let mut s = stats.write();
+                    s.warming_runs += 1;
+                    s.warmed_keys += entries_to_warm.len() as u64;
+                } else {
+                    tracing::debug!(
+                        "Cache warming {} entries (no preloader registered)",
+                        entries_to_warm.len()
+                    );
+                }
+
+                let mut entries = warming_entries.write();
+                for key in &entries_to_warm {
+                    entries.remove(key);
                 }
             }
         });
 
         self.warming_task = Some(handle);
+    }
+
+    /// Register a preloader. Replaces any previously-registered preloader.
+    ///
+    /// The preloader's `predict` will be invoked after every `get_*` call,
+    /// and `warm` will be invoked by the warming-loop tick for queued keys.
+    pub fn set_preloader(&self, preloader: Arc<dyn CachePreloader>) {
+        *self.preloader.write() = Some(preloader);
+    }
+
+    /// Remove the registered preloader. Subsequent `get_*` calls and warming
+    /// ticks become no-ops with respect to predictive preloading.
+    pub fn clear_preloader(&self) {
+        *self.preloader.write() = None;
+    }
+
+    /// Returns `true` if `key` is present in any of the four underlying caches.
+    fn contains_cached_key(&self, key: &str) -> bool {
+        self.tasks.contains_key(key)
+            || self.projects.contains_key(key)
+            || self.areas.contains_key(key)
+            || self.search_results.contains_key(key)
+    }
+
+    /// Snapshot the registered preloader and call its `predict`, pushing any
+    /// returned `(key, priority)` pairs into `warming_entries`.
+    /// Keys already present in the cache are skipped — this prevents a
+    /// self-reinforcing loop where warming a key triggers predict on its
+    /// counterpart, which re-enqueues the original key indefinitely.
+    fn notify_preloader(&self, accessed_key: &str) {
+        let p_snapshot = self.preloader.read().clone();
+        let Some(p) = p_snapshot else { return };
+        for (k, prio) in p.predict(accessed_key) {
+            if !self.contains_cached_key(&k) {
+                self.add_to_warming(k, prio);
+            }
+        }
     }
 
     /// Add entry to cache warming list
@@ -731,6 +833,98 @@ where
         cache.invalidate(k).await;
     }
     keys.len()
+}
+
+/// Default [`CachePreloader`] with a small set of hardcoded heuristics over
+/// the existing top-level cache keys.
+///
+/// Holds a [`Weak`] reference to the cache to avoid the obvious
+/// `Arc<ThingsCache>` ↔ `Arc<dyn CachePreloader>` reference cycle. Once the
+/// last strong reference to the cache is dropped, [`CachePreloader::warm`]
+/// becomes a no-op.
+///
+/// Heuristics:
+/// - Accessing `inbox:all` predicts `today:all` (priority 8).
+/// - Accessing `today:all` predicts `inbox:all` (priority 10).
+/// - Accessing `areas:all` predicts `projects:all` (priority 7).
+///
+/// Other keys produce no predictions. Future preloaders (per-project tasks,
+/// search-history-driven) plug in via the same trait.
+///
+/// # Warm-loop behaviour
+///
+/// The `inbox:all` ↔ `today:all` pair is mutually predictive, which would
+/// ordinarily create a perpetual warming loop. [`ThingsCache::notify_preloader`]
+/// guards against this: a predicted key is only enqueued when it is *not*
+/// already present in the cache. Once both keys are warm, no further
+/// enqueuing occurs until one of them expires or is invalidated.
+pub struct DefaultPreloader {
+    cache: std::sync::Weak<ThingsCache>,
+    db: Arc<crate::database::ThingsDatabase>,
+}
+
+impl DefaultPreloader {
+    /// Construct a preloader that holds a [`Weak`] handle to `cache` and a
+    /// strong handle to `db`. Wrap in [`Arc`] before registering with
+    /// [`ThingsCache::set_preloader`].
+    #[must_use]
+    pub fn new(cache: &Arc<ThingsCache>, db: Arc<crate::database::ThingsDatabase>) -> Arc<Self> {
+        Arc::new(Self {
+            cache: Arc::downgrade(cache),
+            db,
+        })
+    }
+}
+
+impl CachePreloader for DefaultPreloader {
+    fn predict(&self, accessed_key: &str) -> Vec<(String, u32)> {
+        match accessed_key {
+            "inbox:all" => vec![("today:all".to_string(), 8)],
+            "today:all" => vec![("inbox:all".to_string(), 10)],
+            "areas:all" => vec![("projects:all".to_string(), 7)],
+            _ => vec![],
+        }
+    }
+
+    fn warm(&self, key: &str) {
+        let Some(cache) = self.cache.upgrade() else {
+            return;
+        };
+        let db = Arc::clone(&self.db);
+        let key = key.to_string();
+        tokio::spawn(async move {
+            let result: Result<()> = match key.as_str() {
+                "inbox:all" => cache
+                    .get_tasks(&key, || async {
+                        db.get_inbox(None).await.map_err(anyhow::Error::from)
+                    })
+                    .await
+                    .map(|_| ()),
+                "today:all" => cache
+                    .get_tasks(&key, || async {
+                        db.get_today(None).await.map_err(anyhow::Error::from)
+                    })
+                    .await
+                    .map(|_| ()),
+                "areas:all" => cache
+                    .get_areas(&key, || async {
+                        db.get_areas().await.map_err(anyhow::Error::from)
+                    })
+                    .await
+                    .map(|_| ()),
+                "projects:all" => cache
+                    .get_projects(&key, || async {
+                        db.get_projects(None).await.map_err(anyhow::Error::from)
+                    })
+                    .await
+                    .map(|_| ()),
+                _ => Ok(()),
+            };
+            if let Err(e) = result {
+                tracing::warn!("DefaultPreloader::warm({key}) failed: {e}");
+            }
+        });
+    }
 }
 
 /// Cache key generators
@@ -868,6 +1062,7 @@ mod tests {
             misses: 2,
             entries: 5,
             hit_rate: 0.0,
+            ..Default::default()
         };
 
         stats.calculate_hit_rate();
@@ -881,6 +1076,7 @@ mod tests {
             misses: 0,
             entries: 0,
             hit_rate: 0.0,
+            ..Default::default()
         };
 
         stats.calculate_hit_rate();
@@ -894,6 +1090,7 @@ mod tests {
             misses: 5,
             entries: 3,
             hit_rate: 0.67,
+            ..Default::default()
         };
 
         // Test serialization
@@ -918,6 +1115,7 @@ mod tests {
             misses: 3,
             entries: 2,
             hit_rate: 0.625,
+            ..Default::default()
         };
 
         let cloned = stats.clone();
@@ -934,6 +1132,7 @@ mod tests {
             misses: 1,
             entries: 1,
             hit_rate: 0.5,
+            ..Default::default()
         };
 
         let debug_str = format!("{stats:?}");
@@ -1430,5 +1629,229 @@ mod tests {
         cache.areas.run_pending_tasks().await;
         assert!(cache.tasks.get("inbox").await.is_none());
         assert!(cache.areas.get("areas:all").await.is_some());
+    }
+
+    // ─── Predictive preloading (#94) ──────────────────────────────────────
+
+    /// Recording preloader: captures every `predict` and `warm` call so tests
+    /// can assert that the cache fired the hooks at the right moments.
+    struct RecordingPreloader {
+        predictions: Arc<RwLock<Vec<(String, u32)>>>,
+        seen_predict: Arc<RwLock<Vec<String>>>,
+        seen_warm: Arc<RwLock<Vec<String>>>,
+    }
+
+    impl RecordingPreloader {
+        fn new(predictions: Vec<(String, u32)>) -> Self {
+            Self {
+                predictions: Arc::new(RwLock::new(predictions)),
+                seen_predict: Arc::new(RwLock::new(Vec::new())),
+                seen_warm: Arc::new(RwLock::new(Vec::new())),
+            }
+        }
+    }
+
+    impl CachePreloader for RecordingPreloader {
+        fn predict(&self, accessed_key: &str) -> Vec<(String, u32)> {
+            self.seen_predict.write().push(accessed_key.to_string());
+            self.predictions.read().clone()
+        }
+        fn warm(&self, key: &str) {
+            self.seen_warm.write().push(key.to_string());
+        }
+    }
+
+    #[tokio::test]
+    async fn test_default_preloader_predict_rules() {
+        // All three heuristic rules tested against the real DefaultPreloader.
+        // predict() is pure (doesn't touch self.cache or self.db), so we only
+        // need a minimal DB to satisfy DefaultPreloader::new.
+        let f = tempfile::NamedTempFile::new().unwrap();
+        crate::test_utils::create_test_database(f.path())
+            .await
+            .unwrap();
+        let db = Arc::new(crate::ThingsDatabase::new(f.path()).await.unwrap());
+        let cache = Arc::new(ThingsCache::new_default());
+        let pre = DefaultPreloader::new(&cache, db);
+
+        assert_eq!(pre.predict("inbox:all"), vec![("today:all".to_string(), 8)]);
+        assert_eq!(
+            pre.predict("today:all"),
+            vec![("inbox:all".to_string(), 10)]
+        );
+        assert_eq!(
+            pre.predict("areas:all"),
+            vec![("projects:all".to_string(), 7)]
+        );
+        assert!(pre.predict("search:foo").is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_predict_fires_on_get_tasks_miss_and_hit() {
+        let cache = ThingsCache::new_default();
+        let pre = Arc::new(RecordingPreloader::new(vec![]));
+        cache.set_preloader(pre.clone());
+
+        cache
+            .get_tasks("inbox:all", || async { Ok(vec![]) })
+            .await
+            .unwrap();
+        cache
+            .get_tasks("inbox:all", || async { Ok(vec![]) })
+            .await
+            .unwrap();
+
+        let seen = pre.seen_predict.read().clone();
+        assert_eq!(seen, vec!["inbox:all".to_string(), "inbox:all".to_string()]);
+    }
+
+    #[tokio::test]
+    async fn test_predict_enqueues_warming() {
+        let cache = ThingsCache::new_default();
+        let pre = Arc::new(RecordingPreloader::new(vec![("today:all".to_string(), 5)]));
+        cache.set_preloader(pre);
+
+        cache
+            .get_tasks("inbox:all", || async { Ok(vec![]) })
+            .await
+            .unwrap();
+
+        let entries = cache.warming_entries.read();
+        assert_eq!(entries.get("today:all"), Some(&5));
+    }
+
+    #[tokio::test]
+    async fn test_no_preloader_is_noop() {
+        // Default cache (no preloader) — get_* must not panic; stats counters
+        // for warming must stay at zero even if the warming loop ticks.
+        let config = CacheConfig {
+            warming_interval: Duration::from_millis(20),
+            ..Default::default()
+        };
+        let cache = ThingsCache::new(&config);
+        cache
+            .get_tasks("inbox:all", || async { Ok(vec![]) })
+            .await
+            .unwrap();
+        // Let the warming loop tick a few times.
+        tokio::time::sleep(Duration::from_millis(80)).await;
+        let stats = cache.get_stats();
+        assert_eq!(stats.warmed_keys, 0);
+        assert_eq!(stats.warming_runs, 0);
+    }
+
+    #[tokio::test]
+    async fn test_warming_loop_invokes_warm() {
+        let config = CacheConfig {
+            warming_interval: Duration::from_millis(20),
+            max_warming_entries: 10,
+            ..Default::default()
+        };
+        let cache = ThingsCache::new(&config);
+
+        let pre = Arc::new(RecordingPreloader::new(vec![]));
+        cache.set_preloader(pre.clone());
+
+        cache.add_to_warming("inbox:all".to_string(), 10);
+        cache.add_to_warming("today:all".to_string(), 8);
+
+        // Wait long enough for at least one warming-loop tick.
+        tokio::time::sleep(Duration::from_millis(100)).await;
+
+        let warmed = pre.seen_warm.read().clone();
+        assert!(warmed.contains(&"inbox:all".to_string()));
+        assert!(warmed.contains(&"today:all".to_string()));
+
+        // Queue should have been drained after dispatch.
+        assert!(cache.warming_entries.read().is_empty());
+
+        // Stats should reflect the work.
+        let stats = cache.get_stats();
+        assert!(stats.warming_runs >= 1);
+        assert!(stats.warmed_keys >= 2);
+    }
+
+    #[tokio::test]
+    async fn test_clear_preloader_disables_predict() {
+        let cache = ThingsCache::new_default();
+        let pre = Arc::new(RecordingPreloader::new(vec![("today:all".to_string(), 5)]));
+        cache.set_preloader(pre.clone());
+        cache
+            .get_tasks("inbox:all", || async { Ok(vec![]) })
+            .await
+            .unwrap();
+        assert_eq!(pre.seen_predict.read().len(), 1);
+
+        cache.clear_preloader();
+        cache
+            .get_tasks("inbox:all", || async { Ok(vec![]) })
+            .await
+            .unwrap();
+        // Cleared — no further calls.
+        assert_eq!(pre.seen_predict.read().len(), 1);
+    }
+
+    #[tokio::test]
+    async fn test_default_preloader_warms_via_db() {
+        // Full integration: real test DB, real DefaultPreloader, real warming
+        // loop. After fetching `inbox:all`, the loop should warm `today:all`.
+        let f = tempfile::NamedTempFile::new().unwrap();
+        crate::test_utils::create_test_database(f.path())
+            .await
+            .unwrap();
+        let db = Arc::new(crate::ThingsDatabase::new(f.path()).await.unwrap());
+
+        let config = CacheConfig {
+            warming_interval: Duration::from_millis(20),
+            ..Default::default()
+        };
+        let cache = Arc::new(ThingsCache::new(&config));
+        cache.set_preloader(DefaultPreloader::new(&cache, Arc::clone(&db)));
+
+        // Trigger predict("inbox:all") → enqueues "today:all" with priority 8
+        cache
+            .get_tasks("inbox:all", || async {
+                db.get_inbox(None).await.map_err(anyhow::Error::from)
+            })
+            .await
+            .unwrap();
+
+        // Wait for the warming loop to tick AND for the spawned warm() task
+        // (which calls back into cache.get_tasks) to complete.
+        tokio::time::sleep(Duration::from_millis(150)).await;
+
+        // After warming, "today:all" should hit cache without invoking the
+        // panicking fetcher.
+        let result = cache
+            .get_tasks("today:all", || async {
+                panic!("today:all should be served from warmed cache, not fetched")
+            })
+            .await
+            .unwrap();
+        // Sanity: result is whatever db.get_today returned (possibly empty).
+        let expected = db.get_today(None).await.unwrap();
+        assert_eq!(result.len(), expected.len());
+    }
+
+    #[tokio::test]
+    async fn test_default_preloader_weak_ref_breaks_cycle() {
+        // Drop the only Arc<ThingsCache>; DefaultPreloader.warm should noop.
+        let f = tempfile::NamedTempFile::new().unwrap();
+        crate::test_utils::create_test_database(f.path())
+            .await
+            .unwrap();
+        let db = Arc::new(crate::ThingsDatabase::new(f.path()).await.unwrap());
+
+        let cache = Arc::new(ThingsCache::new_default());
+        let preloader = DefaultPreloader::new(&cache, db);
+        let preloader_dyn: Arc<dyn CachePreloader> = preloader.clone();
+
+        drop(cache);
+
+        // Should not panic and should not spawn a doomed task.
+        preloader_dyn.warm("inbox:all");
+        // Sanity: weak ref upgrade inside warm returned None — no observable
+        // side effect to assert beyond "did not panic".
+        tokio::time::sleep(Duration::from_millis(20)).await;
     }
 }
