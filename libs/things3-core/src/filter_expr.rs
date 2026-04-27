@@ -155,13 +155,37 @@ impl FilterExpr {
     /// Convenience: case-insensitive title-contains predicate.
     #[must_use]
     pub fn title_contains(needle: impl Into<String>) -> Self {
-        FilterExpr::Pred(FilterPredicate::TitleContains(needle.into()))
+        FilterExpr::Pred(FilterPredicate::TitleContains(needle.into().to_lowercase()))
     }
 
     /// Convenience: case-insensitive notes-contains predicate.
     #[must_use]
     pub fn notes_contains(needle: impl Into<String>) -> Self {
-        FilterExpr::Pred(FilterPredicate::NotesContains(needle.into()))
+        FilterExpr::Pred(FilterPredicate::NotesContains(needle.into().to_lowercase()))
+    }
+
+    /// Convenience: `deadline < d` predicate. Tasks with no deadline never match.
+    #[must_use]
+    pub fn deadline_before(d: NaiveDate) -> Self {
+        FilterExpr::Pred(FilterPredicate::DeadlineBefore(d))
+    }
+
+    /// Convenience: `deadline > d` predicate. Tasks with no deadline never match.
+    #[must_use]
+    pub fn deadline_after(d: NaiveDate) -> Self {
+        FilterExpr::Pred(FilterPredicate::DeadlineAfter(d))
+    }
+
+    /// Convenience: `start_date < d` predicate. Tasks with no start date never match.
+    #[must_use]
+    pub fn start_date_before(d: NaiveDate) -> Self {
+        FilterExpr::Pred(FilterPredicate::StartDateBefore(d))
+    }
+
+    /// Convenience: `start_date > d` predicate. Tasks with no start date never match.
+    #[must_use]
+    pub fn start_date_after(d: NaiveDate) -> Self {
+        FilterExpr::Pred(FilterPredicate::StartDateAfter(d))
     }
 }
 
@@ -178,12 +202,12 @@ impl FilterPredicate {
             FilterPredicate::DeadlineBefore(d) => task.deadline.is_some_and(|dl| dl < *d),
             FilterPredicate::DeadlineAfter(d) => task.deadline.is_some_and(|dl| dl > *d),
             FilterPredicate::TitleContains(needle) => {
-                task.title.to_lowercase().contains(&needle.to_lowercase())
+                task.title.to_lowercase().contains(needle.as_str())
             }
             FilterPredicate::NotesContains(needle) => task
                 .notes
                 .as_deref()
-                .is_some_and(|n| n.to_lowercase().contains(&needle.to_lowercase())),
+                .is_some_and(|n| n.to_lowercase().contains(needle.as_str())),
         }
     }
 }
