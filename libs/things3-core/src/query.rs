@@ -404,9 +404,9 @@ impl TaskQueryBuilder {
         &self,
         db: &crate::database::ThingsDatabase,
     ) -> crate::error::Result<crate::cursor::Page<crate::models::Task>> {
-        if self.fuzzy_query.is_some() && self.after.is_some() {
+        if self.fuzzy_query.is_some() {
             return Err(crate::error::ThingsError::InvalidCursor(
-                "cursor pagination is not compatible with fuzzy_search".to_string(),
+                "execute_paged and execute_stream do not support fuzzy_search; use execute_ranked instead".to_string(),
             ));
         }
         if self.filters.offset.is_some() && self.after.is_some() {
@@ -476,6 +476,66 @@ impl TaskQueryBuilder {
         Ok(crate::cursor::Page {
             items: tasks,
             next_cursor,
+        })
+    }
+
+    /// Execute the query as a [`futures_core::Stream`] of tasks, internally
+    /// chunked via cursor pagination.
+    ///
+    /// Yields tasks one at a time in `(creationDate DESC, uuid DESC)` order,
+    /// transparently fetching the next page when the current one is exhausted.
+    /// The stream completes when the underlying query has no more rows.
+    ///
+    /// `self.filters.limit` (overridable via [`limit`](Self::limit)) sets the
+    /// **chunk size** in this context, not a cap on total emitted items —
+    /// defaults to `100` if unset. Pre-filters and post-filters
+    /// (`status`, `any_tags`, `where_expr`, etc.) compose with streaming
+    /// exactly as they do with [`execute_paged`](Self::execute_paged).
+    ///
+    /// The first item is `Err(ThingsError)` if the underlying `execute_paged`
+    /// call rejects the query (e.g. `.offset()` and `.after()` both set, or
+    /// `.fuzzy_search()` and `.after()` both set). After any error, the
+    /// stream terminates.
+    ///
+    /// Requires both the `advanced-queries` and `batch-operations` feature
+    /// flags.
+    ///
+    /// # Examples
+    ///
+    /// ```ignore
+    /// use futures_util::StreamExt;
+    /// let mut stream = TaskQueryBuilder::new()
+    ///     .status(TaskStatus::Incomplete)
+    ///     .limit(50) // chunk size, not total cap
+    ///     .execute_stream(&db);
+    /// while let Some(task) = stream.next().await {
+    ///     let task = task?;
+    ///     // process task
+    /// }
+    /// # Ok::<(), things3_core::ThingsError>(())
+    /// ```
+    #[cfg(all(feature = "advanced-queries", feature = "batch-operations"))]
+    pub fn execute_stream<'a>(
+        mut self,
+        db: &'a crate::database::ThingsDatabase,
+    ) -> std::pin::Pin<
+        Box<dyn futures_core::Stream<Item = crate::error::Result<crate::models::Task>> + Send + 'a>,
+    >
+    where
+        Self: Send + 'a,
+    {
+        Box::pin(async_stream::try_stream! {
+            loop {
+                let page = self.execute_paged(db).await?;
+                let next = page.next_cursor;
+                for task in page.items {
+                    yield task;
+                }
+                match next {
+                    Some(c) => self.after = Some(c),
+                    None => break,
+                }
+            }
         })
     }
 
@@ -828,7 +888,7 @@ mod tests {
 
         #[cfg(feature = "advanced-queries")]
         #[tokio::test]
-        async fn test_execute_paged_rejects_fuzzy_and_after() {
+        async fn test_execute_paged_rejects_fuzzy_search() {
             use tempfile::NamedTempFile;
             let f = NamedTempFile::new().unwrap();
             crate::test_utils::create_test_database(f.path())
@@ -838,9 +898,9 @@ mod tests {
                 .await
                 .unwrap();
 
+            // fuzzy_search alone must be rejected — no .after() needed to trigger.
             let result = TaskQueryBuilder::new()
                 .fuzzy_search("anything")
-                .after(sample_cursor())
                 .execute_paged(&db)
                 .await;
             match result {
