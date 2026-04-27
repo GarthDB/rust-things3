@@ -1,7 +1,11 @@
 #[cfg(any(feature = "advanced-queries", feature = "batch-operations"))]
 use crate::models::TaskFilters;
 use crate::{
-    database::{mappers::map_task_row, query_builders::TaskUpdateBuilder, validators},
+    database::{
+        mappers::{map_project_row, map_task_row},
+        query_builders::TaskUpdateBuilder,
+        validators,
+    },
     error::{Result as ThingsResult, ThingsError},
     models::{
         Area, CreateTaskRequest, DeleteChildHandling, Project, Task, TaskStatus, TaskType,
@@ -1606,42 +1610,11 @@ impl ThingsDatabase {
         .map_err(|e| ThingsError::unknown(format!("Failed to fetch project: {e}")))?;
 
         if let Some(row) = row {
-            // Check if trashed
             let trashed: i64 = row.get("trashed");
             if trashed == 1 {
-                return Ok(None); // Return None for trashed projects
+                return Ok(None);
             }
-
-            let project = Project {
-                uuid: things_uuid_to_uuid(&row.get::<String, _>("uuid")),
-                title: row.get("title"),
-                status: TaskStatus::from_i32(row.get("status")).unwrap_or(TaskStatus::Incomplete),
-                area_uuid: row
-                    .get::<Option<String>, _>("area")
-                    .map(|s| things_uuid_to_uuid(&s)),
-                notes: row.get("notes"),
-                deadline: row
-                    .get::<Option<i64>, _>("deadline")
-                    .and_then(|ts| DateTime::from_timestamp(ts, 0))
-                    .map(|dt| dt.date_naive()),
-                start_date: row
-                    .get::<Option<i64>, _>("startDate")
-                    .and_then(|ts| DateTime::from_timestamp(ts, 0))
-                    .map(|dt| dt.date_naive()),
-                tags: Vec::new(),  // TODO: Load tags separately
-                tasks: Vec::new(), // TODO: Load child tasks separately
-                created: {
-                    let ts_f64 = row.get::<f64, _>("creationDate");
-                    let ts = safe_timestamp_convert(ts_f64);
-                    DateTime::from_timestamp(ts, 0).unwrap_or_else(Utc::now)
-                },
-                modified: {
-                    let ts_f64 = row.get::<f64, _>("userModificationDate");
-                    let ts = safe_timestamp_convert(ts_f64);
-                    DateTime::from_timestamp(ts, 0).unwrap_or_else(Utc::now)
-                },
-            };
-            Ok(Some(project))
+            Ok(Some(map_project_row(&row)))
         } else {
             Ok(None)
         }
