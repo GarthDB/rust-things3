@@ -21,6 +21,8 @@ pub struct TaskQueryBuilder {
     fuzzy_query: Option<String>,
     #[cfg(feature = "advanced-queries")]
     fuzzy_threshold: Option<f32>,
+    #[cfg(feature = "advanced-queries")]
+    where_expr: Option<crate::filter_expr::FilterExpr>,
 }
 
 impl TaskQueryBuilder {
@@ -39,6 +41,8 @@ impl TaskQueryBuilder {
             fuzzy_query: None,
             #[cfg(feature = "advanced-queries")]
             fuzzy_threshold: None,
+            #[cfg(feature = "advanced-queries")]
+            where_expr: None,
         }
     }
 
@@ -137,6 +141,25 @@ impl TaskQueryBuilder {
     #[must_use]
     pub fn fuzzy_threshold(mut self, threshold: f32) -> Self {
         self.fuzzy_threshold = Some(threshold.clamp(0.0, 1.0));
+        self
+    }
+
+    /// Apply a boolean expression tree as an additional filter.
+    ///
+    /// The expression composes via AND with the SQL pre-fetch (`TaskFilters`)
+    /// and with the other post-filters (`any_tags`, `exclude_tags`,
+    /// `tag_count`, fuzzy search). To express disjunction or negation across
+    /// statuses or types, leave `filters.status` / `filters.task_type` unset
+    /// and put the OR/NOT branches inside `expr` instead.
+    ///
+    /// Evaluated in Rust by `execute()` after the database returns rows; not
+    /// reflected in `build()`.
+    ///
+    /// Requires the `advanced-queries` feature flag.
+    #[cfg(feature = "advanced-queries")]
+    #[must_use]
+    pub fn where_expr(mut self, expr: crate::filter_expr::FilterExpr) -> Self {
+        self.where_expr = Some(expr);
         self
     }
 
@@ -278,8 +301,9 @@ impl TaskQueryBuilder {
         let has_tag_post_filters = self.any_tags.as_ref().is_some_and(|t| !t.is_empty())
             || self.exclude_tags.as_ref().is_some_and(|t| !t.is_empty())
             || self.tag_count_min.is_some();
+        let has_where_expr = self.where_expr.is_some();
 
-        if !has_tag_post_filters {
+        if !has_tag_post_filters && !has_where_expr {
             return db.query_tasks(&self.filters).await;
         }
 
@@ -294,6 +318,10 @@ impl TaskQueryBuilder {
             self.exclude_tags.as_deref(),
             self.tag_count_min,
         );
+
+        if let Some(expr) = &self.where_expr {
+            tasks.retain(|task| expr.matches(task));
+        }
 
         let offset = offset.unwrap_or(0);
         tasks = tasks.into_iter().skip(offset).collect();
@@ -365,12 +393,16 @@ impl TaskQueryBuilder {
         }
 
         let tasks = db.query_tasks(&filters_no_page).await?;
-        let tasks = Self::apply_tag_filters(
+        let mut tasks = Self::apply_tag_filters(
             tasks,
             self.any_tags.as_deref(),
             self.exclude_tags.as_deref(),
             self.tag_count_min,
         );
+
+        if let Some(expr) = &self.where_expr {
+            tasks.retain(|task| expr.matches(task));
+        }
 
         let mut scored: Vec<crate::models::RankedTask> = tasks
             .into_iter()
@@ -419,6 +451,7 @@ impl TaskQueryBuilder {
             tag_count_min: self.tag_count_min,
             fuzzy_query: self.fuzzy_query.clone(),
             fuzzy_threshold: self.fuzzy_threshold,
+            where_expr: self.where_expr.clone(),
             saved_at: chrono::Utc::now(),
         }
     }
@@ -438,6 +471,7 @@ impl TaskQueryBuilder {
             tag_count_min: query.tag_count_min,
             fuzzy_query: query.fuzzy_query.clone(),
             fuzzy_threshold: query.fuzzy_threshold.map(|t| t.clamp(0.0, 1.0)),
+            where_expr: query.where_expr.clone(),
         }
     }
 }
@@ -608,6 +642,15 @@ mod tests {
 
     #[cfg(feature = "advanced-queries")]
     #[test]
+    fn test_task_query_builder_where_expr_setter() {
+        use crate::filter_expr::FilterExpr;
+        let expr = FilterExpr::status(TaskStatus::Incomplete);
+        let builder = TaskQueryBuilder::new().where_expr(expr.clone());
+        assert_eq!(builder.where_expr, Some(expr));
+    }
+
+    #[cfg(feature = "advanced-queries")]
+    #[test]
     fn test_task_query_builder_chaining_tag_methods() {
         let builder = TaskQueryBuilder::new()
             .tags(vec!["a".to_string()])
@@ -749,6 +792,18 @@ mod tests {
             assert_eq!(saved.tag_count_min, Some(2));
             assert_eq!(saved.fuzzy_query, Some("budget".to_string()));
             assert_eq!(saved.fuzzy_threshold, Some(0.75));
+            assert!(saved.where_expr.is_none());
+        }
+
+        #[test]
+        fn test_to_saved_query_captures_where_expr() {
+            use crate::filter_expr::FilterExpr;
+            let expr = FilterExpr::status(TaskStatus::Incomplete)
+                .or(FilterExpr::status(TaskStatus::Completed));
+            let saved = TaskQueryBuilder::new()
+                .where_expr(expr.clone())
+                .to_saved_query("with-expr");
+            assert_eq!(saved.where_expr, Some(expr));
         }
 
         #[test]
@@ -786,6 +841,24 @@ mod tests {
             assert_eq!(rebuilt.any_tags, Some(vec!["x".to_string()]));
             assert_eq!(rebuilt.fuzzy_query, Some("foo".to_string()));
             assert_eq!(rebuilt.fuzzy_threshold, Some(0.5));
+        }
+
+        #[test]
+        fn test_from_saved_query_restores_where_expr_through_json() {
+            use crate::filter_expr::FilterExpr;
+            let expr = FilterExpr::Or(vec![
+                FilterExpr::status(TaskStatus::Incomplete),
+                FilterExpr::status(TaskStatus::Completed),
+            ])
+            .and(FilterExpr::task_type(TaskType::Project).not());
+
+            let saved = TaskQueryBuilder::new()
+                .where_expr(expr.clone())
+                .to_saved_query("expr-rt");
+            let json = serde_json::to_string(&saved).unwrap();
+            let restored: crate::saved_queries::SavedQuery = serde_json::from_str(&json).unwrap();
+            let rebuilt = TaskQueryBuilder::from_saved_query(&restored);
+            assert_eq!(rebuilt.where_expr, Some(expr));
         }
     }
 

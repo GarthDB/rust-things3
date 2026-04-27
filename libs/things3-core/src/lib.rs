@@ -58,6 +58,9 @@ pub mod database;
 pub mod disk_cache;
 pub mod error;
 
+#[cfg(feature = "advanced-queries")]
+pub mod filter_expr;
+
 #[cfg(any(feature = "export-csv", feature = "export-opml"))]
 pub mod export;
 
@@ -119,6 +122,8 @@ pub use performance::{
 };
 pub use query_cache::{QueryCache, QueryCacheConfig, QueryCacheStats};
 
+#[cfg(feature = "advanced-queries")]
+pub use filter_expr::{FilterExpr, FilterPredicate};
 pub use query_performance::{
     ImplementationEffort, OptimizationPriority, OptimizationType, QueryContext,
     QueryOptimizationSuggestion, QueryPerformanceMetrics, QueryPerformanceStats,

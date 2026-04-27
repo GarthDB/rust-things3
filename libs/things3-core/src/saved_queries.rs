@@ -60,6 +60,10 @@ pub struct SavedQuery {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub fuzzy_threshold: Option<f32>,
 
+    /// Boolean expression tree applied as a Rust-side post-filter.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub where_expr: Option<crate::filter_expr::FilterExpr>,
+
     /// When the query was last saved.
     pub saved_at: DateTime<Utc>,
 }
@@ -79,6 +83,7 @@ impl SavedQuery {
             tag_count_min: None,
             fuzzy_query: None,
             fuzzy_threshold: None,
+            where_expr: None,
             saved_at: Utc::now(),
         }
     }
@@ -259,6 +264,10 @@ mod tests {
             tag_count_min: Some(2),
             fuzzy_query: Some("agenda".to_string()),
             fuzzy_threshold: Some(0.7),
+            where_expr: Some(
+                crate::filter_expr::FilterExpr::status(TaskStatus::Incomplete)
+                    .and(crate::filter_expr::FilterExpr::task_type(TaskType::Project).not()),
+            ),
             saved_at: chrono::Utc::now(),
         }
     }
@@ -291,6 +300,7 @@ mod tests {
         assert_eq!(parsed.tag_count_min, original.tag_count_min);
         assert_eq!(parsed.fuzzy_query, original.fuzzy_query);
         assert_eq!(parsed.fuzzy_threshold, original.fuzzy_threshold);
+        assert_eq!(parsed.where_expr, original.where_expr);
     }
 
     #[test]
@@ -305,6 +315,7 @@ mod tests {
         assert!(!json.contains("\"tag_count_min\""));
         assert!(!json.contains("\"fuzzy_query\""));
         assert!(!json.contains("\"fuzzy_threshold\""));
+        assert!(!json.contains("\"where_expr\""));
 
         // Required fields stay
         assert!(json.contains("\"name\":\"minimal\""));

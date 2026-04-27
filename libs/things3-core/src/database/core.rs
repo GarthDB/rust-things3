@@ -4917,5 +4917,177 @@ mod tests {
             let uuids: Vec<Uuid> = tasks.iter().map(|t| t.uuid).collect();
             assert!(uuids.contains(&target), "fuzzy should match text in notes");
         }
+
+        async fn insert_task_with_status(
+            db: &ThingsDatabase,
+            title: &str,
+            status: TaskStatus,
+        ) -> Uuid {
+            let uuid = Uuid::new_v4();
+            let blob = serialize_tags_to_blob(&Vec::<String>::new()).unwrap();
+            let status_n: i64 = match status {
+                TaskStatus::Incomplete => 0,
+                TaskStatus::Completed => 1,
+                TaskStatus::Canceled => 2,
+                TaskStatus::Trashed => 0,
+            };
+            sqlx::query(
+                "INSERT INTO TMTask \
+                 (uuid, title, notes, type, status, trashed, creationDate, userModificationDate, cachedTags) \
+                 VALUES (?, ?, NULL, 0, ?, 0, 0, 0, ?)",
+            )
+            .bind(uuid.to_string())
+            .bind(title)
+            .bind(status_n)
+            .bind(blob)
+            .execute(&db.pool)
+            .await
+            .unwrap();
+            uuid
+        }
+
+        async fn insert_task_with_type(
+            db: &ThingsDatabase,
+            title: &str,
+            task_type: crate::models::TaskType,
+        ) -> Uuid {
+            let uuid = Uuid::new_v4();
+            let blob = serialize_tags_to_blob(&Vec::<String>::new()).unwrap();
+            let type_n: i64 = match task_type {
+                crate::models::TaskType::Todo => 0,
+                crate::models::TaskType::Project => 1,
+                crate::models::TaskType::Heading => 2,
+                crate::models::TaskType::Area => 3,
+            };
+            sqlx::query(
+                "INSERT INTO TMTask \
+                 (uuid, title, notes, type, status, trashed, creationDate, userModificationDate, cachedTags) \
+                 VALUES (?, ?, NULL, ?, 0, 0, 0, 0, ?)",
+            )
+            .bind(uuid.to_string())
+            .bind(title)
+            .bind(type_n)
+            .bind(blob)
+            .execute(&db.pool)
+            .await
+            .unwrap();
+            uuid
+        }
+
+        #[tokio::test]
+        async fn test_execute_with_where_expr_or_status() {
+            use crate::filter_expr::FilterExpr;
+            let (db, _f) = open_test_db().await;
+            let inc = insert_task_with_status(&db, "inc", TaskStatus::Incomplete).await;
+            let comp = insert_task_with_status(&db, "comp", TaskStatus::Completed).await;
+            let canc = insert_task_with_status(&db, "canc", TaskStatus::Canceled).await;
+
+            let tasks = TaskQueryBuilder::new()
+                .where_expr(
+                    FilterExpr::status(TaskStatus::Incomplete)
+                        .or(FilterExpr::status(TaskStatus::Completed)),
+                )
+                .execute(&db)
+                .await
+                .unwrap();
+
+            let uuids: std::collections::HashSet<_> = tasks.iter().map(|t| t.uuid).collect();
+            assert!(uuids.contains(&inc));
+            assert!(uuids.contains(&comp));
+            assert!(!uuids.contains(&canc));
+        }
+
+        #[tokio::test]
+        async fn test_execute_with_where_expr_not_type() {
+            use crate::filter_expr::FilterExpr;
+            use crate::models::TaskType;
+            let (db, _f) = open_test_db().await;
+            let todo = insert_task_with_type(&db, "todo", TaskType::Todo).await;
+            let project = insert_task_with_type(&db, "project", TaskType::Project).await;
+
+            let tasks = TaskQueryBuilder::new()
+                .where_expr(FilterExpr::task_type(TaskType::Project).not())
+                .execute(&db)
+                .await
+                .unwrap();
+
+            let uuids: std::collections::HashSet<_> = tasks.iter().map(|t| t.uuid).collect();
+            assert!(uuids.contains(&todo));
+            assert!(!uuids.contains(&project));
+        }
+
+        #[tokio::test]
+        async fn test_execute_pagination_defers_to_rust_when_where_expr_set() {
+            // Mirror of test_query_tasks_pagination_with_any_tags. With a
+            // where_expr, limit/offset must count post-filter matches.
+            use crate::filter_expr::FilterExpr;
+            let (db, _f) = open_test_db().await;
+            insert_task_with_status(&db, "inc-1", TaskStatus::Incomplete).await;
+            insert_task_with_status(&db, "inc-2", TaskStatus::Incomplete).await;
+            insert_task_with_status(&db, "inc-3", TaskStatus::Incomplete).await;
+            insert_task_with_status(&db, "comp", TaskStatus::Completed).await;
+
+            let page0 = TaskQueryBuilder::new()
+                .where_expr(FilterExpr::status(TaskStatus::Incomplete))
+                .limit(1)
+                .offset(0)
+                .execute(&db)
+                .await
+                .unwrap();
+            let page1 = TaskQueryBuilder::new()
+                .where_expr(FilterExpr::status(TaskStatus::Incomplete))
+                .limit(1)
+                .offset(1)
+                .execute(&db)
+                .await
+                .unwrap();
+            assert_eq!(page0.len(), 1);
+            assert_eq!(page1.len(), 1);
+            assert_ne!(page0[0].uuid, page1[0].uuid);
+            assert_eq!(page0[0].status, TaskStatus::Incomplete);
+            assert_eq!(page1[0].status, TaskStatus::Incomplete);
+        }
+
+        #[tokio::test]
+        async fn test_execute_combines_where_expr_with_filters_status() {
+            // filters.status (SQL) AND-combines with where_expr (Rust).
+            use crate::filter_expr::FilterExpr;
+            let (db, _f) = open_test_db().await;
+            let target = insert_task(&db, "needle", None, &["work"]).await;
+            insert_task(&db, "decoy", None, &["work"]).await;
+
+            let tasks = TaskQueryBuilder::new()
+                .status(TaskStatus::Incomplete)
+                .where_expr(FilterExpr::title_contains("needle"))
+                .execute(&db)
+                .await
+                .unwrap();
+
+            let uuids: std::collections::HashSet<_> = tasks.iter().map(|t| t.uuid).collect();
+            assert!(uuids.contains(&target));
+            assert_eq!(tasks.len(), 1);
+        }
+
+        #[tokio::test]
+        async fn test_execute_combines_where_expr_with_any_tags() {
+            // Both Rust-side post-filters apply. Tag filter narrows by tag,
+            // expr further narrows by title.
+            use crate::filter_expr::FilterExpr;
+            let (db, _f) = open_test_db().await;
+            let target = insert_task(&db, "needle-task", None, &["work"]).await;
+            insert_task(&db, "decoy-task", None, &["work"]).await;
+            insert_task(&db, "needle-but-wrong-tag", None, &["personal"]).await;
+
+            let tasks = TaskQueryBuilder::new()
+                .any_tags(vec!["work".to_string()])
+                .where_expr(FilterExpr::title_contains("needle"))
+                .execute(&db)
+                .await
+                .unwrap();
+
+            let uuids: std::collections::HashSet<_> = tasks.iter().map(|t| t.uuid).collect();
+            assert!(uuids.contains(&target));
+            assert_eq!(tasks.len(), 1);
+        }
     }
 }
