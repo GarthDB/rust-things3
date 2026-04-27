@@ -68,7 +68,11 @@ pub(crate) mod batch;
 #[cfg(feature = "batch-operations")]
 pub mod cursor;
 
-#[cfg(any(feature = "export-csv", feature = "export-opml", feature = "export-taskpaper"))]
+#[cfg(any(
+    feature = "export-csv",
+    feature = "export-opml",
+    feature = "export-taskpaper"
+))]
 pub mod export;
 
 pub mod mcp_cache_middleware;
@@ -109,7 +113,11 @@ pub use database::{
 pub use disk_cache::{DiskCache, DiskCacheConfig, DiskCacheStats};
 pub use error::{Result, ThingsError};
 
-#[cfg(any(feature = "export-csv", feature = "export-opml", feature = "export-taskpaper"))]
+#[cfg(any(
+    feature = "export-csv",
+    feature = "export-opml",
+    feature = "export-taskpaper"
+))]
 pub use export::{DataExporter, ExportConfig, ExportData, ExportFormat};
 
 pub use mcp_cache_middleware::{MCPCacheConfig, MCPCacheEntry, MCPCacheMiddleware, MCPCacheStats};

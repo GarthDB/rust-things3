@@ -265,13 +265,8 @@ impl DataExporter {
 
         // --- Areas → their projects → tasks ---
         for area in &data.areas {
-            let area_meta = taskpaper_metadata(
-                TaskStatus::Incomplete,
-                None,
-                None,
-                None,
-                &area.tags,
-            );
+            let area_meta =
+                taskpaper_metadata(TaskStatus::Incomplete, None, None, None, &area.tags);
             writeln!(out, "{}:{area_meta}", escape_taskpaper_title(&area.title)).unwrap();
 
             let area_projects: Vec<&Project> = data
@@ -303,11 +298,7 @@ impl DataExporter {
         }
 
         // --- Orphan projects (no area) ---
-        for project in data
-            .projects
-            .iter()
-            .filter(|p| p.area_uuid.is_none())
-        {
+        for project in data.projects.iter().filter(|p| p.area_uuid.is_none()) {
             let meta = taskpaper_metadata(
                 project.status,
                 None,
@@ -329,11 +320,9 @@ impl DataExporter {
         }
 
         // --- Orphan tasks (no project, no area, no parent) ---
-        for task in data
-            .tasks
-            .iter()
-            .filter(|t| t.project_uuid.is_none() && t.area_uuid.is_none() && t.parent_uuid.is_none())
-        {
+        for task in data.tasks.iter().filter(|t| {
+            t.project_uuid.is_none() && t.area_uuid.is_none() && t.parent_uuid.is_none()
+        }) {
             write_taskpaper_task(&mut out, task, 0, &data.tasks);
         }
 
@@ -1048,23 +1037,24 @@ mod tests {
         use chrono::TimeZone;
 
         let base_uuid = uuid::Uuid::parse_str("aaaaaaaa-0000-0000-0000-000000000000").unwrap();
-        let make_task = |n: u8, status: TaskStatus, stop_date: Option<chrono::DateTime<Utc>>| Task {
-            uuid: uuid::Uuid::parse_str(&format!("aaaaaaaa-0000-0000-0000-{n:012}")).unwrap(),
-            title: format!("Task {n}"),
-            task_type: TaskType::Todo,
-            status,
-            notes: None,
-            start_date: None,
-            deadline: None,
-            created: Utc::now(),
-            modified: Utc::now(),
-            stop_date,
-            project_uuid: None,
-            area_uuid: None,
-            parent_uuid: None,
-            tags: vec![],
-            children: vec![],
-        };
+        let make_task =
+            |n: u8, status: TaskStatus, stop_date: Option<chrono::DateTime<Utc>>| Task {
+                uuid: uuid::Uuid::parse_str(&format!("aaaaaaaa-0000-0000-0000-{n:012}")).unwrap(),
+                title: format!("Task {n}"),
+                task_type: TaskType::Todo,
+                status,
+                notes: None,
+                start_date: None,
+                deadline: None,
+                created: Utc::now(),
+                modified: Utc::now(),
+                stop_date,
+                project_uuid: None,
+                area_uuid: None,
+                parent_uuid: None,
+                tags: vec![],
+                children: vec![],
+            };
         let _ = base_uuid;
 
         let stop = Utc.with_ymd_and_hms(2026, 1, 15, 0, 0, 0).unwrap();
@@ -1080,11 +1070,20 @@ mod tests {
         let tp = exporter.export(&data, ExportFormat::TaskPaper).unwrap();
 
         // Incomplete: no status tag
-        assert!(tp.contains("- Task 1\n"), "Incomplete task should have no status tag:\n{tp}");
+        assert!(
+            tp.contains("- Task 1\n"),
+            "Incomplete task should have no status tag:\n{tp}"
+        );
         // Completed with stop date
-        assert!(tp.contains("@done(2026-01-15)"), "Completed task with stop_date:\n{tp}");
+        assert!(
+            tp.contains("@done(2026-01-15)"),
+            "Completed task with stop_date:\n{tp}"
+        );
         // Completed without stop date
-        assert!(tp.contains("- Task 3 @done\n"), "Completed task without stop_date:\n{tp}");
+        assert!(
+            tp.contains("- Task 3 @done\n"),
+            "Completed task without stop_date:\n{tp}"
+        );
         // Canceled
         assert!(tp.contains("@cancelled"), "Cancelled task:\n{tp}");
         // Trashed
@@ -1118,7 +1117,10 @@ mod tests {
         let tp = exporter.export(&data, ExportFormat::TaskPaper).unwrap();
 
         assert!(tp.contains("@due(2026-04-30)"), "Expected @due date:\n{tp}");
-        assert!(tp.contains("@start(2026-03-01)"), "Expected @start date:\n{tp}");
+        assert!(
+            tp.contains("@start(2026-03-01)"),
+            "Expected @start date:\n{tp}"
+        );
     }
 
     #[test]
@@ -1150,7 +1152,10 @@ mod tests {
         let tp = exporter.export(&data, ExportFormat::TaskPaper).unwrap();
 
         assert!(tp.contains("@work"), "Expected @work tag:\n{tp}");
-        assert!(tp.contains("@high-priority"), "Expected @high-priority tag:\n{tp}");
+        assert!(
+            tp.contains("@high-priority"),
+            "Expected @high-priority tag:\n{tp}"
+        );
         // @ ( ) stripped; resulting non-empty tag should appear
         assert!(tp.contains("@weirdname"), "Expected @weirdname tag:\n{tp}");
     }
@@ -1180,9 +1185,18 @@ mod tests {
         let tp = exporter.export(&data, ExportFormat::TaskPaper).unwrap();
 
         // Task is at indent 0, so notes are at indent 1 (\t)
-        assert!(tp.contains("\tFirst line"), "Expected indented first line:\n{tp}");
-        assert!(tp.contains("\tSecond line"), "Expected indented second line:\n{tp}");
-        assert!(tp.contains("\tThird line"), "Expected indented third line:\n{tp}");
+        assert!(
+            tp.contains("\tFirst line"),
+            "Expected indented first line:\n{tp}"
+        );
+        assert!(
+            tp.contains("\tSecond line"),
+            "Expected indented second line:\n{tp}"
+        );
+        assert!(
+            tp.contains("\tThird line"),
+            "Expected indented third line:\n{tp}"
+        );
     }
 
     #[test]
@@ -1200,7 +1214,10 @@ mod tests {
     fn test_escape_taskpaper_title() {
         assert_eq!(escape_taskpaper_title("Normal title"), "Normal title");
         assert_eq!(escape_taskpaper_title("Multi\nline"), "Multi line");
-        assert_eq!(escape_taskpaper_title("Carriage\rreturn"), "Carriage return");
+        assert_eq!(
+            escape_taskpaper_title("Carriage\rreturn"),
+            "Carriage return"
+        );
         assert_eq!(
             escape_taskpaper_title("Ends with colon:"),
             "Ends with colon: "
