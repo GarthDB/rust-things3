@@ -61,6 +61,9 @@ pub mod error;
 #[cfg(feature = "advanced-queries")]
 pub mod filter_expr;
 
+#[cfg(feature = "batch-operations")]
+pub mod cursor;
+
 #[cfg(any(feature = "export-csv", feature = "export-opml"))]
 pub mod export;
 
@@ -124,6 +127,9 @@ pub use query_cache::{QueryCache, QueryCacheConfig, QueryCacheStats};
 
 #[cfg(feature = "advanced-queries")]
 pub use filter_expr::{FilterExpr, FilterPredicate};
+
+#[cfg(feature = "batch-operations")]
+pub use cursor::{Cursor, Page};
 pub use query_performance::{
     ImplementationEffort, OptimizationPriority, OptimizationType, QueryContext,
     QueryOptimizationSuggestion, QueryPerformanceMetrics, QueryPerformanceStats,

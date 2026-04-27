@@ -23,6 +23,10 @@ pub struct TaskQueryBuilder {
     fuzzy_threshold: Option<f32>,
     #[cfg(feature = "advanced-queries")]
     where_expr: Option<crate::filter_expr::FilterExpr>,
+    /// Cursor for keyset pagination via `execute_paged`. Stored on the builder
+    /// because `TaskFilters` is frozen public API.
+    #[cfg(feature = "batch-operations")]
+    after: Option<crate::cursor::Cursor>,
 }
 
 impl TaskQueryBuilder {
@@ -43,6 +47,8 @@ impl TaskQueryBuilder {
             fuzzy_threshold: None,
             #[cfg(feature = "advanced-queries")]
             where_expr: None,
+            #[cfg(feature = "batch-operations")]
+            after: None,
         }
     }
 
@@ -160,6 +166,22 @@ impl TaskQueryBuilder {
     #[must_use]
     pub fn where_expr(mut self, expr: crate::filter_expr::FilterExpr) -> Self {
         self.where_expr = Some(expr);
+        self
+    }
+
+    /// Continue cursor-based pagination from a previously-returned [`crate::cursor::Cursor`].
+    ///
+    /// The cursor identifies the last task delivered on the previous page;
+    /// [`Self::execute_paged`] will return tasks strictly after it in the
+    /// `(creationDate DESC, uuid DESC)` ordering. Mutually exclusive with
+    /// `.offset(...)` — `execute_paged` will return [`crate::error::ThingsError::InvalidCursor`]
+    /// if both are set.
+    ///
+    /// Requires the `batch-operations` feature flag.
+    #[cfg(feature = "batch-operations")]
+    #[must_use]
+    pub fn after(mut self, cursor: crate::cursor::Cursor) -> Self {
+        self.after = Some(cursor);
         self
     }
 
@@ -355,6 +377,108 @@ impl TaskQueryBuilder {
         tasks
     }
 
+    /// Execute the query and return one page of results plus an optional
+    /// cursor for the next page.
+    ///
+    /// Pagination is keyset-based: the cursor encodes `(created, uuid)` of the
+    /// last-returned task and the next page admits only rows strictly older in
+    /// the canonical `(creationDate DESC, uuid DESC)` ordering. Unlike
+    /// `offset`, page boundaries are stable when underlying data changes
+    /// between fetches.
+    ///
+    /// Page size is `self.filters.limit` if set, otherwise `100`. The returned
+    /// `Page::next_cursor` is `Some` only if the page is full (i.e. there may
+    /// be more rows); the last page always has `next_cursor: None`.
+    ///
+    /// Requires both the `advanced-queries` and `batch-operations` feature
+    /// flags (cursor pagination is built on top of `query_tasks`).
+    ///
+    /// # Errors
+    ///
+    /// - [`crate::error::ThingsError::InvalidCursor`] if `.offset(...)` and
+    ///   `.after(...)` are both set, or if `.fuzzy_search(...)` and
+    ///   `.after(...)` are both set, or if the cursor itself is malformed.
+    /// - Any error returned by [`crate::database::ThingsDatabase::query_tasks`].
+    #[cfg(all(feature = "advanced-queries", feature = "batch-operations"))]
+    pub async fn execute_paged(
+        &self,
+        db: &crate::database::ThingsDatabase,
+    ) -> crate::error::Result<crate::cursor::Page<crate::models::Task>> {
+        if self.fuzzy_query.is_some() && self.after.is_some() {
+            return Err(crate::error::ThingsError::InvalidCursor(
+                "cursor pagination is not compatible with fuzzy_search".to_string(),
+            ));
+        }
+        if self.filters.offset.is_some() && self.after.is_some() {
+            return Err(crate::error::ThingsError::InvalidCursor(
+                "offset and after are mutually exclusive".to_string(),
+            ));
+        }
+
+        let after_payload = self
+            .after
+            .as_ref()
+            .map(crate::cursor::Cursor::decode)
+            .transpose()?;
+        let after_anchor = after_payload.as_ref().map(|p| (p.c.timestamp(), p.u));
+
+        let page_size = self.filters.limit.unwrap_or(DEFAULT_PAGE_SIZE);
+
+        // Build a TaskFilters with the page size applied at the SQL layer when
+        // there are no post-filters; with post-filters, defer to Rust below.
+        let has_tag_post_filters = self.any_tags.as_ref().is_some_and(|t| !t.is_empty())
+            || self.exclude_tags.as_ref().is_some_and(|t| !t.is_empty())
+            || self.tag_count_min.is_some();
+        let has_where_expr = self.where_expr.is_some();
+        let has_post_filters = has_tag_post_filters || has_where_expr;
+
+        let mut filters = self.filters.clone();
+        filters.offset = None;
+        if has_post_filters {
+            // SQL fetches everything; Rust does the slicing.
+            filters.limit = None;
+        } else {
+            filters.limit = Some(page_size);
+        }
+
+        let mut tasks = db.query_tasks_inner(&filters, after_anchor).await?;
+
+        if has_tag_post_filters {
+            tasks = Self::apply_tag_filters(
+                tasks,
+                self.any_tags.as_deref(),
+                self.exclude_tags.as_deref(),
+                self.tag_count_min,
+            );
+        }
+        if let Some(expr) = &self.where_expr {
+            tasks.retain(|task| expr.matches(task));
+        }
+        if has_post_filters {
+            tasks.truncate(page_size);
+        }
+
+        let next_cursor = if tasks.len() == page_size {
+            tasks
+                .last()
+                .map(|last| {
+                    let payload = crate::cursor::CursorPayload {
+                        c: last.created,
+                        u: last.uuid,
+                    };
+                    crate::cursor::Cursor::encode(&payload)
+                })
+                .transpose()?
+        } else {
+            None
+        };
+
+        Ok(crate::cursor::Page {
+            items: tasks,
+            next_cursor,
+        })
+    }
+
     /// Execute the query and return tasks paired with their fuzzy-match scores,
     /// sorted by score descending (ties broken by UUID for determinism).
     ///
@@ -472,6 +596,9 @@ impl TaskQueryBuilder {
             fuzzy_query: query.fuzzy_query.clone(),
             fuzzy_threshold: query.fuzzy_threshold.map(|t| t.clamp(0.0, 1.0)),
             where_expr: query.where_expr.clone(),
+            // Cursors are ephemeral and not part of saved-query state.
+            #[cfg(feature = "batch-operations")]
+            after: None,
         }
     }
 }
@@ -484,6 +611,9 @@ impl Default for TaskQueryBuilder {
 
 #[cfg(feature = "advanced-queries")]
 const DEFAULT_FUZZY_THRESHOLD: f32 = 0.6;
+
+#[cfg(all(feature = "advanced-queries", feature = "batch-operations"))]
+const DEFAULT_PAGE_SIZE: usize = 100;
 
 #[cfg(feature = "advanced-queries")]
 fn task_fuzzy_score(query_lc: &str, task: &crate::models::Task) -> f32 {
@@ -647,6 +777,79 @@ mod tests {
         let expr = FilterExpr::status(TaskStatus::Incomplete);
         let builder = TaskQueryBuilder::new().where_expr(expr.clone());
         assert_eq!(builder.where_expr, Some(expr));
+    }
+
+    #[cfg(feature = "batch-operations")]
+    mod cursor_builder_tests {
+        use super::*;
+        use crate::cursor::{Cursor, CursorPayload};
+        use chrono::Utc;
+        use uuid::Uuid;
+
+        fn sample_cursor() -> Cursor {
+            Cursor::encode(&CursorPayload {
+                c: Utc::now(),
+                u: Uuid::new_v4(),
+            })
+            .unwrap()
+        }
+
+        #[test]
+        fn test_after_setter_stores_cursor() {
+            let c = sample_cursor();
+            let builder = TaskQueryBuilder::new().after(c.clone());
+            assert_eq!(builder.after, Some(c));
+        }
+
+        #[cfg(feature = "advanced-queries")]
+        #[tokio::test]
+        async fn test_execute_paged_rejects_offset_and_after() {
+            use tempfile::NamedTempFile;
+            let f = NamedTempFile::new().unwrap();
+            crate::test_utils::create_test_database(f.path())
+                .await
+                .unwrap();
+            let db = crate::database::ThingsDatabase::new(f.path())
+                .await
+                .unwrap();
+
+            let result = TaskQueryBuilder::new()
+                .offset(5)
+                .after(sample_cursor())
+                .execute_paged(&db)
+                .await;
+            match result {
+                Err(crate::error::ThingsError::InvalidCursor(msg)) => {
+                    assert!(msg.contains("offset and after"), "msg: {msg}");
+                }
+                other => panic!("expected InvalidCursor, got {other:?}"),
+            }
+        }
+
+        #[cfg(feature = "advanced-queries")]
+        #[tokio::test]
+        async fn test_execute_paged_rejects_fuzzy_and_after() {
+            use tempfile::NamedTempFile;
+            let f = NamedTempFile::new().unwrap();
+            crate::test_utils::create_test_database(f.path())
+                .await
+                .unwrap();
+            let db = crate::database::ThingsDatabase::new(f.path())
+                .await
+                .unwrap();
+
+            let result = TaskQueryBuilder::new()
+                .fuzzy_search("anything")
+                .after(sample_cursor())
+                .execute_paged(&db)
+                .await;
+            match result {
+                Err(crate::error::ThingsError::InvalidCursor(msg)) => {
+                    assert!(msg.contains("fuzzy"), "msg: {msg}");
+                }
+                other => panic!("expected InvalidCursor, got {other:?}"),
+            }
+        }
     }
 
     #[cfg(feature = "advanced-queries")]

@@ -407,6 +407,9 @@ impl From<ThingsError> for McpError {
                 McpError::validation_error(format!("Area not found: {uuid}"))
             }
             ThingsError::Validation { message } => McpError::validation_error(message),
+            ThingsError::InvalidCursor(message) => {
+                McpError::validation_error(format!("Invalid cursor: {message}"))
+            }
             ThingsError::Configuration { message } => McpError::configuration_error(message),
             ThingsError::DateValidation(e) => {
                 McpError::validation_error(format!("Date validation failed: {e}"))

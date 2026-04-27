@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **`batch-operations` feature flag** — gates new pagination, streaming, and batch-fetch APIs (1.2.0 milestone). Additive; default builds are unaffected.
+- **Cursor-based pagination on `TaskQueryBuilder`** — new `cursor` module exposing opaque `Cursor` and `Page<T>` types, plus `TaskQueryBuilder::after(cursor)` and `execute_paged()` (gated on both `advanced-queries` and `batch-operations`). Cursor anchors on `(created, uuid)`: `created` is immutable so cursors stay valid under concurrent edits, and `uuid` provides a deterministic tiebreak. Cursor encoding is URL-safe base64 of a compact JSON payload. Default page size is 100 (overridable via `.limit()`). `execute_paged` returns `ThingsError::InvalidCursor` if `.offset()` and `.after()` are both set, or if `.fuzzy_search()` and `.after()` are both set.
+
+### Changed
+- **`ThingsDatabase::query_tasks` ordering is now deterministic** — `ORDER BY` was tightened from `creationDate DESC` to `CAST(creationDate AS INTEGER) DESC, uuid DESC`. Previously, the order of tasks tied on truncated-second `creationDate` was unspecified; now it is well-defined. No effect on callers that already had distinct timestamps.
+
 ## [1.1.0] - 2026-04-26
 
 ### Added

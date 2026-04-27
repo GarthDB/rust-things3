@@ -19,7 +19,8 @@ export-csv = ["dep:csv"]
 export-opml = ["dep:quick-xml"]
 observability = ["dep:metrics"]
 advanced-queries = []
-full = ["export-csv", "export-opml", "observability", "advanced-queries"]
+batch-operations = ["dep:base64"]
+full = ["export-csv", "export-opml", "observability", "advanced-queries", "batch-operations"]
 
 [dependencies]
 # Core
@@ -36,6 +37,9 @@ rusqlite = { version = "0.32", features = ["bundled"] }
 
 # String similarity (for tag fuzzy matching)
 strsim.workspace = true
+
+# Cursor pagination (optional, gated behind `batch-operations`)
+base64 = { workspace = true, optional = true }
 
 # Async
 tokio.workspace = true
