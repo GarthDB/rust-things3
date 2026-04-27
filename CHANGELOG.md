@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-04-26
+
 ### Added
 - **`advanced-queries` feature flag** — gates new query execution APIs so existing builds are unaffected.
 - **`ThingsDatabase::query_tasks(filters: &TaskFilters)`** — executes a dynamic SQL query driven by all `TaskFilters` fields: status, type, project, area, start date range, deadline range, limit, and offset. Tag and search-query filters are applied in Rust after the database fetch.
