@@ -4,6 +4,7 @@ use crate::models::{Area, Project, Task, TaskStatus, TaskType};
 use anyhow::Result;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+#[cfg(feature = "export-opml")]
 use std::collections::HashMap;
 use std::fmt::Write;
 
@@ -14,6 +15,7 @@ pub enum ExportFormat {
     Csv,
     Opml,
     Markdown,
+    TaskPaper,
 }
 
 impl std::str::FromStr for ExportFormat {
@@ -25,6 +27,7 @@ impl std::str::FromStr for ExportFormat {
             "csv" => Ok(Self::Csv),
             "opml" => Ok(Self::Opml),
             "markdown" | "md" => Ok(Self::Markdown),
+            "taskpaper" | "tp" => Ok(Self::TaskPaper),
             _ => Err(anyhow::anyhow!("Unsupported export format: {s}")),
         }
     }
@@ -114,6 +117,12 @@ impl DataExporter {
                 "OPML export is not enabled. Enable the 'export-opml' feature."
             )),
             ExportFormat::Markdown => Ok(Self::export_markdown(data)),
+            #[cfg(feature = "export-taskpaper")]
+            ExportFormat::TaskPaper => Ok(Self::export_taskpaper(data)),
+            #[cfg(not(feature = "export-taskpaper"))]
+            ExportFormat::TaskPaper => Err(anyhow::anyhow!(
+                "TaskPaper export is not enabled. Enable the 'export-taskpaper' feature."
+            )),
         }
     }
 
@@ -249,6 +258,88 @@ impl DataExporter {
         opml
     }
 
+    /// Export as TaskPaper
+    #[cfg(feature = "export-taskpaper")]
+    fn export_taskpaper(data: &ExportData) -> String {
+        let mut out = String::new();
+
+        // --- Areas → their projects → tasks ---
+        for area in &data.areas {
+            let area_meta = taskpaper_metadata(
+                TaskStatus::Incomplete,
+                None,
+                None,
+                None,
+                &area.tags,
+            );
+            writeln!(out, "{}:{area_meta}", escape_taskpaper_title(&area.title)).unwrap();
+
+            let area_projects: Vec<&Project> = data
+                .projects
+                .iter()
+                .filter(|p| p.area_uuid == Some(area.uuid))
+                .collect();
+
+            for project in &area_projects {
+                let meta = taskpaper_metadata(
+                    project.status,
+                    None,
+                    project.deadline,
+                    project.start_date,
+                    &project.tags,
+                );
+                writeln!(out, "\t{}:{meta}", escape_taskpaper_title(&project.title)).unwrap();
+                if let Some(notes) = &project.notes {
+                    write_taskpaper_notes(&mut out, notes, 2);
+                }
+                for task in data
+                    .tasks
+                    .iter()
+                    .filter(|t| t.project_uuid == Some(project.uuid) && t.parent_uuid.is_none())
+                {
+                    write_taskpaper_task(&mut out, task, 2, &data.tasks);
+                }
+            }
+        }
+
+        // --- Orphan projects (no area) ---
+        for project in data
+            .projects
+            .iter()
+            .filter(|p| p.area_uuid.is_none())
+        {
+            let meta = taskpaper_metadata(
+                project.status,
+                None,
+                project.deadline,
+                project.start_date,
+                &project.tags,
+            );
+            writeln!(out, "{}:{meta}", escape_taskpaper_title(&project.title)).unwrap();
+            if let Some(notes) = &project.notes {
+                write_taskpaper_notes(&mut out, notes, 1);
+            }
+            for task in data
+                .tasks
+                .iter()
+                .filter(|t| t.project_uuid == Some(project.uuid) && t.parent_uuid.is_none())
+            {
+                write_taskpaper_task(&mut out, task, 1, &data.tasks);
+            }
+        }
+
+        // --- Orphan tasks (no project, no area, no parent) ---
+        for task in data
+            .tasks
+            .iter()
+            .filter(|t| t.project_uuid.is_none() && t.area_uuid.is_none() && t.parent_uuid.is_none())
+        {
+            write_taskpaper_task(&mut out, task, 0, &data.tasks);
+        }
+
+        out
+    }
+
     /// Export as Markdown
     fn export_markdown(data: &ExportData) -> String {
         let mut md = String::new();
@@ -318,6 +409,7 @@ impl DataExporter {
 }
 
 /// Helper functions for CSV export
+#[cfg(feature = "export-csv")]
 const fn format_task_type_csv(task_type: TaskType) -> &'static str {
     match task_type {
         TaskType::Todo => "Todo",
@@ -327,6 +419,7 @@ const fn format_task_type_csv(task_type: TaskType) -> &'static str {
     }
 }
 
+#[cfg(feature = "export-csv")]
 const fn format_task_status_csv(status: TaskStatus) -> &'static str {
     match status {
         TaskStatus::Incomplete => "Incomplete",
@@ -336,15 +429,18 @@ const fn format_task_status_csv(status: TaskStatus) -> &'static str {
     }
 }
 
+#[cfg(feature = "export-csv")]
 fn format_date_csv(date: Option<chrono::NaiveDate>) -> String {
     date.map(|d| d.format("%Y-%m-%d").to_string())
         .unwrap_or_default()
 }
 
+#[cfg(feature = "export-csv")]
 fn format_datetime_csv(datetime: DateTime<Utc>) -> String {
     datetime.format("%Y-%m-%d %H:%M:%S").to_string()
 }
 
+#[cfg(feature = "export-csv")]
 fn escape_csv(s: &str) -> String {
     if s.contains(',') || s.contains('"') || s.contains('\n') {
         format!("\"{}\"", s.replace('"', "\"\""))
@@ -353,6 +449,154 @@ fn escape_csv(s: &str) -> String {
     }
 }
 
+/// Sanitize a tag name for TaskPaper syntax.
+///
+/// TaskPaper tags are `@word` tokens — no spaces, parens, or `@`.
+/// Whitespace runs become `-`; `@`, `(`, `)`, and control characters are stripped.
+fn sanitize_taskpaper_tag(s: &str) -> String {
+    let mut result = String::with_capacity(s.len());
+    let mut prev_was_space = false;
+    for ch in s.chars() {
+        match ch {
+            '@' | '(' | ')' => {}
+            c if c.is_control() => {}
+            c if c.is_whitespace() => {
+                if !prev_was_space && !result.is_empty() {
+                    result.push('-');
+                }
+                prev_was_space = true;
+                continue;
+            }
+            c => result.push(c),
+        }
+        prev_was_space = false;
+    }
+    // Strip trailing dashes that result from trailing whitespace
+    result.trim_end_matches('-').to_string()
+}
+
+/// Escape a task/project title for TaskPaper.
+///
+/// Titles must be one line; newlines are replaced with a space.
+/// A trailing `:` would make the line look like a project header — append a
+/// trailing space to prevent that.
+fn escape_taskpaper_title(s: &str) -> String {
+    let single_line = s.replace(['\n', '\r'], " ");
+    if single_line.ends_with(':') {
+        format!("{single_line} ")
+    } else {
+        single_line
+    }
+}
+
+/// Format a `NaiveDate` as `YYYY-MM-DD`.
+fn format_date_taskpaper(date: chrono::NaiveDate) -> String {
+    date.format("%Y-%m-%d").to_string()
+}
+
+/// Build the inline metadata suffix for a task/project line.
+///
+/// Returns the `@tag(value) @tag …` string (with a leading space when non-empty).
+#[cfg(feature = "export-taskpaper")]
+fn taskpaper_metadata(
+    status: TaskStatus,
+    stop_date: Option<chrono::DateTime<Utc>>,
+    deadline: Option<chrono::NaiveDate>,
+    start_date: Option<chrono::NaiveDate>,
+    tags: &[String],
+) -> String {
+    let mut parts: Vec<String> = Vec::new();
+
+    match status {
+        TaskStatus::Completed => {
+            if let Some(dt) = stop_date {
+                parts.push(format!("@done({})", dt.format("%Y-%m-%d")));
+            } else {
+                parts.push("@done".to_string());
+            }
+        }
+        TaskStatus::Canceled => parts.push("@cancelled".to_string()),
+        TaskStatus::Trashed => parts.push("@trashed".to_string()),
+        TaskStatus::Incomplete => {}
+    }
+
+    if let Some(d) = deadline {
+        parts.push(format!("@due({})", format_date_taskpaper(d)));
+    }
+    if let Some(d) = start_date {
+        parts.push(format!("@start({})", format_date_taskpaper(d)));
+    }
+
+    for tag in tags {
+        let sanitized = sanitize_taskpaper_tag(tag);
+        if !sanitized.is_empty() {
+            parts.push(format!("@{sanitized}"));
+        }
+    }
+
+    if parts.is_empty() {
+        String::new()
+    } else {
+        format!(" {}", parts.join(" "))
+    }
+}
+
+/// Write notes indented at `indent` tabs, one output line per note line.
+#[cfg(feature = "export-taskpaper")]
+fn write_taskpaper_notes(out: &mut String, notes: &str, indent: usize) {
+    let prefix = "\t".repeat(indent);
+    for line in notes.lines() {
+        writeln!(out, "{prefix}{line}").unwrap();
+    }
+}
+
+/// Write a single task (and its children) at the given indent depth.
+#[cfg(feature = "export-taskpaper")]
+fn write_taskpaper_task(out: &mut String, task: &Task, indent: usize, all_tasks: &[Task]) {
+    let tabs = "\t".repeat(indent);
+
+    if task.task_type == TaskType::Heading {
+        // Headings are section dividers — render as a nested project-style header
+        let meta = taskpaper_metadata(
+            task.status,
+            task.stop_date,
+            task.deadline,
+            task.start_date,
+            &task.tags,
+        );
+        writeln!(out, "{tabs}{}:{meta}", escape_taskpaper_title(&task.title)).unwrap();
+    } else {
+        let meta = taskpaper_metadata(
+            task.status,
+            task.stop_date,
+            task.deadline,
+            task.start_date,
+            &task.tags,
+        );
+        writeln!(out, "{tabs}- {}{meta}", escape_taskpaper_title(&task.title)).unwrap();
+    }
+
+    if let Some(notes) = &task.notes {
+        write_taskpaper_notes(out, notes, indent + 1);
+    }
+
+    // Recurse into direct children (from task.children if populated, or from
+    // the flat all_tasks slice by parent_uuid match)
+    if !task.children.is_empty() {
+        for child in &task.children {
+            write_taskpaper_task(out, child, indent + 1, &[]);
+        }
+    } else {
+        for child in all_tasks
+            .iter()
+            .filter(|t| t.parent_uuid == Some(task.uuid))
+        {
+            write_taskpaper_task(out, child, indent + 1, all_tasks);
+        }
+    }
+}
+
+#[cfg(feature = "export-opml")]
 fn escape_xml(s: &str) -> String {
     s.replace('&', "&amp;")
         .replace('<', "&lt;")
@@ -572,6 +816,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "export-csv")]
     fn test_format_task_type_csv() {
         assert_eq!(format_task_type_csv(TaskType::Todo), "Todo");
         assert_eq!(format_task_type_csv(TaskType::Project), "Project");
@@ -580,6 +825,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "export-csv")]
     fn test_format_task_status_csv() {
         assert_eq!(format_task_status_csv(TaskStatus::Incomplete), "Incomplete");
         assert_eq!(format_task_status_csv(TaskStatus::Completed), "Completed");
@@ -588,6 +834,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "export-csv")]
     fn test_format_date_csv() {
         use chrono::NaiveDate;
 
@@ -597,6 +844,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "export-csv")]
     fn test_format_datetime_csv() {
         let datetime = Utc::now();
         let formatted = format_datetime_csv(datetime);
@@ -613,6 +861,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "export-csv")]
     fn test_escape_csv() {
         // No special characters
         assert_eq!(escape_csv("normal text"), "normal text");
@@ -634,6 +883,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "export-opml")]
     fn test_escape_xml() {
         assert_eq!(escape_xml("normal text"), "normal text");
         assert_eq!(
@@ -715,5 +965,246 @@ mod tests {
         let debug_str = format!("{data:?}");
         assert!(!debug_str.is_empty());
         assert!(debug_str.contains("ExportData"));
+    }
+
+    #[test]
+    fn test_export_format_from_str_taskpaper() {
+        assert_eq!(
+            "taskpaper".parse::<ExportFormat>().unwrap(),
+            ExportFormat::TaskPaper
+        );
+        assert_eq!(
+            "TaskPaper".parse::<ExportFormat>().unwrap(),
+            ExportFormat::TaskPaper
+        );
+        assert_eq!(
+            "TASKPAPER".parse::<ExportFormat>().unwrap(),
+            ExportFormat::TaskPaper
+        );
+        assert_eq!(
+            "tp".parse::<ExportFormat>().unwrap(),
+            ExportFormat::TaskPaper
+        );
+        assert_eq!(
+            "TP".parse::<ExportFormat>().unwrap(),
+            ExportFormat::TaskPaper
+        );
+    }
+
+    #[test]
+    #[cfg(not(feature = "export-taskpaper"))]
+    fn test_export_taskpaper_disabled() {
+        let exporter = DataExporter::new_default();
+        let data = ExportData::new(vec![], vec![], vec![]);
+        let result = exporter.export(&data, ExportFormat::TaskPaper);
+        assert!(result.is_err());
+        let msg = result.unwrap_err().to_string();
+        assert!(
+            msg.contains("export-taskpaper"),
+            "Error should name the missing feature, got: {msg}"
+        );
+    }
+
+    #[test]
+    #[cfg(feature = "export-taskpaper")]
+    fn test_export_taskpaper_empty() {
+        let exporter = DataExporter::new_default();
+        let data = ExportData::new(vec![], vec![], vec![]);
+        let result = exporter.export(&data, ExportFormat::TaskPaper);
+        assert!(result.is_ok());
+        assert!(result.unwrap().is_empty());
+    }
+
+    #[test]
+    #[cfg(feature = "export-taskpaper")]
+    fn test_export_taskpaper_with_data() {
+        let exporter = DataExporter::new_default();
+        let tasks = create_mock_tasks();
+        let projects = create_mock_projects();
+        let areas = create_mock_areas();
+        let data = ExportData::new(tasks, projects, areas);
+
+        let result = exporter.export(&data, ExportFormat::TaskPaper);
+        assert!(result.is_ok());
+        let tp = result.unwrap();
+
+        // Area as top-level project
+        assert!(tp.contains("Work:"), "Expected 'Work:' in output:\n{tp}");
+        // Project indented under area
+        assert!(
+            tp.contains("\tWebsite Redesign:"),
+            "Expected '\\tWebsite Redesign:' in output:\n{tp}"
+        );
+        // Task indented under project (two levels)
+        assert!(
+            tp.contains("\t\t- Research competitors"),
+            "Expected '\\t\\t- Research competitors' in output:\n{tp}"
+        );
+    }
+
+    #[test]
+    #[cfg(feature = "export-taskpaper")]
+    fn test_export_taskpaper_status_tags() {
+        use chrono::TimeZone;
+
+        let base_uuid = uuid::Uuid::parse_str("aaaaaaaa-0000-0000-0000-000000000000").unwrap();
+        let make_task = |n: u8, status: TaskStatus, stop_date: Option<chrono::DateTime<Utc>>| Task {
+            uuid: uuid::Uuid::parse_str(&format!("aaaaaaaa-0000-0000-0000-{n:012}")).unwrap(),
+            title: format!("Task {n}"),
+            task_type: TaskType::Todo,
+            status,
+            notes: None,
+            start_date: None,
+            deadline: None,
+            created: Utc::now(),
+            modified: Utc::now(),
+            stop_date,
+            project_uuid: None,
+            area_uuid: None,
+            parent_uuid: None,
+            tags: vec![],
+            children: vec![],
+        };
+        let _ = base_uuid;
+
+        let stop = Utc.with_ymd_and_hms(2026, 1, 15, 0, 0, 0).unwrap();
+        let tasks = vec![
+            make_task(1, TaskStatus::Incomplete, None),
+            make_task(2, TaskStatus::Completed, Some(stop)),
+            make_task(3, TaskStatus::Completed, None),
+            make_task(4, TaskStatus::Canceled, None),
+            make_task(5, TaskStatus::Trashed, None),
+        ];
+        let data = ExportData::new(tasks, vec![], vec![]);
+        let exporter = DataExporter::new_default();
+        let tp = exporter.export(&data, ExportFormat::TaskPaper).unwrap();
+
+        // Incomplete: no status tag
+        assert!(tp.contains("- Task 1\n"), "Incomplete task should have no status tag:\n{tp}");
+        // Completed with stop date
+        assert!(tp.contains("@done(2026-01-15)"), "Completed task with stop_date:\n{tp}");
+        // Completed without stop date
+        assert!(tp.contains("- Task 3 @done\n"), "Completed task without stop_date:\n{tp}");
+        // Canceled
+        assert!(tp.contains("@cancelled"), "Cancelled task:\n{tp}");
+        // Trashed
+        assert!(tp.contains("@trashed"), "Trashed task:\n{tp}");
+    }
+
+    #[test]
+    #[cfg(feature = "export-taskpaper")]
+    fn test_export_taskpaper_dates() {
+        use chrono::NaiveDate;
+
+        let task = Task {
+            uuid: uuid::Uuid::parse_str("bbbbbbbb-0000-0000-0000-000000000001").unwrap(),
+            title: "Task with dates".to_string(),
+            task_type: TaskType::Todo,
+            status: TaskStatus::Incomplete,
+            notes: None,
+            start_date: Some(NaiveDate::from_ymd_opt(2026, 3, 1).unwrap()),
+            deadline: Some(NaiveDate::from_ymd_opt(2026, 4, 30).unwrap()),
+            created: Utc::now(),
+            modified: Utc::now(),
+            stop_date: None,
+            project_uuid: None,
+            area_uuid: None,
+            parent_uuid: None,
+            tags: vec![],
+            children: vec![],
+        };
+        let data = ExportData::new(vec![task], vec![], vec![]);
+        let exporter = DataExporter::new_default();
+        let tp = exporter.export(&data, ExportFormat::TaskPaper).unwrap();
+
+        assert!(tp.contains("@due(2026-04-30)"), "Expected @due date:\n{tp}");
+        assert!(tp.contains("@start(2026-03-01)"), "Expected @start date:\n{tp}");
+    }
+
+    #[test]
+    #[cfg(feature = "export-taskpaper")]
+    fn test_export_taskpaper_tags() {
+        let task = Task {
+            uuid: uuid::Uuid::parse_str("cccccccc-0000-0000-0000-000000000001").unwrap(),
+            title: "Tagged task".to_string(),
+            task_type: TaskType::Todo,
+            status: TaskStatus::Incomplete,
+            notes: None,
+            start_date: None,
+            deadline: None,
+            created: Utc::now(),
+            modified: Utc::now(),
+            stop_date: None,
+            project_uuid: None,
+            area_uuid: None,
+            parent_uuid: None,
+            tags: vec![
+                "work".to_string(),
+                "high priority".to_string(),
+                "@weird(name)".to_string(),
+            ],
+            children: vec![],
+        };
+        let data = ExportData::new(vec![task], vec![], vec![]);
+        let exporter = DataExporter::new_default();
+        let tp = exporter.export(&data, ExportFormat::TaskPaper).unwrap();
+
+        assert!(tp.contains("@work"), "Expected @work tag:\n{tp}");
+        assert!(tp.contains("@high-priority"), "Expected @high-priority tag:\n{tp}");
+        // @ ( ) stripped; resulting non-empty tag should appear
+        assert!(tp.contains("@weirdname"), "Expected @weirdname tag:\n{tp}");
+    }
+
+    #[test]
+    #[cfg(feature = "export-taskpaper")]
+    fn test_export_taskpaper_notes_multiline() {
+        let task = Task {
+            uuid: uuid::Uuid::parse_str("dddddddd-0000-0000-0000-000000000001").unwrap(),
+            title: "Task with notes".to_string(),
+            task_type: TaskType::Todo,
+            status: TaskStatus::Incomplete,
+            notes: Some("First line\nSecond line\nThird line".to_string()),
+            start_date: None,
+            deadline: None,
+            created: Utc::now(),
+            modified: Utc::now(),
+            stop_date: None,
+            project_uuid: None,
+            area_uuid: None,
+            parent_uuid: None,
+            tags: vec![],
+            children: vec![],
+        };
+        let data = ExportData::new(vec![task], vec![], vec![]);
+        let exporter = DataExporter::new_default();
+        let tp = exporter.export(&data, ExportFormat::TaskPaper).unwrap();
+
+        // Task is at indent 0, so notes are at indent 1 (\t)
+        assert!(tp.contains("\tFirst line"), "Expected indented first line:\n{tp}");
+        assert!(tp.contains("\tSecond line"), "Expected indented second line:\n{tp}");
+        assert!(tp.contains("\tThird line"), "Expected indented third line:\n{tp}");
+    }
+
+    #[test]
+    fn test_sanitize_taskpaper_tag() {
+        assert_eq!(sanitize_taskpaper_tag("work"), "work");
+        assert_eq!(sanitize_taskpaper_tag("high priority"), "high-priority");
+        assert_eq!(sanitize_taskpaper_tag("  leading"), "leading");
+        assert_eq!(sanitize_taskpaper_tag("trailing  "), "trailing");
+        assert_eq!(sanitize_taskpaper_tag("@tag(value)"), "tagvalue");
+        assert_eq!(sanitize_taskpaper_tag(""), "");
+        assert_eq!(sanitize_taskpaper_tag("a  b  c"), "a-b-c");
+    }
+
+    #[test]
+    fn test_escape_taskpaper_title() {
+        assert_eq!(escape_taskpaper_title("Normal title"), "Normal title");
+        assert_eq!(escape_taskpaper_title("Multi\nline"), "Multi line");
+        assert_eq!(escape_taskpaper_title("Carriage\rreturn"), "Carriage return");
+        assert_eq!(
+            escape_taskpaper_title("Ends with colon:"),
+            "Ends with colon: "
+        );
+        assert_eq!(escape_taskpaper_title("Not a colon"), "Not a colon");
     }
 }
