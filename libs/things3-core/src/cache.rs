@@ -35,6 +35,32 @@ pub struct CacheDependency {
     pub invalidating_operations: Vec<String>,
 }
 
+impl CacheDependency {
+    /// Test whether this dependency matches a mutation on `(entity_type, entity_id)`.
+    ///
+    /// `entity_id == None` on either side acts as a wildcard: a dependency with
+    /// no specific id matches any concrete mutation of the same type, and a
+    /// caller passing `None` matches every dependency of that type.
+    #[must_use]
+    pub fn matches(&self, entity_type: &str, entity_id: Option<&Uuid>) -> bool {
+        if self.entity_type != entity_type {
+            return false;
+        }
+        match (self.entity_id, entity_id) {
+            (Some(dep_id), Some(req_id)) => dep_id == *req_id,
+            _ => true,
+        }
+    }
+
+    /// Test whether this dependency lists `operation` as one of its invalidators.
+    #[must_use]
+    pub fn matches_operation(&self, operation: &str) -> bool {
+        self.invalidating_operations
+            .iter()
+            .any(|op| op == operation)
+    }
+}
+
 /// Enhanced cache configuration with intelligent invalidation
 #[derive(Debug, Clone)]
 pub struct CacheConfig {
@@ -139,10 +165,9 @@ impl<T> CachedData<T> {
     }
 
     pub fn has_dependency(&self, entity_type: &str, entity_id: Option<&Uuid>) -> bool {
-        self.dependencies.iter().any(|dep| {
-            dep.entity_type == entity_type
-                && entity_id.is_none_or(|id| dep.entity_id.as_ref() == Some(id))
-        })
+        self.dependencies
+            .iter()
+            .any(|dep| dep.matches(entity_type, entity_id))
     }
 }
 
@@ -597,52 +622,59 @@ impl ThingsCache {
         entries.remove(key);
     }
 
-    /// Invalidate cache entries based on entity changes
-    pub fn invalidate_by_entity(&self, entity_type: &str, entity_id: Option<&Uuid>) {
-        // For now, we'll invalidate all caches when an entity changes
-        // In a more sophisticated implementation, we would track dependencies
-        // and only invalidate specific entries
-
-        // Invalidate all caches as a conservative approach
-        self.tasks.invalidate_all();
-        self.projects.invalidate_all();
-        self.areas.invalidate_all();
-        self.search_results.invalidate_all();
+    /// Selectively invalidate cache entries whose dependencies match
+    /// `(entity_type, entity_id)`. Returns the number of entries evicted.
+    ///
+    /// `entity_id == None` is a wildcard that matches any cached entry
+    /// depending on `entity_type`. Entries that do not depend on the mutated
+    /// entity are left untouched.
+    pub async fn invalidate_by_entity(&self, entity_type: &str, entity_id: Option<&Uuid>) -> usize {
+        let (task_keys, project_keys, area_keys, search_keys) = {
+            let pred = |dep: &CacheDependency| dep.matches(entity_type, entity_id);
+            (
+                collect_matching_keys(&self.tasks, &pred),
+                collect_matching_keys(&self.projects, &pred),
+                collect_matching_keys(&self.areas, &pred),
+                collect_matching_keys(&self.search_results, &pred),
+            )
+        };
+        let removed = evict_keys(&self.tasks, &task_keys).await
+            + evict_keys(&self.projects, &project_keys).await
+            + evict_keys(&self.areas, &area_keys).await
+            + evict_keys(&self.search_results, &search_keys).await;
 
         tracing::debug!(
-            "Invalidated all caches due to entity change: {} {:?}",
+            "Invalidated {} cache entries depending on {} {:?}",
+            removed,
             entity_type,
             entity_id
         );
+        removed
     }
 
-    /// Invalidate cache entries by operation type
-    pub fn invalidate_by_operation(&self, operation: &str) {
-        // For now, we'll invalidate all caches when certain operations occur
-        // In a more sophisticated implementation, we would track dependencies
-        // and only invalidate specific entries based on the operation
+    /// Selectively invalidate cache entries whose dependencies list `operation`
+    /// among their invalidating operations. Returns the number of entries evicted.
+    pub async fn invalidate_by_operation(&self, operation: &str) -> usize {
+        let (task_keys, project_keys, area_keys, search_keys) = {
+            let pred = |dep: &CacheDependency| dep.matches_operation(operation);
+            (
+                collect_matching_keys(&self.tasks, &pred),
+                collect_matching_keys(&self.projects, &pred),
+                collect_matching_keys(&self.areas, &pred),
+                collect_matching_keys(&self.search_results, &pred),
+            )
+        };
+        let removed = evict_keys(&self.tasks, &task_keys).await
+            + evict_keys(&self.projects, &project_keys).await
+            + evict_keys(&self.areas, &area_keys).await
+            + evict_keys(&self.search_results, &search_keys).await;
 
-        match operation {
-            "task_created" | "task_updated" | "task_deleted" | "task_completed" => {
-                self.tasks.invalidate_all();
-                self.search_results.invalidate_all();
-            }
-            "project_created" | "project_updated" | "project_deleted" => {
-                self.projects.invalidate_all();
-                self.tasks.invalidate_all(); // Tasks depend on projects
-            }
-            "area_created" | "area_updated" | "area_deleted" => {
-                self.areas.invalidate_all();
-                self.projects.invalidate_all(); // Projects depend on areas
-                self.tasks.invalidate_all(); // Tasks depend on areas
-            }
-            _ => {
-                // For unknown operations, invalidate all caches as a conservative approach
-                self.invalidate_all();
-            }
-        }
-
-        tracing::debug!("Invalidated caches due to operation: {}", operation);
+        tracing::debug!(
+            "Invalidated {} cache entries due to operation {}",
+            removed,
+            operation
+        );
+        removed
     }
 
     /// Get cache warming statistics
@@ -660,6 +692,39 @@ impl ThingsCache {
             handle.abort();
         }
     }
+}
+
+/// Walk a moka cache synchronously and collect keys whose dependency list
+/// satisfies `pred`. Split from [`evict_keys`] so the (non-`Send`) predicate is
+/// dropped before any `.await`, keeping the surrounding async fn `Send`.
+fn collect_matching_keys<V>(
+    cache: &Cache<String, CachedData<V>>,
+    pred: &dyn Fn(&CacheDependency) -> bool,
+) -> Vec<String>
+where
+    V: Clone + Send + Sync + 'static,
+{
+    cache
+        .iter()
+        .filter_map(|(k, v)| {
+            if v.dependencies.iter().any(pred) {
+                Some((*k).clone())
+            } else {
+                None
+            }
+        })
+        .collect()
+}
+
+/// Evict the given keys from a moka cache and return the count.
+async fn evict_keys<V>(cache: &Cache<String, CachedData<V>>, keys: &[String]) -> usize
+where
+    V: Clone + Send + Sync + 'static,
+{
+    for k in keys {
+        cache.invalidate(k).await;
+    }
+    keys.len()
 }
 
 /// Cache key generators
@@ -1208,5 +1273,156 @@ mod tests {
         assert_eq!(stats.hits, 2);
         assert_eq!(stats.misses, 1);
         assert!((stats.hit_rate - 2.0 / 3.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_cache_dependency_matches_rules() {
+        let id_a = Uuid::new_v4();
+        let id_b = Uuid::new_v4();
+        let dep_concrete = CacheDependency {
+            entity_type: "task".to_string(),
+            entity_id: Some(id_a),
+            invalidating_operations: vec!["task_updated".to_string()],
+        };
+        let dep_wildcard = CacheDependency {
+            entity_type: "task".to_string(),
+            entity_id: None,
+            invalidating_operations: vec!["task_updated".to_string()],
+        };
+
+        // concrete dep matches its own id, not a different id
+        assert!(dep_concrete.matches("task", Some(&id_a)));
+        assert!(!dep_concrete.matches("task", Some(&id_b)));
+        // wildcard request matches concrete dep
+        assert!(dep_concrete.matches("task", None));
+        // wildcard dep matches any concrete id of same type
+        assert!(dep_wildcard.matches("task", Some(&id_a)));
+        // type mismatch never matches
+        assert!(!dep_concrete.matches("project", Some(&id_a)));
+
+        // operation matching
+        assert!(dep_concrete.matches_operation("task_updated"));
+        assert!(!dep_concrete.matches_operation("task_deleted"));
+    }
+
+    /// Build a `Task` whose `uuid`, `project_uuid`, and `area_uuid` we control,
+    /// so dependency lists carry the IDs we expect.
+    fn task_with_ids(uuid: Uuid, project: Option<Uuid>, area: Option<Uuid>) -> Task {
+        let mut t = create_mock_tasks().into_iter().next().unwrap();
+        t.uuid = uuid;
+        t.project_uuid = project;
+        t.area_uuid = area;
+        t
+    }
+
+    #[tokio::test]
+    async fn test_invalidate_by_entity_selective_by_id() {
+        let cache = ThingsCache::new_default();
+        let id_x = Uuid::new_v4();
+        let id_y = Uuid::new_v4();
+
+        cache
+            .get_tasks("key_x", || async {
+                Ok(vec![task_with_ids(id_x, None, None)])
+            })
+            .await
+            .unwrap();
+        cache
+            .get_tasks("key_y", || async {
+                Ok(vec![task_with_ids(id_y, None, None)])
+            })
+            .await
+            .unwrap();
+
+        let removed = cache.invalidate_by_entity("task", Some(&id_x)).await;
+        assert_eq!(removed, 1, "only the entry depending on id_x should evict");
+        cache.tasks.run_pending_tasks().await;
+        assert!(cache.tasks.get("key_x").await.is_none());
+        assert!(cache.tasks.get("key_y").await.is_some());
+    }
+
+    #[tokio::test]
+    async fn test_invalidate_by_entity_wildcard_id() {
+        let cache = ThingsCache::new_default();
+        let id_x = Uuid::new_v4();
+        let id_y = Uuid::new_v4();
+
+        cache
+            .get_tasks("key_x", || async {
+                Ok(vec![task_with_ids(id_x, None, None)])
+            })
+            .await
+            .unwrap();
+        cache
+            .get_tasks("key_y", || async {
+                Ok(vec![task_with_ids(id_y, None, None)])
+            })
+            .await
+            .unwrap();
+
+        let removed = cache.invalidate_by_entity("task", None).await;
+        assert_eq!(removed, 2);
+        cache.tasks.run_pending_tasks().await;
+        assert!(cache.tasks.get("key_x").await.is_none());
+        assert!(cache.tasks.get("key_y").await.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_invalidate_by_entity_leaves_unrelated_caches() {
+        let cache = ThingsCache::new_default();
+        let task_id = Uuid::new_v4();
+        let project_id = Uuid::new_v4();
+
+        // task entry depends on its own task_id AND on project_id
+        cache
+            .get_tasks("inbox", || async {
+                Ok(vec![task_with_ids(task_id, Some(project_id), None)])
+            })
+            .await
+            .unwrap();
+        // project entry: cached projects keyed under "projects:all"
+        let mut p = create_mock_projects().into_iter().next().unwrap();
+        p.uuid = project_id;
+        cache
+            .get_projects("projects:all", || async { Ok(vec![p]) })
+            .await
+            .unwrap();
+
+        // invalidate by *task* id — must not nuke the projects cache
+        let removed = cache.invalidate_by_entity("task", Some(&task_id)).await;
+        assert_eq!(removed, 1);
+        cache.tasks.run_pending_tasks().await;
+        cache.projects.run_pending_tasks().await;
+        assert!(cache.tasks.get("inbox").await.is_none());
+        assert!(cache.projects.get("projects:all").await.is_some());
+    }
+
+    #[tokio::test]
+    async fn test_invalidate_by_operation_selective() {
+        let cache = ThingsCache::new_default();
+        let task_id = Uuid::new_v4();
+        let area_id = Uuid::new_v4();
+
+        // task entry: invalidating_operations include "task_updated"
+        cache
+            .get_tasks("inbox", || async {
+                Ok(vec![task_with_ids(task_id, None, None)])
+            })
+            .await
+            .unwrap();
+        // area entry: invalidating_operations include "area_updated", NOT "task_updated"
+        let mut a = create_mock_areas().into_iter().next().unwrap();
+        a.uuid = area_id;
+        cache
+            .get_areas("areas:all", || async { Ok(vec![a]) })
+            .await
+            .unwrap();
+
+        let removed = cache.invalidate_by_operation("task_updated").await;
+        assert_eq!(removed, 1);
+        cache.tasks.run_pending_tasks().await;
+        cache.areas.run_pending_tasks().await;
+        assert!(cache.tasks.get("inbox").await.is_none());
+        assert!(cache.areas.get("areas:all").await.is_some());
     }
 }
