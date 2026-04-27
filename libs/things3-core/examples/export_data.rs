@@ -45,6 +45,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     std::fs::write("export.md", &markdown)?;
     println!("  ✓ Saved to export.md ({} bytes)", markdown.len());
 
+    // Export to TaskPaper
+    println!("Exporting to TaskPaper...");
+    let taskpaper = exporter.export(&export_data, ExportFormat::TaskPaper)?;
+    std::fs::write("export.taskpaper", &taskpaper)?;
+    println!("  ✓ Saved to export.taskpaper ({} bytes)", taskpaper.len());
+
     println!("\n✓ Export completed successfully");
     Ok(())
 }

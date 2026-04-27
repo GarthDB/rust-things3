@@ -17,10 +17,11 @@ default = []
 test-utils = []
 export-csv = ["dep:csv"]
 export-opml = ["dep:quick-xml"]
+export-taskpaper = []
 observability = ["dep:metrics"]
 advanced-queries = []
 batch-operations = ["dep:base64", "dep:async-stream", "dep:futures-core"]
-full = ["export-csv", "export-opml", "observability", "advanced-queries", "batch-operations"]
+full = ["export-csv", "export-opml", "export-taskpaper", "observability", "advanced-queries", "batch-operations"]
 
 [dependencies]
 # Core
@@ -103,4 +104,4 @@ required-features = ["test-utils"]
 
 [[example]]
 name = "export_data"
-required-features = ["export-csv", "export-opml"]
+required-features = ["export-csv", "export-opml", "export-taskpaper"]
