@@ -7,6 +7,9 @@
 target/
 # Cargo.lock is now committed for reproducible builds
 
+# Ferrograph index
+.ferrograph
+
 # Coverage files
 *.profraw
 *.profdata
