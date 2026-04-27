@@ -60,13 +60,13 @@ pub struct SavedQuery {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub fuzzy_threshold: Option<f32>,
 
-    /// When the query was created.
-    pub created: DateTime<Utc>,
+    /// When the query was last saved.
+    pub saved_at: DateTime<Utc>,
 }
 
 impl SavedQuery {
     /// Build a minimal `SavedQuery` from just a name. All filters default
-    /// to empty; `created` is set to `Utc::now()`. Useful for tests and as
+    /// to empty; `saved_at` is set to `Utc::now()`. Useful for tests and as
     /// a starting point in CLI prompts.
     #[must_use]
     pub fn new(name: impl Into<String>) -> Self {
@@ -79,7 +79,7 @@ impl SavedQuery {
             tag_count_min: None,
             fuzzy_query: None,
             fuzzy_threshold: None,
-            created: Utc::now(),
+            saved_at: Utc::now(),
         }
     }
 }
@@ -259,7 +259,7 @@ mod tests {
             tag_count_min: Some(2),
             fuzzy_query: Some("agenda".to_string()),
             fuzzy_threshold: Some(0.7),
-            created: chrono::Utc::now(),
+            saved_at: chrono::Utc::now(),
         }
     }
 
@@ -272,9 +272,20 @@ mod tests {
         assert_eq!(parsed.name, original.name);
         assert_eq!(parsed.description, original.description);
         assert_eq!(parsed.filters.status, original.filters.status);
+        assert_eq!(parsed.filters.task_type, original.filters.task_type);
+        assert_eq!(parsed.filters.project_uuid, original.filters.project_uuid);
+        assert_eq!(parsed.filters.area_uuid, original.filters.area_uuid);
         assert_eq!(parsed.filters.tags, original.filters.tags);
+        assert_eq!(
+            parsed.filters.start_date_from,
+            original.filters.start_date_from
+        );
+        assert_eq!(parsed.filters.start_date_to, original.filters.start_date_to);
+        assert_eq!(parsed.filters.deadline_from, original.filters.deadline_from);
+        assert_eq!(parsed.filters.deadline_to, original.filters.deadline_to);
         assert_eq!(parsed.filters.search_query, original.filters.search_query);
         assert_eq!(parsed.filters.limit, original.filters.limit);
+        assert_eq!(parsed.filters.offset, original.filters.offset);
         assert_eq!(parsed.any_tags, original.any_tags);
         assert_eq!(parsed.exclude_tags, original.exclude_tags);
         assert_eq!(parsed.tag_count_min, original.tag_count_min);
@@ -298,16 +309,16 @@ mod tests {
         // Required fields stay
         assert!(json.contains("\"name\":\"minimal\""));
         assert!(json.contains("\"filters\""));
-        assert!(json.contains("\"created\""));
+        assert!(json.contains("\"saved_at\""));
     }
 
     #[test]
     fn test_saved_query_deserializes_with_missing_optional_fields() {
-        // Forward-compat: only name + filters + created should be enough
+        // Forward-compat: only name + filters + saved_at should be enough
         let json = r#"{
             "name": "old-format",
             "filters": {},
-            "created": "2026-01-01T00:00:00Z"
+            "saved_at": "2026-01-01T00:00:00Z"
         }"#;
         let q: SavedQuery = serde_json::from_str(json).unwrap();
         assert_eq!(q.name, "old-format");

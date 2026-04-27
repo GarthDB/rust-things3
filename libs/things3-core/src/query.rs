@@ -419,7 +419,7 @@ impl TaskQueryBuilder {
             tag_count_min: self.tag_count_min,
             fuzzy_query: self.fuzzy_query.clone(),
             fuzzy_threshold: self.fuzzy_threshold,
-            created: chrono::Utc::now(),
+            saved_at: chrono::Utc::now(),
         }
     }
 
@@ -437,7 +437,7 @@ impl TaskQueryBuilder {
             exclude_tags: query.exclude_tags.clone(),
             tag_count_min: query.tag_count_min,
             fuzzy_query: query.fuzzy_query.clone(),
-            fuzzy_threshold: query.fuzzy_threshold,
+            fuzzy_threshold: query.fuzzy_threshold.map(|t| t.clamp(0.0, 1.0)),
         }
     }
 }
