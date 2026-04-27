@@ -34,6 +34,9 @@ CROSS_MACHINE_COMPATIBILITY_FIX.md
 THINGS3_DATABASE_ANALYSIS.md
 compare_machine_databases.sh
 diagnose_things3_database.sh
+test_mcp_interactive.sh
+test_mcp_with_real_data.py
+test_real_database_direct.sh
 
 # Example output files
 export.csv
