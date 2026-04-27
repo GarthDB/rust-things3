@@ -16,7 +16,11 @@ target/
 coverage-reports/
 coverage/
 lcov.info
+lcov-*.info
 coverage.json
+coverage-*.json
+coverage.txt
+*_coverage.txt
 cobertura.xml
 
 # Homebrew tap (separate repository)
