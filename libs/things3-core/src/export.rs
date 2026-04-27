@@ -128,7 +128,7 @@ impl DataExporter {
                 "TaskPaper export is not enabled. Enable the 'export-taskpaper' feature."
             )),
             #[cfg(feature = "export-ical")]
-            ExportFormat::ICalendar => Ok(export_icalendar(data)),
+            ExportFormat::ICalendar => Ok(Self::export_icalendar(data)),
             #[cfg(not(feature = "export-ical"))]
             ExportFormat::ICalendar => Err(anyhow::anyhow!(
                 "iCalendar export is not enabled. Enable the 'export-ical' feature."
@@ -407,6 +407,107 @@ impl DataExporter {
 
         md
     }
+
+    /// Export as iCalendar (RFC 5545) — all items map to VTODO components.
+    ///
+    /// Projects export as top-level VTODOs. Tasks with a project emit
+    /// `RELATED-TO:<project-uid>`; tasks with a parent task also emit
+    /// `RELATED-TO:<parent-uid>` (RELTYPE defaults to PARENT per RFC 5545).
+    /// Areas surface as `CATEGORIES` entries rather than standalone components.
+    #[cfg(feature = "export-ical")]
+    fn export_icalendar(data: &ExportData) -> String {
+        use icalendar::{Calendar, Component, DatePerhapsTime, EventLike, Todo};
+
+        let mut cal = Calendar::new();
+        cal.name("Things 3 Export");
+
+        for project in &data.projects {
+            let mut todo = Todo::new();
+            todo.uid(&project.uuid.to_string());
+            todo.summary(&project.title);
+
+            if let Some(notes) = &project.notes {
+                todo.description(notes);
+            }
+
+            todo.status(ical_todo_status(project.status));
+
+            if let Some(d) = project.deadline {
+                todo.due(DatePerhapsTime::Date(d));
+            }
+            if let Some(d) = project.start_date {
+                todo.starts(DatePerhapsTime::Date(d));
+            }
+
+            let area_cat = data
+                .areas
+                .iter()
+                .find(|a| Some(a.uuid) == project.area_uuid);
+            for cat in project
+                .tags
+                .iter()
+                .map(String::as_str)
+                .chain(area_cat.map(|a| a.title.as_str()))
+            {
+                todo.add_multi_property("CATEGORIES", cat);
+            }
+
+            todo.created(project.created);
+            todo.last_modified(project.modified);
+
+            cal.push(todo);
+        }
+
+        for task in &data.tasks {
+            let mut todo = Todo::new();
+            todo.uid(&task.uuid.to_string());
+            todo.summary(&task.title);
+
+            if let Some(notes) = &task.notes {
+                todo.description(notes);
+            }
+
+            todo.status(ical_todo_status(task.status));
+
+            if task.status == TaskStatus::Completed {
+                if let Some(stop) = task.stop_date {
+                    todo.completed(stop);
+                }
+            }
+
+            if let Some(d) = task.deadline {
+                todo.due(DatePerhapsTime::Date(d));
+            }
+            if let Some(d) = task.start_date {
+                todo.starts(DatePerhapsTime::Date(d));
+            }
+
+            let area_cat = data.areas.iter().find(|a| Some(a.uuid) == task.area_uuid);
+            for cat in task
+                .tags
+                .iter()
+                .map(String::as_str)
+                .chain(area_cat.map(|a| a.title.as_str()))
+            {
+                todo.add_multi_property("CATEGORIES", cat);
+            }
+
+            // RELATED-TO links project and parent task (RELTYPE defaults to PARENT per RFC 5545)
+            if let Some(proj_uuid) = task.project_uuid {
+                todo.add_multi_property("RELATED-TO", &proj_uuid.to_string());
+            }
+            if let Some(parent_uuid) = task.parent_uuid {
+                todo.add_multi_property("RELATED-TO", &parent_uuid.to_string());
+            }
+
+            todo.created(task.created);
+            todo.last_modified(task.modified);
+
+            cal.push(todo);
+        }
+
+        cal.to_string()
+    }
 }
 
 /// Helper functions for CSV export
@@ -611,99 +712,6 @@ fn escape_xml(s: &str) -> String {
         .replace('\'', "&apos;")
 }
 
-/// Export as iCalendar (RFC 5545) — all items map to VTODO components.
-///
-/// Projects export as top-level VTODOs. Tasks reference their project via
-/// `RELATED-TO`. Areas are not emitted as components; they surface as entries
-/// in each task/project's `CATEGORIES` list.
-#[cfg(feature = "export-ical")]
-fn export_icalendar(data: &ExportData) -> String {
-    use icalendar::{Calendar, Component, DatePerhapsTime, EventLike, Todo};
-
-    let mut cal = Calendar::new();
-    cal.name("Things 3 Export");
-
-    for project in &data.projects {
-        let mut todo = Todo::new();
-        todo.uid(&project.uuid.to_string());
-        todo.summary(&project.title);
-
-        if let Some(notes) = &project.notes {
-            todo.description(notes);
-        }
-
-        todo.status(ical_todo_status(project.status));
-
-        if let Some(d) = project.deadline {
-            todo.due(DatePerhapsTime::Date(d));
-        }
-        if let Some(d) = project.start_date {
-            todo.starts(DatePerhapsTime::Date(d));
-        }
-
-        let mut cats: Vec<&str> = project.tags.iter().map(String::as_str).collect();
-        if let Some(area) = data
-            .areas
-            .iter()
-            .find(|a| Some(a.uuid) == project.area_uuid)
-        {
-            cats.push(&area.title);
-        }
-        if !cats.is_empty() {
-            todo.add_property("CATEGORIES", cats.join(","));
-        }
-
-        todo.add_property("CREATED", ical_datetime(project.created));
-        todo.add_property("LAST-MODIFIED", ical_datetime(project.modified));
-
-        cal.push(todo);
-    }
-
-    for task in &data.tasks {
-        let mut todo = Todo::new();
-        todo.uid(&task.uuid.to_string());
-        todo.summary(&task.title);
-
-        if let Some(notes) = &task.notes {
-            todo.description(notes);
-        }
-
-        todo.status(ical_todo_status(task.status));
-
-        if task.status == TaskStatus::Completed {
-            if let Some(stop) = task.stop_date {
-                todo.add_property("COMPLETED", ical_datetime(stop));
-            }
-        }
-
-        if let Some(d) = task.deadline {
-            todo.due(DatePerhapsTime::Date(d));
-        }
-        if let Some(d) = task.start_date {
-            todo.starts(DatePerhapsTime::Date(d));
-        }
-
-        let mut cats: Vec<&str> = task.tags.iter().map(String::as_str).collect();
-        if let Some(area) = data.areas.iter().find(|a| Some(a.uuid) == task.area_uuid) {
-            cats.push(&area.title);
-        }
-        if !cats.is_empty() {
-            todo.add_property("CATEGORIES", cats.join(","));
-        }
-
-        if let Some(proj_uuid) = task.project_uuid {
-            todo.add_property("RELATED-TO", proj_uuid.to_string());
-        }
-
-        todo.add_property("CREATED", ical_datetime(task.created));
-        todo.add_property("LAST-MODIFIED", ical_datetime(task.modified));
-
-        cal.push(todo);
-    }
-
-    cal.to_string()
-}
-
 #[cfg(feature = "export-ical")]
 fn ical_todo_status(status: TaskStatus) -> icalendar::TodoStatus {
     match status {
@@ -711,11 +719,6 @@ fn ical_todo_status(status: TaskStatus) -> icalendar::TodoStatus {
         TaskStatus::Completed => icalendar::TodoStatus::Completed,
         TaskStatus::Canceled | TaskStatus::Trashed => icalendar::TodoStatus::Cancelled,
     }
-}
-
-#[cfg(feature = "export-ical")]
-fn ical_datetime(dt: DateTime<Utc>) -> String {
-    dt.format("%Y%m%dT%H%M%SZ").to_string()
 }
 
 #[cfg(test)]
@@ -1562,8 +1565,14 @@ mod tests {
             .export(&data, ExportFormat::ICalendar)
             .unwrap();
 
-        assert!(ics.contains("20260430"), "DUE date in output:\n{ics}");
-        assert!(ics.contains("20260301"), "DTSTART date in output:\n{ics}");
+        assert!(
+            ics.contains("DUE;VALUE=DATE:20260430"),
+            "Expected DUE;VALUE=DATE:20260430:\n{ics}"
+        );
+        assert!(
+            ics.contains("DTSTART;VALUE=DATE:20260301"),
+            "Expected DTSTART;VALUE=DATE:20260301:\n{ics}"
+        );
     }
 
     #[test]
@@ -1664,6 +1673,83 @@ mod tests {
         assert!(
             ics.contains("RELATED-TO:12345678-0000-0000-0000-000000000000"),
             "Expected RELATED-TO with project UUID:\n{ics}"
+        );
+    }
+
+    #[test]
+    #[cfg(feature = "export-ical")]
+    fn test_export_icalendar_subtask_related_to() {
+        use crate::models::TaskType;
+
+        let parent_uuid = uuid::Uuid::parse_str("aaaaaaaa-0000-0000-0000-000000000001").unwrap();
+        let child_uuid = uuid::Uuid::parse_str("bbbbbbbb-0000-0000-0000-000000000002").unwrap();
+
+        let make_task = |uuid: uuid::Uuid, parent: Option<uuid::Uuid>| Task {
+            uuid,
+            title: "Task".to_string(),
+            task_type: TaskType::Todo,
+            status: TaskStatus::Incomplete,
+            notes: None,
+            start_date: None,
+            deadline: None,
+            created: Utc::now(),
+            modified: Utc::now(),
+            stop_date: None,
+            project_uuid: None,
+            area_uuid: None,
+            parent_uuid: parent,
+            tags: vec![],
+            children: vec![],
+        };
+        let tasks = vec![
+            make_task(parent_uuid, None),
+            make_task(child_uuid, Some(parent_uuid)),
+        ];
+        let data = ExportData::new(tasks, vec![], vec![]);
+        let ics = DataExporter::new_default()
+            .export(&data, ExportFormat::ICalendar)
+            .unwrap();
+
+        assert!(
+            ics.contains("RELATED-TO:aaaaaaaa-0000-0000-0000-000000000001"),
+            "Subtask should RELATED-TO its parent task:\n{ics}"
+        );
+    }
+
+    #[test]
+    #[cfg(feature = "export-ical")]
+    fn test_export_icalendar_categories_comma_escaped() {
+        use crate::models::TaskType;
+
+        let task = Task {
+            uuid: uuid::Uuid::parse_str("dddddddd-0000-0000-0000-000000000001").unwrap(),
+            title: "Task".to_string(),
+            task_type: TaskType::Todo,
+            status: TaskStatus::Incomplete,
+            notes: None,
+            start_date: None,
+            deadline: None,
+            created: Utc::now(),
+            modified: Utc::now(),
+            stop_date: None,
+            project_uuid: None,
+            area_uuid: None,
+            parent_uuid: None,
+            tags: vec!["design, UX".to_string(), "client\\work".to_string()],
+            children: vec![],
+        };
+        let data = ExportData::new(vec![task], vec![], vec![]);
+        let ics = DataExporter::new_default()
+            .export(&data, ExportFormat::ICalendar)
+            .unwrap();
+
+        assert!(
+            ics.contains("design\\, UX"),
+            "Comma in tag should be escaped as \\,:\n{ics}"
+        );
+        assert!(
+            ics.contains("client\\\\work"),
+            "Backslash in tag should be escaped as \\\\:\n{ics}"
         );
     }
 
