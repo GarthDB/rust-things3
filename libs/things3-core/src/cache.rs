@@ -1710,8 +1710,10 @@ mod tests {
     async fn test_no_preloader_is_noop() {
         // Default cache (no preloader) — get_* must not panic; stats counters
         // for warming must stay at zero even if the warming loop ticks.
-        let mut config = CacheConfig::default();
-        config.warming_interval = Duration::from_millis(20);
+        let config = CacheConfig {
+            warming_interval: Duration::from_millis(20),
+            ..Default::default()
+        };
         let cache = ThingsCache::new(&config);
         cache
             .get_tasks("inbox:all", || async { Ok(vec![]) })
@@ -1726,9 +1728,11 @@ mod tests {
 
     #[tokio::test]
     async fn test_warming_loop_invokes_warm() {
-        let mut config = CacheConfig::default();
-        config.warming_interval = Duration::from_millis(20);
-        config.max_warming_entries = 10;
+        let config = CacheConfig {
+            warming_interval: Duration::from_millis(20),
+            max_warming_entries: 10,
+            ..Default::default()
+        };
         let cache = ThingsCache::new(&config);
 
         let pre = Arc::new(RecordingPreloader::new(vec![]));
@@ -1783,8 +1787,10 @@ mod tests {
             .unwrap();
         let db = Arc::new(crate::ThingsDatabase::new(f.path()).await.unwrap());
 
-        let mut config = CacheConfig::default();
-        config.warming_interval = Duration::from_millis(20);
+        let config = CacheConfig {
+            warming_interval: Duration::from_millis(20),
+            ..Default::default()
+        };
         let cache = Arc::new(ThingsCache::new(&config));
         cache.set_preloader(DefaultPreloader::new(&cache, Arc::clone(&db)));
 
