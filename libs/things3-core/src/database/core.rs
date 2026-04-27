@@ -4666,25 +4666,34 @@ mod tests {
             assert_ne!(page0[0].uuid, page1[0].uuid);
         }
 
-        /// Insert a TMTask row with the given tags pre-serialised into cachedTags.
-        /// Used to seed positive-match tag tests; bypasses create_test_database which
-        /// inserts only untagged rows.
-        async fn insert_task_with_tags(db: &ThingsDatabase, title: &str, tags: &[&str]) -> Uuid {
+        /// Insert a TMTask row with optional notes and tags.
+        /// Used to seed tests; bypasses create_test_database which inserts only untagged rows.
+        async fn insert_task(
+            db: &ThingsDatabase,
+            title: &str,
+            notes: Option<&str>,
+            tags: &[&str],
+        ) -> Uuid {
             let uuid = Uuid::new_v4();
             let owned: Vec<String> = tags.iter().map(|s| (*s).to_string()).collect();
             let blob = serialize_tags_to_blob(&owned).unwrap();
             sqlx::query(
                 "INSERT INTO TMTask \
-                 (uuid, title, type, status, trashed, creationDate, userModificationDate, cachedTags) \
-                 VALUES (?, ?, 0, 0, 0, 0, 0, ?)",
+                 (uuid, title, notes, type, status, trashed, creationDate, userModificationDate, cachedTags) \
+                 VALUES (?, ?, ?, 0, 0, 0, 0, 0, ?)",
             )
             .bind(uuid.to_string())
             .bind(title)
+            .bind(notes)
             .bind(blob)
             .execute(&db.pool)
             .await
             .unwrap();
             uuid
+        }
+
+        async fn insert_task_with_tags(db: &ThingsDatabase, title: &str, tags: &[&str]) -> Uuid {
+            insert_task(db, title, None, tags).await
         }
 
         async fn open_db_with_tagged_rows() -> (ThingsDatabase, NamedTempFile, Uuid, Uuid, Uuid) {
@@ -4782,6 +4791,131 @@ mod tests {
             assert_eq!(page0.len(), 1);
             assert_eq!(page1.len(), 1);
             assert_ne!(page0[0].uuid, page1[0].uuid);
+        }
+
+        #[tokio::test]
+        async fn test_execute_fuzzy_typo_match() {
+            let (db, _f) = open_test_db().await;
+            let groceries = insert_task(&db, "Buy groceries", None, &[]).await;
+            let tasks = TaskQueryBuilder::new()
+                .fuzzy_search("grocries")
+                .execute(&db)
+                .await
+                .unwrap();
+            let uuids: Vec<Uuid> = tasks.iter().map(|t| t.uuid).collect();
+            assert!(
+                uuids.contains(&groceries),
+                "typo 'grocries' should match 'Buy groceries'"
+            );
+        }
+
+        #[tokio::test]
+        async fn test_execute_fuzzy_below_threshold_excluded() {
+            let (db, _f) = open_test_db().await;
+            insert_task(&db, "Buy groceries", None, &[]).await;
+            let tasks = TaskQueryBuilder::new()
+                .fuzzy_search("xyz")
+                .fuzzy_threshold(0.95)
+                .execute(&db)
+                .await
+                .unwrap();
+            assert!(
+                tasks.is_empty(),
+                "completely unrelated query should return nothing at 0.95 threshold"
+            );
+        }
+
+        #[tokio::test]
+        async fn test_execute_ranked_score_ordering() {
+            let (db, _f) = open_test_db().await;
+            insert_task(&db, "urgent task", None, &[]).await;
+            insert_task(&db, "urgntt task", None, &[]).await; // typo
+            insert_task(&db, "completely unrelated xyz abc", None, &[]).await;
+            let ranked = TaskQueryBuilder::new()
+                .fuzzy_search("urgent")
+                .fuzzy_threshold(0.5)
+                .execute_ranked(&db)
+                .await
+                .unwrap();
+            // Verify scores are non-increasing
+            for pair in ranked.windows(2) {
+                assert!(
+                    pair[0].score >= pair[1].score,
+                    "results must be sorted by score desc: {} < {}",
+                    pair[0].score,
+                    pair[1].score
+                );
+            }
+            assert!(!ranked.is_empty(), "at least 'urgent task' should match");
+        }
+
+        #[tokio::test]
+        async fn test_execute_ranked_pagination() {
+            let (db, _f) = open_test_db().await;
+            for i in 0..5 {
+                insert_task(&db, &format!("meeting agenda item {i}"), None, &[]).await;
+            }
+            let all = TaskQueryBuilder::new()
+                .fuzzy_search("agenda")
+                .execute_ranked(&db)
+                .await
+                .unwrap();
+            let page = TaskQueryBuilder::new()
+                .fuzzy_search("agenda")
+                .limit(2)
+                .offset(1)
+                .execute_ranked(&db)
+                .await
+                .unwrap();
+            assert_eq!(page.len(), 2);
+            assert_eq!(page[0].task.uuid, all[1].task.uuid);
+            assert_eq!(page[1].task.uuid, all[2].task.uuid);
+        }
+
+        #[tokio::test]
+        async fn test_execute_fuzzy_with_search_collision() {
+            // If substring search were applied, "zzznomatch" would filter out the
+            // target row and tasks would be empty — proving fuzzy suppressed it.
+            let (db, _f) = open_test_db().await;
+            let target = insert_task(&db, "meeting agenda", None, &[]).await;
+            let tasks = TaskQueryBuilder::new()
+                .search("zzznomatch")
+                .fuzzy_search("agenda")
+                .execute(&db)
+                .await
+                .unwrap();
+            assert_eq!(
+                tasks.len(),
+                1,
+                "only the 'meeting agenda' row should match; substring filter must be suppressed"
+            );
+            assert_eq!(
+                tasks[0].uuid, target,
+                "fuzzy should win over substring search"
+            );
+        }
+
+        #[tokio::test]
+        async fn test_execute_ranked_errors_without_fuzzy_query() {
+            let (db, _f) = open_test_db().await;
+            let result = TaskQueryBuilder::new().execute_ranked(&db).await;
+            assert!(
+                result.is_err(),
+                "execute_ranked without fuzzy_search should error"
+            );
+        }
+
+        #[tokio::test]
+        async fn test_execute_fuzzy_searches_notes() {
+            let (db, _f) = open_test_db().await;
+            let target = insert_task(&db, "Weekly sync", Some("meeting agenda for Q2"), &[]).await;
+            let tasks = TaskQueryBuilder::new()
+                .fuzzy_search("agenda")
+                .execute(&db)
+                .await
+                .unwrap();
+            let uuids: Vec<Uuid> = tasks.iter().map(|t| t.uuid).collect();
+            assert!(uuids.contains(&target), "fuzzy should match text in notes");
         }
     }
 }

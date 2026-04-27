@@ -17,6 +17,10 @@ pub struct TaskQueryBuilder {
     exclude_tags: Option<Vec<String>>,
     #[cfg(feature = "advanced-queries")]
     tag_count_min: Option<usize>,
+    #[cfg(feature = "advanced-queries")]
+    fuzzy_query: Option<String>,
+    #[cfg(feature = "advanced-queries")]
+    fuzzy_threshold: Option<f32>,
 }
 
 impl TaskQueryBuilder {
@@ -31,6 +35,10 @@ impl TaskQueryBuilder {
             exclude_tags: None,
             #[cfg(feature = "advanced-queries")]
             tag_count_min: None,
+            #[cfg(feature = "advanced-queries")]
+            fuzzy_query: None,
+            #[cfg(feature = "advanced-queries")]
+            fuzzy_threshold: None,
         }
     }
 
@@ -102,6 +110,33 @@ impl TaskQueryBuilder {
     #[must_use]
     pub fn tag_count(mut self, min: usize) -> Self {
         self.tag_count_min = Some(min);
+        self
+    }
+
+    /// Filter and rank tasks by fuzzy similarity to `query` (title and notes).
+    ///
+    /// Scores are computed with windowed Levenshtein; only tasks meeting the
+    /// threshold (default `0.6`, tunable via `fuzzy_threshold`) are returned.
+    /// If `.search()` is also set, fuzzy wins and a warning is logged.
+    ///
+    /// Applied in Rust by `execute()` / `execute_ranked()`; not reflected in `build()`.
+    ///
+    /// Requires the `advanced-queries` feature flag.
+    #[cfg(feature = "advanced-queries")]
+    #[must_use]
+    pub fn fuzzy_search(mut self, query: &str) -> Self {
+        self.fuzzy_query = Some(query.to_string());
+        self
+    }
+
+    /// Override the minimum fuzzy-match score threshold (clamped to `[0.0, 1.0]`).
+    /// Defaults to `0.6` when not called.
+    ///
+    /// Requires the `advanced-queries` feature flag.
+    #[cfg(feature = "advanced-queries")]
+    #[must_use]
+    pub fn fuzzy_threshold(mut self, threshold: f32) -> Self {
+        self.fuzzy_threshold = Some(threshold.clamp(0.0, 1.0));
         self
     }
 
@@ -216,11 +251,12 @@ impl TaskQueryBuilder {
 
     /// Execute the query against a live database connection.
     ///
-    /// SQL-level filters (`status`, `type`, project/area UUIDs, date ranges) and the
-    /// `tags` AND-filter are handled by `query_tasks`. The builder-only tag predicates
-    /// (`any_tags`, `exclude_tags`, `tag_count`) are applied in Rust afterward;
-    /// when any of them are active, `limit`/`offset` pagination is also deferred to
-    /// Rust so pages count only matching rows.
+    /// SQL-level filters and the `tags` AND-filter are handled by `query_tasks`.
+    /// Builder-only predicates (`any_tags`, `exclude_tags`, `tag_count`,
+    /// `fuzzy_search`) are applied in Rust afterward; when any are active,
+    /// `limit`/`offset` pagination is deferred to Rust so pages count only
+    /// matching rows. When `fuzzy_search` is set, this delegates to
+    /// `execute_ranked` and strips scores.
     ///
     /// Requires the `advanced-queries` feature flag.
     ///
@@ -232,34 +268,32 @@ impl TaskQueryBuilder {
         &self,
         db: &crate::database::ThingsDatabase,
     ) -> crate::error::Result<Vec<crate::models::Task>> {
-        let has_builder_post_filters = self.any_tags.as_ref().is_some_and(|t| !t.is_empty())
+        if self.fuzzy_query.is_some() {
+            return self
+                .execute_ranked(db)
+                .await
+                .map(|ranked| ranked.into_iter().map(|r| r.task).collect());
+        }
+
+        let has_tag_post_filters = self.any_tags.as_ref().is_some_and(|t| !t.is_empty())
             || self.exclude_tags.as_ref().is_some_and(|t| !t.is_empty())
             || self.tag_count_min.is_some();
 
-        if !has_builder_post_filters {
+        if !has_tag_post_filters {
             return db.query_tasks(&self.filters).await;
         }
 
-        // Fetch without SQL LIMIT/OFFSET; apply pagination in Rust after tag filtering.
         let mut filters_no_page = self.filters.clone();
         let limit = filters_no_page.limit.take();
         let offset = filters_no_page.offset.take();
 
-        let mut tasks = db.query_tasks(&filters_no_page).await?;
-
-        if let Some(ref any) = self.any_tags {
-            if !any.is_empty() {
-                tasks.retain(|task| any.iter().any(|f| task.tags.contains(f)));
-            }
-        }
-        if let Some(ref excl) = self.exclude_tags {
-            if !excl.is_empty() {
-                tasks.retain(|task| !excl.iter().any(|f| task.tags.contains(f)));
-            }
-        }
-        if let Some(min) = self.tag_count_min {
-            tasks.retain(|task| task.tags.len() >= min);
-        }
+        let tasks = db.query_tasks(&filters_no_page).await?;
+        let mut tasks = Self::apply_tag_filters(
+            tasks,
+            self.any_tags.as_deref(),
+            self.exclude_tags.as_deref(),
+            self.tag_count_min,
+        );
 
         let offset = offset.unwrap_or(0);
         tasks = tasks.into_iter().skip(offset).collect();
@@ -269,12 +303,157 @@ impl TaskQueryBuilder {
 
         Ok(tasks)
     }
+
+    #[cfg(feature = "advanced-queries")]
+    fn apply_tag_filters(
+        mut tasks: Vec<crate::models::Task>,
+        any_tags: Option<&[String]>,
+        exclude_tags: Option<&[String]>,
+        tag_count_min: Option<usize>,
+    ) -> Vec<crate::models::Task> {
+        if let Some(any) = any_tags {
+            if !any.is_empty() {
+                tasks.retain(|task| any.iter().any(|f| task.tags.contains(f)));
+            }
+        }
+        if let Some(excl) = exclude_tags {
+            if !excl.is_empty() {
+                tasks.retain(|task| !excl.iter().any(|f| task.tags.contains(f)));
+            }
+        }
+        if let Some(min) = tag_count_min {
+            tasks.retain(|task| task.tags.len() >= min);
+        }
+        tasks
+    }
+
+    /// Execute the query and return tasks paired with their fuzzy-match scores,
+    /// sorted by score descending (ties broken by UUID for determinism).
+    ///
+    /// Requires `.fuzzy_search(query)` to be set — returns a validation error
+    /// otherwise (it is a programming error to ask for ranked results with no
+    /// fuzzy predicate).
+    ///
+    /// Requires the `advanced-queries` feature flag.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if `fuzzy_search` is not set, or if the database query fails.
+    #[cfg(feature = "advanced-queries")]
+    pub async fn execute_ranked(
+        &self,
+        db: &crate::database::ThingsDatabase,
+    ) -> crate::error::Result<Vec<crate::models::RankedTask>> {
+        let query = self.fuzzy_query.as_deref().ok_or_else(|| {
+            crate::error::ThingsError::validation(
+                "execute_ranked requires fuzzy_search() to be set",
+            )
+        })?;
+
+        let query_lc = query.to_lowercase();
+        let threshold = self.fuzzy_threshold.unwrap_or(DEFAULT_FUZZY_THRESHOLD);
+
+        let mut filters_no_page = self.filters.clone();
+        let limit = filters_no_page.limit.take();
+        let offset = filters_no_page.offset.take();
+
+        if filters_no_page.search_query.is_some() {
+            tracing::warn!(
+                "fuzzy_search and search both set; fuzzy takes precedence, ignoring substring search"
+            );
+            filters_no_page.search_query = None;
+        }
+
+        let tasks = db.query_tasks(&filters_no_page).await?;
+        let tasks = Self::apply_tag_filters(
+            tasks,
+            self.any_tags.as_deref(),
+            self.exclude_tags.as_deref(),
+            self.tag_count_min,
+        );
+
+        let mut scored: Vec<crate::models::RankedTask> = tasks
+            .into_iter()
+            .filter_map(|task| {
+                let score = task_fuzzy_score(&query_lc, &task);
+                if score >= threshold {
+                    Some(crate::models::RankedTask { task, score })
+                } else {
+                    None
+                }
+            })
+            .collect();
+
+        scored.sort_by(|a, b| {
+            b.score
+                .partial_cmp(&a.score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+                .then_with(|| a.task.uuid.cmp(&b.task.uuid))
+        });
+
+        let offset = offset.unwrap_or(0);
+        scored = scored.into_iter().skip(offset).collect();
+        if let Some(limit) = limit {
+            scored.truncate(limit);
+        }
+
+        Ok(scored)
+    }
 }
 
 impl Default for TaskQueryBuilder {
     fn default() -> Self {
         Self::new()
     }
+}
+
+#[cfg(feature = "advanced-queries")]
+const DEFAULT_FUZZY_THRESHOLD: f32 = 0.6;
+
+#[cfg(feature = "advanced-queries")]
+fn task_fuzzy_score(query_lc: &str, task: &crate::models::Task) -> f32 {
+    let title_score = fuzzy_field_score(query_lc, &task.title);
+    let notes_score = task
+        .notes
+        .as_deref()
+        .map(|n| fuzzy_field_score(query_lc, n))
+        .unwrap_or(0.0);
+    title_score.max(notes_score)
+}
+
+#[cfg(feature = "advanced-queries")]
+fn fuzzy_field_score(query_lc: &str, field: &str) -> f32 {
+    let field_lc = field.to_lowercase();
+    if !query_lc.is_empty() && field_lc.contains(query_lc) {
+        return 1.0;
+    }
+    best_window_score(query_lc, &field_lc)
+}
+
+#[cfg(feature = "advanced-queries")]
+fn best_window_score(query: &str, field: &str) -> f32 {
+    if query.is_empty() || field.is_empty() {
+        return 0.0;
+    }
+    let window_len = (2 * query.len()).min(field.len());
+    let step = 1;
+    let chars: Vec<char> = field.chars().collect();
+    let n = chars.len();
+    let mut best = 0.0f32;
+    let mut i = 0;
+    loop {
+        let end = (i + window_len).min(n);
+        let slice: String = chars[i..end].iter().collect();
+        let score = strsim::normalized_levenshtein(query, &slice) as f32;
+        if score > best {
+            best = score;
+        }
+        if end >= n {
+            break;
+        }
+        i += step;
+    }
+    best
 }
 
 fn today() -> NaiveDate {
@@ -401,6 +580,91 @@ mod tests {
         );
         assert_eq!(builder.exclude_tags, Some(vec!["d".to_string()]));
         assert_eq!(builder.tag_count_min, Some(1));
+    }
+
+    #[cfg(feature = "advanced-queries")]
+    #[test]
+    fn test_fuzzy_search_sets_field() {
+        let builder = TaskQueryBuilder::new().fuzzy_search("meeting");
+        assert_eq!(builder.fuzzy_query, Some("meeting".to_string()));
+    }
+
+    #[cfg(feature = "advanced-queries")]
+    #[test]
+    fn test_fuzzy_threshold_clamps_low() {
+        let builder = TaskQueryBuilder::new().fuzzy_threshold(-0.5);
+        assert_eq!(builder.fuzzy_threshold, Some(0.0));
+    }
+
+    #[cfg(feature = "advanced-queries")]
+    #[test]
+    fn test_fuzzy_threshold_clamps_high() {
+        let builder = TaskQueryBuilder::new().fuzzy_threshold(1.5);
+        assert_eq!(builder.fuzzy_threshold, Some(1.0));
+    }
+
+    #[cfg(feature = "advanced-queries")]
+    #[test]
+    fn test_fuzzy_search_chains_with_other_filters() {
+        let builder = TaskQueryBuilder::new()
+            .status(TaskStatus::Incomplete)
+            .fuzzy_search("agenda")
+            .fuzzy_threshold(0.7);
+        assert_eq!(builder.fuzzy_query, Some("agenda".to_string()));
+        assert_eq!(builder.fuzzy_threshold, Some(0.7));
+        assert_eq!(builder.filters.status, Some(TaskStatus::Incomplete));
+    }
+
+    #[cfg(feature = "advanced-queries")]
+    mod fuzzy_score_tests {
+        use super::*;
+
+        #[test]
+        fn test_fuzzy_score_substring_short_circuit() {
+            assert_eq!(fuzzy_field_score("foo", "blah foo bar"), 1.0);
+        }
+
+        #[test]
+        fn test_fuzzy_score_typo_above_threshold() {
+            let score = fuzzy_field_score("urgent", "urgnt");
+            assert!(score >= 0.6, "expected score >= 0.6, got {score}");
+        }
+
+        #[test]
+        fn test_best_window_score_long_field() {
+            let long_field = "alexander needs to buy eggs and milk from the store today";
+            let whole = strsim::normalized_levenshtein("alex", long_field) as f32;
+            let windowed = best_window_score("alex", long_field);
+            assert!(
+                windowed > whole,
+                "windowed ({windowed}) should beat whole-field ({whole})"
+            );
+        }
+
+        #[test]
+        fn test_task_fuzzy_score_uses_max_of_title_notes() {
+            use chrono::Utc;
+            use uuid::Uuid;
+            let task = crate::models::Task {
+                uuid: Uuid::new_v4(),
+                title: "unrelated title xyz".to_string(),
+                notes: Some("meeting agenda important".to_string()),
+                task_type: crate::models::TaskType::Todo,
+                status: crate::models::TaskStatus::Incomplete,
+                start_date: None,
+                deadline: None,
+                created: Utc::now(),
+                modified: Utc::now(),
+                stop_date: None,
+                project_uuid: None,
+                area_uuid: None,
+                parent_uuid: None,
+                tags: vec![],
+                children: vec![],
+            };
+            let score = task_fuzzy_score("agenda", &task);
+            assert_eq!(score, 1.0, "notes contains 'agenda', score should be 1.0");
+        }
     }
 
     #[test]

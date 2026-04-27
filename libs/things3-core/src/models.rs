@@ -354,6 +354,20 @@ pub struct TaskFilters {
     pub offset: Option<usize>,
 }
 
+/// A task paired with its fuzzy-match relevance score.
+///
+/// Returned by [`crate::query::TaskQueryBuilder::execute_ranked`].
+///
+/// Requires the `advanced-queries` feature flag.
+#[cfg(feature = "advanced-queries")]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RankedTask {
+    /// The matched task.
+    pub task: Task,
+    /// Relevance score in `[0.0, 1.0]`; higher is a better match.
+    pub score: f32,
+}
+
 /// Project creation request
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CreateProjectRequest {
