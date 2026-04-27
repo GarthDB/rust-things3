@@ -1,6 +1,8 @@
 //! Data export functionality for Things 3 data
 
-use crate::models::{Area, Project, Task, TaskStatus, TaskType};
+#[cfg(any(feature = "export-csv", feature = "export-taskpaper"))]
+use crate::models::TaskType;
+use crate::models::{Area, Project, Task, TaskStatus};
 use anyhow::Result;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -16,6 +18,7 @@ pub enum ExportFormat {
     Opml,
     Markdown,
     TaskPaper,
+    ICalendar,
 }
 
 impl std::str::FromStr for ExportFormat {
@@ -28,6 +31,7 @@ impl std::str::FromStr for ExportFormat {
             "opml" => Ok(Self::Opml),
             "markdown" | "md" => Ok(Self::Markdown),
             "taskpaper" | "tp" => Ok(Self::TaskPaper),
+            "ical" | "ics" | "icalendar" => Ok(Self::ICalendar),
             _ => Err(anyhow::anyhow!("Unsupported export format: {s}")),
         }
     }
@@ -122,6 +126,12 @@ impl DataExporter {
             #[cfg(not(feature = "export-taskpaper"))]
             ExportFormat::TaskPaper => Err(anyhow::anyhow!(
                 "TaskPaper export is not enabled. Enable the 'export-taskpaper' feature."
+            )),
+            #[cfg(feature = "export-ical")]
+            ExportFormat::ICalendar => Ok(Self::export_icalendar(data)),
+            #[cfg(not(feature = "export-ical"))]
+            ExportFormat::ICalendar => Err(anyhow::anyhow!(
+                "iCalendar export is not enabled. Enable the 'export-ical' feature."
             )),
         }
     }
@@ -397,6 +407,107 @@ impl DataExporter {
 
         md
     }
+
+    /// Export as iCalendar (RFC 5545) — all items map to VTODO components.
+    ///
+    /// Projects export as top-level VTODOs. Tasks with a project emit
+    /// `RELATED-TO:<project-uid>`; tasks with a parent task also emit
+    /// `RELATED-TO:<parent-uid>` (RELTYPE defaults to PARENT per RFC 5545).
+    /// Areas surface as `CATEGORIES` entries rather than standalone components.
+    #[cfg(feature = "export-ical")]
+    fn export_icalendar(data: &ExportData) -> String {
+        use icalendar::{Calendar, Component, DatePerhapsTime, EventLike, Todo};
+
+        let mut cal = Calendar::new();
+        cal.name("Things 3 Export");
+
+        for project in &data.projects {
+            let mut todo = Todo::new();
+            todo.uid(&project.uuid.to_string());
+            todo.summary(&project.title);
+
+            if let Some(notes) = &project.notes {
+                todo.description(notes);
+            }
+
+            todo.status(ical_todo_status(project.status));
+
+            if let Some(d) = project.deadline {
+                todo.due(DatePerhapsTime::Date(d));
+            }
+            if let Some(d) = project.start_date {
+                todo.starts(DatePerhapsTime::Date(d));
+            }
+
+            let area_cat = data
+                .areas
+                .iter()
+                .find(|a| Some(a.uuid) == project.area_uuid);
+            for cat in project
+                .tags
+                .iter()
+                .map(String::as_str)
+                .chain(area_cat.map(|a| a.title.as_str()))
+            {
+                todo.add_multi_property("CATEGORIES", cat);
+            }
+
+            todo.created(project.created);
+            todo.last_modified(project.modified);
+
+            cal.push(todo);
+        }
+
+        for task in &data.tasks {
+            let mut todo = Todo::new();
+            todo.uid(&task.uuid.to_string());
+            todo.summary(&task.title);
+
+            if let Some(notes) = &task.notes {
+                todo.description(notes);
+            }
+
+            todo.status(ical_todo_status(task.status));
+
+            if task.status == TaskStatus::Completed {
+                if let Some(stop) = task.stop_date {
+                    todo.completed(stop);
+                }
+            }
+
+            if let Some(d) = task.deadline {
+                todo.due(DatePerhapsTime::Date(d));
+            }
+            if let Some(d) = task.start_date {
+                todo.starts(DatePerhapsTime::Date(d));
+            }
+
+            let area_cat = data.areas.iter().find(|a| Some(a.uuid) == task.area_uuid);
+            for cat in task
+                .tags
+                .iter()
+                .map(String::as_str)
+                .chain(area_cat.map(|a| a.title.as_str()))
+            {
+                todo.add_multi_property("CATEGORIES", cat);
+            }
+
+            // RELATED-TO links project and parent task (RELTYPE defaults to PARENT per RFC 5545)
+            if let Some(proj_uuid) = task.project_uuid {
+                todo.add_multi_property("RELATED-TO", &proj_uuid.to_string());
+            }
+            if let Some(parent_uuid) = task.parent_uuid {
+                todo.add_multi_property("RELATED-TO", &parent_uuid.to_string());
+            }
+
+            todo.created(task.created);
+            todo.last_modified(task.modified);
+
+            cal.push(todo);
+        }
+
+        cal.to_string()
+    }
 }
 
 /// Helper functions for CSV export
@@ -599,6 +710,15 @@ fn escape_xml(s: &str) -> String {
         .replace('>', "&gt;")
         .replace('"', "&quot;")
         .replace('\'', "&apos;")
+}
+
+#[cfg(feature = "export-ical")]
+fn ical_todo_status(status: TaskStatus) -> icalendar::TodoStatus {
+    match status {
+        TaskStatus::Incomplete => icalendar::TodoStatus::NeedsAction,
+        TaskStatus::Completed => icalendar::TodoStatus::Completed,
+        TaskStatus::Canceled | TaskStatus::Trashed => icalendar::TodoStatus::Cancelled,
+    }
 }
 
 #[cfg(test)]
@@ -1237,5 +1357,444 @@ mod tests {
             "Ends with colon: "
         );
         assert_eq!(escape_taskpaper_title("Not a colon"), "Not a colon");
+    }
+
+    // Not gated behind #[cfg(feature = "export-ical")] intentionally:
+    // ExportFormat::ICalendar is an unconditional enum variant and FromStr
+    // always matches "ical"/"ics"/"icalendar" — the feature flag only controls
+    // whether the actual serialization work is compiled in.
+    #[test]
+    fn test_export_format_from_str_icalendar() {
+        assert_eq!(
+            "ical".parse::<ExportFormat>().unwrap(),
+            ExportFormat::ICalendar
+        );
+        assert_eq!(
+            "ICAL".parse::<ExportFormat>().unwrap(),
+            ExportFormat::ICalendar
+        );
+        assert_eq!(
+            "ics".parse::<ExportFormat>().unwrap(),
+            ExportFormat::ICalendar
+        );
+        assert_eq!(
+            "ICS".parse::<ExportFormat>().unwrap(),
+            ExportFormat::ICalendar
+        );
+        assert_eq!(
+            "icalendar".parse::<ExportFormat>().unwrap(),
+            ExportFormat::ICalendar
+        );
+        assert_eq!(
+            "iCalendar".parse::<ExportFormat>().unwrap(),
+            ExportFormat::ICalendar
+        );
+    }
+
+    #[test]
+    #[cfg(not(feature = "export-ical"))]
+    fn test_export_icalendar_disabled() {
+        let exporter = DataExporter::new_default();
+        let data = ExportData::new(vec![], vec![], vec![]);
+        let result = exporter.export(&data, ExportFormat::ICalendar);
+        assert!(result.is_err());
+        let msg = result.unwrap_err().to_string();
+        assert!(
+            msg.contains("export-ical"),
+            "Error should name the missing feature, got: {msg}"
+        );
+    }
+
+    #[test]
+    #[cfg(feature = "export-ical")]
+    fn test_export_icalendar_empty() {
+        let exporter = DataExporter::new_default();
+        let data = ExportData::new(vec![], vec![], vec![]);
+        let result = exporter.export(&data, ExportFormat::ICalendar);
+        assert!(result.is_ok());
+        let ics = result.unwrap();
+        assert!(ics.contains("BEGIN:VCALENDAR"), "Missing VCALENDAR:\n{ics}");
+        assert!(
+            ics.contains("END:VCALENDAR"),
+            "Missing END:VCALENDAR:\n{ics}"
+        );
+        assert!(
+            !ics.contains("BEGIN:VTODO"),
+            "Empty export should have no VTODOs:\n{ics}"
+        );
+    }
+
+    #[test]
+    #[cfg(feature = "export-ical")]
+    fn test_export_icalendar_with_data() {
+        let exporter = DataExporter::new_default();
+        let tasks = create_mock_tasks();
+        let projects = create_mock_projects();
+        let areas = create_mock_areas();
+        let data = ExportData::new(tasks, projects, areas);
+
+        let ics = exporter.export(&data, ExportFormat::ICalendar).unwrap();
+
+        assert!(ics.contains("BEGIN:VCALENDAR"), "Missing VCALENDAR:\n{ics}");
+        // Projects and tasks both become VTODOs
+        assert!(ics.contains("BEGIN:VTODO"), "Missing VTODO:\n{ics}");
+        assert!(
+            ics.contains("SUMMARY:Website Redesign"),
+            "Missing project summary:\n{ics}"
+        );
+        assert!(
+            ics.contains("SUMMARY:Research competitors"),
+            "Missing task summary:\n{ics}"
+        );
+    }
+
+    #[test]
+    #[cfg(feature = "export-ical")]
+    fn test_export_icalendar_uid_stable() {
+        use crate::models::TaskType;
+        let task_uuid = uuid::Uuid::parse_str("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee").unwrap();
+        let task = Task {
+            uuid: task_uuid,
+            title: "UID test".to_string(),
+            task_type: TaskType::Todo,
+            status: TaskStatus::Incomplete,
+            notes: None,
+            start_date: None,
+            deadline: None,
+            created: Utc::now(),
+            modified: Utc::now(),
+            stop_date: None,
+            project_uuid: None,
+            area_uuid: None,
+            parent_uuid: None,
+            tags: vec![],
+            children: vec![],
+        };
+        let data = ExportData::new(vec![task], vec![], vec![]);
+        let ics = DataExporter::new_default()
+            .export(&data, ExportFormat::ICalendar)
+            .unwrap();
+
+        assert!(
+            ics.contains("UID:aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"),
+            "UID should equal task UUID:\n{ics}"
+        );
+    }
+
+    #[test]
+    #[cfg(feature = "export-ical")]
+    fn test_export_icalendar_status_mapping() {
+        use crate::models::TaskType;
+        use chrono::TimeZone;
+
+        let make_task = |n: u8, status: TaskStatus, stop: Option<DateTime<Utc>>| Task {
+            uuid: uuid::Uuid::parse_str(&format!("00000000-0000-0000-0000-{n:012}")).unwrap(),
+            title: format!("Task {n}"),
+            task_type: TaskType::Todo,
+            status,
+            notes: None,
+            start_date: None,
+            deadline: None,
+            created: Utc::now(),
+            modified: Utc::now(),
+            stop_date: stop,
+            project_uuid: None,
+            area_uuid: None,
+            parent_uuid: None,
+            tags: vec![],
+            children: vec![],
+        };
+
+        let stop = Utc.with_ymd_and_hms(2026, 1, 15, 10, 30, 0).unwrap();
+        let tasks = vec![
+            make_task(1, TaskStatus::Incomplete, None),
+            make_task(2, TaskStatus::Completed, Some(stop)),
+            make_task(3, TaskStatus::Completed, None),
+            make_task(4, TaskStatus::Canceled, None),
+            make_task(5, TaskStatus::Trashed, None),
+        ];
+        let data = ExportData::new(tasks, vec![], vec![]);
+        let ics = DataExporter::new_default()
+            .export(&data, ExportFormat::ICalendar)
+            .unwrap();
+
+        assert!(
+            ics.contains("STATUS:NEEDS-ACTION"),
+            "Incomplete → NEEDS-ACTION:\n{ics}"
+        );
+        assert!(
+            ics.contains("STATUS:COMPLETED"),
+            "Completed → COMPLETED:\n{ics}"
+        );
+        // Completed task with stop_date should have COMPLETED: property
+        assert!(
+            ics.contains("COMPLETED:20260115T103000Z"),
+            "Expected COMPLETED timestamp:\n{ics}"
+        );
+        assert!(
+            ics.contains("STATUS:CANCELLED"),
+            "Canceled/Trashed → CANCELLED:\n{ics}"
+        );
+    }
+
+    #[test]
+    #[cfg(feature = "export-ical")]
+    fn test_export_icalendar_due_date() {
+        use crate::models::TaskType;
+        use chrono::NaiveDate;
+
+        let task = Task {
+            uuid: uuid::Uuid::parse_str("11111111-0000-0000-0000-000000000001").unwrap(),
+            title: "Task with deadline".to_string(),
+            task_type: TaskType::Todo,
+            status: TaskStatus::Incomplete,
+            notes: None,
+            start_date: Some(NaiveDate::from_ymd_opt(2026, 3, 1).unwrap()),
+            deadline: Some(NaiveDate::from_ymd_opt(2026, 4, 30).unwrap()),
+            created: Utc::now(),
+            modified: Utc::now(),
+            stop_date: None,
+            project_uuid: None,
+            area_uuid: None,
+            parent_uuid: None,
+            tags: vec![],
+            children: vec![],
+        };
+        let data = ExportData::new(vec![task], vec![], vec![]);
+        let ics = DataExporter::new_default()
+            .export(&data, ExportFormat::ICalendar)
+            .unwrap();
+
+        assert!(
+            ics.contains("DUE;VALUE=DATE:20260430"),
+            "Expected DUE;VALUE=DATE:20260430:\n{ics}"
+        );
+        assert!(
+            ics.contains("DTSTART;VALUE=DATE:20260301"),
+            "Expected DTSTART;VALUE=DATE:20260301:\n{ics}"
+        );
+    }
+
+    #[test]
+    #[cfg(feature = "export-ical")]
+    fn test_export_icalendar_categories() {
+        use crate::models::{Area, TaskType};
+
+        let area_uuid = uuid::Uuid::parse_str("aaaaaaaa-0000-0000-0000-000000000000").unwrap();
+        let area = Area {
+            uuid: area_uuid,
+            title: "Work".to_string(),
+            notes: None,
+            created: Utc::now(),
+            modified: Utc::now(),
+            tags: vec![],
+            projects: vec![],
+        };
+        let task = Task {
+            uuid: uuid::Uuid::parse_str("bbbbbbbb-0000-0000-0000-000000000001").unwrap(),
+            title: "Tagged task".to_string(),
+            task_type: TaskType::Todo,
+            status: TaskStatus::Incomplete,
+            notes: None,
+            start_date: None,
+            deadline: None,
+            created: Utc::now(),
+            modified: Utc::now(),
+            stop_date: None,
+            project_uuid: None,
+            area_uuid: Some(area_uuid),
+            parent_uuid: None,
+            tags: vec!["focus".to_string(), "deep-work".to_string()],
+            children: vec![],
+        };
+        let data = ExportData::new(vec![task], vec![], vec![area]);
+        let ics = DataExporter::new_default()
+            .export(&data, ExportFormat::ICalendar)
+            .unwrap();
+
+        assert!(
+            ics.contains("CATEGORIES:"),
+            "Expected CATEGORIES property:\n{ics}"
+        );
+        assert!(
+            ics.contains("focus"),
+            "Expected 'focus' in categories:\n{ics}"
+        );
+        assert!(
+            ics.contains("deep-work"),
+            "Expected 'deep-work' in categories:\n{ics}"
+        );
+        assert!(
+            ics.contains("Work"),
+            "Expected area name in categories:\n{ics}"
+        );
+    }
+
+    #[test]
+    #[cfg(feature = "export-ical")]
+    fn test_export_icalendar_related_to() {
+        use crate::models::TaskType;
+        let proj_uuid = uuid::Uuid::parse_str("12345678-0000-0000-0000-000000000000").unwrap();
+        let project = crate::models::Project {
+            uuid: proj_uuid,
+            title: "My Project".to_string(),
+            notes: None,
+            start_date: None,
+            deadline: None,
+            created: Utc::now(),
+            modified: Utc::now(),
+            area_uuid: None,
+            tags: vec![],
+            status: TaskStatus::Incomplete,
+            tasks: vec![],
+        };
+        let task = Task {
+            uuid: uuid::Uuid::parse_str("87654321-0000-0000-0000-000000000001").unwrap(),
+            title: "Child task".to_string(),
+            task_type: TaskType::Todo,
+            status: TaskStatus::Incomplete,
+            notes: None,
+            start_date: None,
+            deadline: None,
+            created: Utc::now(),
+            modified: Utc::now(),
+            stop_date: None,
+            project_uuid: Some(proj_uuid),
+            area_uuid: None,
+            parent_uuid: None,
+            tags: vec![],
+            children: vec![],
+        };
+        let data = ExportData::new(vec![task], vec![project], vec![]);
+        let ics = DataExporter::new_default()
+            .export(&data, ExportFormat::ICalendar)
+            .unwrap();
+
+        assert!(
+            ics.contains("RELATED-TO:12345678-0000-0000-0000-000000000000"),
+            "Expected RELATED-TO with project UUID:\n{ics}"
+        );
+    }
+
+    #[test]
+    #[cfg(feature = "export-ical")]
+    fn test_export_icalendar_subtask_related_to() {
+        use crate::models::TaskType;
+
+        let parent_uuid = uuid::Uuid::parse_str("aaaaaaaa-0000-0000-0000-000000000001").unwrap();
+        let child_uuid = uuid::Uuid::parse_str("bbbbbbbb-0000-0000-0000-000000000002").unwrap();
+
+        let make_task = |uuid: uuid::Uuid, parent: Option<uuid::Uuid>| Task {
+            uuid,
+            title: "Task".to_string(),
+            task_type: TaskType::Todo,
+            status: TaskStatus::Incomplete,
+            notes: None,
+            start_date: None,
+            deadline: None,
+            created: Utc::now(),
+            modified: Utc::now(),
+            stop_date: None,
+            project_uuid: None,
+            area_uuid: None,
+            parent_uuid: parent,
+            tags: vec![],
+            children: vec![],
+        };
+        let tasks = vec![
+            make_task(parent_uuid, None),
+            make_task(child_uuid, Some(parent_uuid)),
+        ];
+        let data = ExportData::new(tasks, vec![], vec![]);
+        let ics = DataExporter::new_default()
+            .export(&data, ExportFormat::ICalendar)
+            .unwrap();
+
+        assert!(
+            ics.contains("RELATED-TO:aaaaaaaa-0000-0000-0000-000000000001"),
+            "Subtask should RELATED-TO its parent task:\n{ics}"
+        );
+    }
+
+    #[test]
+    #[cfg(feature = "export-ical")]
+    fn test_export_icalendar_categories_comma_escaped() {
+        use crate::models::TaskType;
+
+        let task = Task {
+            uuid: uuid::Uuid::parse_str("dddddddd-0000-0000-0000-000000000001").unwrap(),
+            title: "Task".to_string(),
+            task_type: TaskType::Todo,
+            status: TaskStatus::Incomplete,
+            notes: None,
+            start_date: None,
+            deadline: None,
+            created: Utc::now(),
+            modified: Utc::now(),
+            stop_date: None,
+            project_uuid: None,
+            area_uuid: None,
+            parent_uuid: None,
+            tags: vec!["design, UX".to_string(), "client\\work".to_string()],
+            children: vec![],
+        };
+        let data = ExportData::new(vec![task], vec![], vec![]);
+        let ics = DataExporter::new_default()
+            .export(&data, ExportFormat::ICalendar)
+            .unwrap();
+
+        assert!(
+            ics.contains("design\\, UX"),
+            "Comma in tag should be escaped as \\,:\n{ics}"
+        );
+        assert!(
+            ics.contains("client\\\\work"),
+            "Backslash in tag should be escaped as \\\\:\n{ics}"
+        );
+    }
+
+    #[test]
+    #[cfg(feature = "export-ical")]
+    fn test_export_icalendar_notes_multiline() {
+        use crate::models::TaskType;
+        let task = Task {
+            uuid: uuid::Uuid::parse_str("cccccccc-0000-0000-0000-000000000001").unwrap(),
+            title: "Task with notes".to_string(),
+            task_type: TaskType::Todo,
+            status: TaskStatus::Incomplete,
+            notes: Some("First line\nSecond line\nThird line".to_string()),
+            start_date: None,
+            deadline: None,
+            created: Utc::now(),
+            modified: Utc::now(),
+            stop_date: None,
+            project_uuid: None,
+            area_uuid: None,
+            parent_uuid: None,
+            tags: vec![],
+            children: vec![],
+        };
+        let data = ExportData::new(vec![task], vec![], vec![]);
+        let ics = DataExporter::new_default()
+            .export(&data, ExportFormat::ICalendar)
+            .unwrap();
+
+        // RFC 5545 escapes newlines in DESCRIPTION as \n (literal backslash-n)
+        assert!(
+            ics.contains("DESCRIPTION:"),
+            "Expected DESCRIPTION property:\n{ics}"
+        );
+        assert!(
+            ics.contains("First line"),
+            "Expected first line in description:\n{ics}"
+        );
+        assert!(
+            ics.contains("Second line"),
+            "Expected second line in description:\n{ics}"
+        );
+        assert!(
+            ics.contains("Third line"),
+            "Expected third line in description:\n{ics}"
+        );
     }
 }

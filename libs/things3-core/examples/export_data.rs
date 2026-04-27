@@ -51,6 +51,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     std::fs::write("export.taskpaper", &taskpaper)?;
     println!("  ✓ Saved to export.taskpaper ({} bytes)", taskpaper.len());
 
+    // Export to iCalendar
+    println!("Exporting to iCalendar...");
+    let ical = exporter.export(&export_data, ExportFormat::ICalendar)?;
+    std::fs::write("export.ics", &ical)?;
+    println!("  ✓ Saved to export.ics ({} bytes)", ical.len());
+
     println!("\n✓ Export completed successfully");
     Ok(())
 }

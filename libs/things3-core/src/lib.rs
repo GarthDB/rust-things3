@@ -45,6 +45,7 @@
 //! - `export-csv`: Enable CSV export support
 //! - `export-opml`: Enable OPML export support
 //! - `export-taskpaper`: Enable TaskPaper export support
+//! - `export-ical`: Enable iCalendar (.ics) export support
 //! - `observability`: Enable metrics, tracing, and health checks
 //! - `full`: Enable all optional features
 //! - `test-utils`: Enable test utilities (for testing only)
@@ -71,7 +72,8 @@ pub mod cursor;
 #[cfg(any(
     feature = "export-csv",
     feature = "export-opml",
-    feature = "export-taskpaper"
+    feature = "export-taskpaper",
+    feature = "export-ical"
 ))]
 pub mod export;
 
@@ -116,7 +118,8 @@ pub use error::{Result, ThingsError};
 #[cfg(any(
     feature = "export-csv",
     feature = "export-opml",
-    feature = "export-taskpaper"
+    feature = "export-taskpaper",
+    feature = "export-ical"
 ))]
 pub use export::{DataExporter, ExportConfig, ExportData, ExportFormat};
 

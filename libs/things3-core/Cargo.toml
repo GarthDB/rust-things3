@@ -18,10 +18,11 @@ test-utils = []
 export-csv = ["dep:csv"]
 export-opml = ["dep:quick-xml"]
 export-taskpaper = []
+export-ical = ["dep:icalendar"]
 observability = ["dep:metrics"]
 advanced-queries = []
 batch-operations = ["dep:base64", "dep:async-stream", "dep:futures-core"]
-full = ["export-csv", "export-opml", "export-taskpaper", "observability", "advanced-queries", "batch-operations"]
+full = ["export-csv", "export-opml", "export-taskpaper", "export-ical", "observability", "advanced-queries", "batch-operations"]
 
 [dependencies]
 # Core
@@ -59,6 +60,7 @@ zstd = "0.13"
 # Export formats (optional)
 csv = { workspace = true, optional = true }
 quick-xml = { workspace = true, optional = true }
+icalendar = { workspace = true, optional = true }
 
 # Configuration
 serde_yaml = "0.9"
@@ -104,4 +106,4 @@ required-features = ["test-utils"]
 
 [[example]]
 name = "export_data"
-required-features = ["export-csv", "export-opml", "export-taskpaper"]
+required-features = ["export-csv", "export-opml", "export-taskpaper", "export-ical"]
