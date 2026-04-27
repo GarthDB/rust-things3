@@ -8,10 +8,14 @@ use uuid::Uuid;
 #[derive(Debug, Clone)]
 pub struct TaskQueryBuilder {
     filters: TaskFilters,
-    /// OR-semantics tag filter applied by `execute()` in Rust after `query_tasks()`.
+    /// OR-semantics / exclusion / count tag filters applied by `execute()` in Rust.
     /// Kept off `TaskFilters` to preserve the stable public struct surface.
+    /// Only present in `advanced-queries` builds (same gate as `execute()`).
+    #[cfg(feature = "advanced-queries")]
     any_tags: Option<Vec<String>>,
+    #[cfg(feature = "advanced-queries")]
     exclude_tags: Option<Vec<String>>,
+    #[cfg(feature = "advanced-queries")]
     tag_count_min: Option<usize>,
 }
 
@@ -21,8 +25,11 @@ impl TaskQueryBuilder {
     pub fn new() -> Self {
         Self {
             filters: TaskFilters::default(),
+            #[cfg(feature = "advanced-queries")]
             any_tags: None,
+            #[cfg(feature = "advanced-queries")]
             exclude_tags: None,
+            #[cfg(feature = "advanced-queries")]
             tag_count_min: None,
         }
     }
@@ -65,21 +72,33 @@ impl TaskQueryBuilder {
     /// Filter to tasks containing **any** of these tags (OR semantics).
     ///
     /// Composes with `.tags()` (AND) and `.exclude_tags()` (NOT) — all
-    /// active tag filters must be satisfied. Applied in Rust by `execute()`.
+    /// active tag filters must be satisfied. Applied in Rust by `execute()`;
+    /// not reflected in `build()`.
+    ///
+    /// Requires the `advanced-queries` feature flag.
+    #[cfg(feature = "advanced-queries")]
     #[must_use]
     pub fn any_tags(mut self, tags: Vec<String>) -> Self {
         self.any_tags = Some(tags);
         self
     }
 
-    /// Filter out tasks containing any of these tags. Applied in Rust by `execute()`.
+    /// Filter out tasks containing any of these tags. Applied in Rust by `execute()`;
+    /// not reflected in `build()`.
+    ///
+    /// Requires the `advanced-queries` feature flag.
+    #[cfg(feature = "advanced-queries")]
     #[must_use]
     pub fn exclude_tags(mut self, tags: Vec<String>) -> Self {
         self.exclude_tags = Some(tags);
         self
     }
 
-    /// Filter to tasks with at least `min` tags total. Applied in Rust by `execute()`.
+    /// Filter to tasks with at least `min` tags total. Applied in Rust by `execute()`;
+    /// not reflected in `build()`.
+    ///
+    /// Requires the `advanced-queries` feature flag.
+    #[cfg(feature = "advanced-queries")]
     #[must_use]
     pub fn tag_count(mut self, min: usize) -> Self {
         self.tag_count_min = Some(min);
@@ -344,6 +363,7 @@ mod tests {
         assert_eq!(filters.tags, Some(tags));
     }
 
+    #[cfg(feature = "advanced-queries")]
     #[test]
     fn test_task_query_builder_any_tags() {
         let tags = vec!["a".to_string(), "b".to_string()];
@@ -351,6 +371,7 @@ mod tests {
         assert_eq!(builder.any_tags, Some(tags));
     }
 
+    #[cfg(feature = "advanced-queries")]
     #[test]
     fn test_task_query_builder_exclude_tags() {
         let tags = vec!["archived".to_string()];
@@ -358,12 +379,14 @@ mod tests {
         assert_eq!(builder.exclude_tags, Some(tags));
     }
 
+    #[cfg(feature = "advanced-queries")]
     #[test]
     fn test_task_query_builder_tag_count() {
         let builder = TaskQueryBuilder::new().tag_count(2);
         assert_eq!(builder.tag_count_min, Some(2));
     }
 
+    #[cfg(feature = "advanced-queries")]
     #[test]
     fn test_task_query_builder_chaining_tag_methods() {
         let builder = TaskQueryBuilder::new()

@@ -12,7 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`ThingsDatabase::query_tasks(filters: &TaskFilters)`** — executes a dynamic SQL query driven by all `TaskFilters` fields: status, type, project, area, start date range, deadline range, limit, and offset. Tag and search-query filters are applied in Rust after the database fetch.
 - **`TaskQueryBuilder::execute(&ThingsDatabase)`** — end-to-end shorthand that calls `.build()` and `query_tasks()` in one step.
 - **Natural-language date helpers on `TaskQueryBuilder`** — `due_today`, `due_this_week`, `due_next_week`, `due_in(days)`, `overdue`, `starting_today`, `starting_this_week`. Pure builder sugar that delegates to existing `deadline_range` / `start_date_range` setters. Weeks are Monday-Sunday. `overdue()` also implies `status = Incomplete` when no status filter has been set.
-- **Flexible tag operations on `TaskQueryBuilder`** — `any_tags(tags)` (OR semantics), `exclude_tags(tags)` (NOT IN), `tag_count(min)` (minimum tag-count threshold). Three new `TaskFilters` fields (`any_tags`, `exclude_tags`, `tag_count_min`); pagination correctly defers to Rust when any of these are active. Tag matching is case-sensitive, matching the existing `tags` (AND) filter.
+- **Flexible tag operations on `TaskQueryBuilder`** — `any_tags(tags)` (OR semantics), `exclude_tags(tags)` (NOT IN), `tag_count(min)` (minimum tag-count threshold). These are builder-only predicates gated behind `advanced-queries`; they are applied in Rust inside `execute()` and are not reflected in `build()` / `TaskFilters`. Pagination correctly defers to Rust when any of these are active. Tag matching is case-sensitive, matching the existing `tags` (AND) filter.
 
 ## [1.0.1] - 2026-04-22
 
