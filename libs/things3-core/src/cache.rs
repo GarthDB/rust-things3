@@ -623,7 +623,8 @@ impl ThingsCache {
     }
 
     /// Selectively invalidate cache entries whose dependencies match
-    /// `(entity_type, entity_id)`. Returns the number of entries evicted.
+    /// `(entity_type, entity_id)`. Returns the number of keys submitted for
+    /// eviction (moka eviction may complete asynchronously).
     ///
     /// `entity_id == None` is a wildcard that matches any cached entry
     /// depending on `entity_type`. Entries that do not depend on the mutated
@@ -653,7 +654,8 @@ impl ThingsCache {
     }
 
     /// Selectively invalidate cache entries whose dependencies list `operation`
-    /// among their invalidating operations. Returns the number of entries evicted.
+    /// among their invalidating operations. Returns the number of keys submitted
+    /// for eviction (moka eviction may complete asynchronously).
     pub async fn invalidate_by_operation(&self, operation: &str) -> usize {
         let (task_keys, project_keys, area_keys, search_keys) = {
             let pred = |dep: &CacheDependency| dep.matches_operation(operation);
@@ -716,7 +718,11 @@ where
         .collect()
 }
 
-/// Evict the given keys from a moka cache and return the count.
+/// Evict the given keys from a moka cache.
+///
+/// Returns the number of keys submitted for eviction. Moka's `invalidate` is
+/// async but the actual removal may lag slightly; callers that need to observe
+/// the post-eviction state should `await` a short yield or sleep.
 async fn evict_keys<V>(cache: &Cache<String, CachedData<V>>, keys: &[String]) -> usize
 where
     V: Clone + Send + Sync + 'static,

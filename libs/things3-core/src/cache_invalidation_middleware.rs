@@ -420,43 +420,42 @@ impl CacheInvalidationMiddleware {
         let mut dependent_entities = Vec::new();
         let project_uuid = Self::metadata_uuid(event, "project_uuid");
         let area_uuid = Self::metadata_uuid(event, "area_uuid");
-        let affected = vec!["l1".to_string(), "l2".to_string()];
 
         match event.entity_type.as_str() {
             "task" if event.entity_id.is_some() => {
                 dependent_entities.push(DependentEntity {
                     entity_type: "project".to_string(),
                     entity_id: project_uuid,
-                    affected_caches: affected.clone(),
+                    affected_caches: vec![],
                 });
                 dependent_entities.push(DependentEntity {
                     entity_type: "area".to_string(),
                     entity_id: area_uuid,
-                    affected_caches: affected,
+                    affected_caches: vec![],
                 });
             }
             "project" if event.entity_id.is_some() => {
                 dependent_entities.push(DependentEntity {
                     entity_type: "task".to_string(),
                     entity_id: None,
-                    affected_caches: affected.clone(),
+                    affected_caches: vec![],
                 });
                 dependent_entities.push(DependentEntity {
                     entity_type: "area".to_string(),
                     entity_id: area_uuid,
-                    affected_caches: affected,
+                    affected_caches: vec![],
                 });
             }
             "area" if event.entity_id.is_some() => {
                 dependent_entities.push(DependentEntity {
                     entity_type: "project".to_string(),
                     entity_id: None,
-                    affected_caches: affected.clone(),
+                    affected_caches: vec![],
                 });
                 dependent_entities.push(DependentEntity {
                     entity_type: "task".to_string(),
                     entity_id: None,
-                    affected_caches: affected,
+                    affected_caches: vec![],
                 });
             }
             _ => {}
@@ -1004,18 +1003,11 @@ mod tests {
         };
         handler.invalidate(&event).unwrap();
 
-        // The handler spawns; give the runtime a chance to run the spawned future.
-        for _ in 0..10 {
-            tokio::task::yield_now().await;
-            if cache
-                .get_tasks("target_key", || async { Ok(vec![]) })
-                .await
-                .unwrap()
-                .is_empty()
-            {
-                break;
-            }
-        }
+        // The handler spawns the eviction; give the runtime enough time to
+        // complete it before asserting. yield_now is insufficient on loaded
+        // machines — a brief sleep is more robust.
+        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+
         // Re-fetch via the cache: the target key should miss (returning the
         // empty fetcher result), the other key should still hit its cached row.
         let target = cache
