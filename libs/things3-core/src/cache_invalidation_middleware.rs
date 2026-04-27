@@ -404,59 +404,74 @@ impl CacheInvalidationMiddleware {
         Ok(())
     }
 
-    /// Find dependent entities for cascade invalidation
+    /// Find dependent entities for cascade invalidation.
+    ///
+    /// The fan-out is type-driven (a task event implies project + area
+    /// dependents; an area event implies project + task dependents). When the
+    /// caller populates `event.metadata` with structured hints, the dependent
+    /// events carry concrete entity IDs instead of `None`. Recognised keys:
+    ///
+    /// - `"project_uuid"` — UUID string of the project the entity belongs to.
+    /// - `"area_uuid"` — UUID string of the area the entity belongs to.
+    ///
+    /// Missing or unparseable metadata falls back to `entity_id: None`
+    /// (back-compatible with pre-#93 callers).
     fn find_dependent_entities(event: &InvalidationEvent) -> Vec<DependentEntity> {
-        // This is a simplified implementation
-        // In a real system, you would query a dependency graph or database
         let mut dependent_entities = Vec::new();
+        let project_uuid = Self::metadata_uuid(event, "project_uuid");
+        let area_uuid = Self::metadata_uuid(event, "area_uuid");
 
         match event.entity_type.as_str() {
-            "task" => {
-                // If a task is updated, invalidate related projects and areas
-                if let Some(_task_id) = event.entity_id {
-                    dependent_entities.push(DependentEntity {
-                        entity_type: "project".to_string(),
-                        entity_id: None, // Would need to look up project ID
-                        affected_caches: vec!["l1".to_string(), "l2".to_string()],
-                    });
-                    dependent_entities.push(DependentEntity {
-                        entity_type: "area".to_string(),
-                        entity_id: None, // Would need to look up area ID
-                        affected_caches: vec!["l1".to_string(), "l2".to_string()],
-                    });
-                }
+            "task" if event.entity_id.is_some() => {
+                dependent_entities.push(DependentEntity {
+                    entity_type: "project".to_string(),
+                    entity_id: project_uuid,
+                    affected_caches: vec![],
+                });
+                dependent_entities.push(DependentEntity {
+                    entity_type: "area".to_string(),
+                    entity_id: area_uuid,
+                    affected_caches: vec![],
+                });
             }
-            "project" => {
-                // If a project is updated, invalidate related tasks
-                if let Some(_project_id) = event.entity_id {
-                    dependent_entities.push(DependentEntity {
-                        entity_type: "task".to_string(),
-                        entity_id: None, // Would need to look up task IDs
-                        affected_caches: vec!["l1".to_string(), "l2".to_string()],
-                    });
-                }
+            "project" if event.entity_id.is_some() => {
+                dependent_entities.push(DependentEntity {
+                    entity_type: "task".to_string(),
+                    entity_id: None,
+                    affected_caches: vec![],
+                });
+                dependent_entities.push(DependentEntity {
+                    entity_type: "area".to_string(),
+                    entity_id: area_uuid,
+                    affected_caches: vec![],
+                });
             }
-            "area" => {
-                // If an area is updated, invalidate related projects and tasks
-                if let Some(_area_id) = event.entity_id {
-                    dependent_entities.push(DependentEntity {
-                        entity_type: "project".to_string(),
-                        entity_id: None,
-                        affected_caches: vec!["l1".to_string(), "l2".to_string()],
-                    });
-                    dependent_entities.push(DependentEntity {
-                        entity_type: "task".to_string(),
-                        entity_id: None,
-                        affected_caches: vec!["l1".to_string(), "l2".to_string()],
-                    });
-                }
+            "area" if event.entity_id.is_some() => {
+                dependent_entities.push(DependentEntity {
+                    entity_type: "project".to_string(),
+                    entity_id: None,
+                    affected_caches: vec![],
+                });
+                dependent_entities.push(DependentEntity {
+                    entity_type: "task".to_string(),
+                    entity_id: None,
+                    affected_caches: vec![],
+                });
             }
-            _ => {
-                // No dependencies for unknown entity types
-            }
+            _ => {}
         }
 
         dependent_entities
+    }
+
+    /// Extract a UUID from `event.metadata[key]`, returning `None` if missing
+    /// or unparseable.
+    fn metadata_uuid(event: &InvalidationEvent, key: &str) -> Option<Uuid> {
+        event
+            .metadata
+            .get(key)
+            .and_then(serde_json::Value::as_str)
+            .and_then(|s| Uuid::parse_str(s).ok())
     }
 
     /// Check if event matches a pattern
@@ -509,6 +524,70 @@ struct DependentEntity {
     entity_type: String,
     entity_id: Option<Uuid>,
     affected_caches: Vec<String>,
+}
+
+/// Bridge handler that routes [`InvalidationEvent`]s into a [`ThingsCache`]'s
+/// dependency-aware invalidation methods.
+///
+/// Register one of these on a [`CacheInvalidationMiddleware`] to make
+/// `process_event(...)` actually evict cached entries:
+///
+/// ```ignore
+/// let cache = Arc::new(ThingsCache::new_default());
+/// let handler = ThingsCacheInvalidationHandler::new(Arc::clone(&cache));
+/// middleware.register_handler(Box::new(handler));
+/// ```
+///
+/// Spawns the actual eviction onto the current Tokio runtime so the
+/// synchronous trait method can return immediately. Callers that need to
+/// observe the post-invalidation state (e.g. tests) should yield once with
+/// `tokio::task::yield_now().await` after `process_event` returns.
+pub struct ThingsCacheInvalidationHandler {
+    cache: Arc<crate::cache::ThingsCache>,
+    cache_type: String,
+}
+
+impl ThingsCacheInvalidationHandler {
+    /// Construct a handler with the default cache type label `"things_cache"`.
+    #[must_use]
+    pub fn new(cache: Arc<crate::cache::ThingsCache>) -> Self {
+        Self {
+            cache,
+            cache_type: "things_cache".to_string(),
+        }
+    }
+
+    /// Construct a handler with a caller-supplied cache type label.
+    #[must_use]
+    pub fn with_cache_type(cache: Arc<crate::cache::ThingsCache>, cache_type: String) -> Self {
+        Self { cache, cache_type }
+    }
+}
+
+impl CacheInvalidationHandler for ThingsCacheInvalidationHandler {
+    fn invalidate(&self, event: &InvalidationEvent) -> Result<()> {
+        // Route only by `(entity_type, entity_id)`. Operation matching is a
+        // category-level fallback that would over-evict siblings of the
+        // mutated entity (every task entry lists `task_updated`), so we leave
+        // it for callers that explicitly want coarse invalidation.
+        let cache = Arc::clone(&self.cache);
+        let entity_type = event.entity_type.clone();
+        let entity_id = event.entity_id;
+        tokio::spawn(async move {
+            cache
+                .invalidate_by_entity(&entity_type, entity_id.as_ref())
+                .await;
+        });
+        Ok(())
+    }
+
+    fn cache_type(&self) -> &str {
+        &self.cache_type
+    }
+
+    fn can_handle(&self, _event: &InvalidationEvent) -> bool {
+        true
+    }
 }
 
 /// Cascade invalidation event type
@@ -837,5 +916,110 @@ mod tests {
         // Get all events
         let all_events = middleware.get_recent_events(10);
         assert_eq!(all_events.len(), 5);
+    }
+
+    fn task_event_with_metadata(
+        entity_id: Uuid,
+        metadata: HashMap<String, serde_json::Value>,
+    ) -> InvalidationEvent {
+        InvalidationEvent {
+            event_id: Uuid::new_v4(),
+            event_type: InvalidationEventType::Updated,
+            entity_type: "task".to_string(),
+            entity_id: Some(entity_id),
+            operation: "task_updated".to_string(),
+            timestamp: Utc::now(),
+            affected_caches: vec![],
+            metadata,
+        }
+    }
+
+    #[test]
+    fn test_cascade_uses_project_uuid_metadata() {
+        let task_id = Uuid::new_v4();
+        let project_id = Uuid::new_v4();
+        let mut metadata = HashMap::new();
+        metadata.insert(
+            "project_uuid".to_string(),
+            serde_json::Value::String(project_id.to_string()),
+        );
+        let event = task_event_with_metadata(task_id, metadata);
+
+        let dependents = CacheInvalidationMiddleware::find_dependent_entities(&event);
+        let project_dep = dependents
+            .iter()
+            .find(|d| d.entity_type == "project")
+            .expect("task event must fan out to project");
+        assert_eq!(project_dep.entity_id, Some(project_id));
+        let area_dep = dependents
+            .iter()
+            .find(|d| d.entity_type == "area")
+            .expect("task event must fan out to area");
+        assert_eq!(area_dep.entity_id, None, "no area_uuid in metadata");
+    }
+
+    #[test]
+    fn test_cascade_falls_back_when_metadata_missing() {
+        let event = task_event_with_metadata(Uuid::new_v4(), HashMap::new());
+        let dependents = CacheInvalidationMiddleware::find_dependent_entities(&event);
+        assert!(dependents.iter().all(|d| d.entity_id.is_none()));
+    }
+
+    #[tokio::test]
+    async fn test_things_cache_handler_routes_to_invalidate_by_entity() {
+        use crate::cache::ThingsCache;
+        use crate::test_utils::create_mock_tasks;
+
+        let cache = Arc::new(ThingsCache::new_default());
+        let target_id = Uuid::new_v4();
+        let other_id = Uuid::new_v4();
+
+        let mut target_task = create_mock_tasks().into_iter().next().unwrap();
+        target_task.uuid = target_id;
+        target_task.project_uuid = None;
+        target_task.area_uuid = None;
+        let mut other_task = target_task.clone();
+        other_task.uuid = other_id;
+
+        cache
+            .get_tasks("target_key", || async { Ok(vec![target_task]) })
+            .await
+            .unwrap();
+        cache
+            .get_tasks("other_key", || async { Ok(vec![other_task]) })
+            .await
+            .unwrap();
+
+        let handler = ThingsCacheInvalidationHandler::new(Arc::clone(&cache));
+        let event = InvalidationEvent {
+            event_id: Uuid::new_v4(),
+            event_type: InvalidationEventType::Updated,
+            entity_type: "task".to_string(),
+            entity_id: Some(target_id),
+            operation: "task_updated".to_string(),
+            timestamp: Utc::now(),
+            affected_caches: vec![],
+            metadata: HashMap::new(),
+        };
+        handler.invalidate(&event).unwrap();
+
+        // The handler spawns the eviction; give the runtime enough time to
+        // complete it before asserting. yield_now is insufficient on loaded
+        // machines — a brief sleep is more robust.
+        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+
+        // Re-fetch via the cache: the target key should miss (returning the
+        // empty fetcher result), the other key should still hit its cached row.
+        let target = cache
+            .get_tasks("target_key", || async { Ok(vec![]) })
+            .await
+            .unwrap();
+        let other = cache
+            .get_tasks("other_key", || async { Ok(vec![]) })
+            .await
+            .unwrap();
+        assert!(target.is_empty(), "target should have been invalidated");
+        assert_eq!(other.len(), 1, "other task should still be cached");
+        assert_eq!(other[0].uuid, other_id);
     }
 }
