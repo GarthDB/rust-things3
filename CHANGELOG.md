@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.0] - 2026-04-27
+
+### Added
+- **TaskPaper export format** (#105 → #107) — new `export-taskpaper` feature flag adds an `ExportFormat::TaskPaper` variant on `DataExporter::export()`, plus `"taskpaper"` / `"tp"` in the `FromStr` parser. TaskPaper is a plain-text outline format consumed by Hog Bay Software's TaskPaper / Taskmator and other macOS scratch-list apps. Areas render as top-level project headers, projects nest under their area at one tab, tasks at two; status maps to `@done(stop_date)` / `@cancelled` / `@trashed`; deadlines and start dates to `@due(date)` / `@start(date)`; tags become sanitized `@tag` tokens (whitespace runs collapse to `-`, `@`, `(`, `)`, and control chars are stripped). Subtasks recurse via `task.children` or `parent_uuid`. No new external dependencies.
+- **iCalendar (.ics) export format** (#106 → #108) — new `export-ical` feature flag adds an `ExportFormat::ICalendar` variant plus `"ical"` / `"ics"` / `"icalendar"` in the `FromStr` parser. All Things tasks and projects map to RFC 5545 `VTODO` components (no `VEVENT` — Things items are to-dos, not time-bounded events). Areas surface as `CATEGORIES` entries on each task/project rather than standalone components. Tasks emit `RELATED-TO:<project-uid>` for project linkage, plus an additional `RELATED-TO:<parent-uid>` for subtask hierarchy. UIDs are the Things UUID strings, so re-exports update existing entries rather than duplicate. Status maps `Incomplete → STATUS:NEEDS-ACTION`, `Completed → STATUS:COMPLETED` (+ `COMPLETED:<stop_date>` when present), `Canceled` / `Trashed → STATUS:CANCELLED`. `NaiveDate` fields use the `DATE` value type; `DateTime<Utc>` fields use `DATE-TIME` UTC. Pulls in `icalendar` 0.17 as a new optional dep.
+
 ## [1.2.0] - 2026-04-27
 
 ### Added
