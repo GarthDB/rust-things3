@@ -295,6 +295,7 @@ impl DataExporter {
                     write_taskpaper_task(&mut out, task, 2, &data.tasks);
                 }
             }
+            writeln!(out).unwrap();
         }
 
         // --- Orphan projects (no area) ---
@@ -317,6 +318,7 @@ impl DataExporter {
             {
                 write_taskpaper_task(&mut out, task, 1, &data.tasks);
             }
+            writeln!(out).unwrap();
         }
 
         // --- Orphan tasks (no project, no area, no parent) ---
@@ -442,6 +444,10 @@ fn escape_csv(s: &str) -> String {
 ///
 /// TaskPaper tags are `@word` tokens — no spaces, parens, or `@`.
 /// Whitespace runs become `-`; `@`, `(`, `)`, and control characters are stripped.
+/// Note: paren content is not treated as a separate value — characters on both
+/// sides of `(…)` are concatenated directly (e.g. `weird(name)` → `weirdname`).
+/// This is intentional: Things tag names containing parens are rare enough that
+/// discarding the distinction is preferable to a more complex parse.
 #[cfg(feature = "export-taskpaper")]
 fn sanitize_taskpaper_tag(s: &str) -> String {
     let mut result = String::with_capacity(s.len());
@@ -467,23 +473,18 @@ fn sanitize_taskpaper_tag(s: &str) -> String {
 
 /// Escape a task/project title for TaskPaper.
 ///
-/// Titles must be one line; newlines are replaced with a space.
-/// A trailing `:` would make the line look like a project header — append a
-/// trailing space to prevent that.
+/// Titles must be single-line: `\n`, `\r`, and `\t` are replaced with spaces.
+/// (`\t` would corrupt indent-based parsing if emitted inside a title.)
+/// A trailing `:` is padded with a trailing space so the line is not
+/// misread as a project header.
 #[cfg(feature = "export-taskpaper")]
 fn escape_taskpaper_title(s: &str) -> String {
-    let single_line = s.replace(['\n', '\r'], " ");
+    let single_line = s.replace(['\n', '\r', '\t'], " ");
     if single_line.ends_with(':') {
         format!("{single_line} ")
     } else {
         single_line
     }
-}
-
-/// Format a `NaiveDate` as `YYYY-MM-DD`.
-#[cfg(feature = "export-taskpaper")]
-fn format_date_taskpaper(date: chrono::NaiveDate) -> String {
-    date.format("%Y-%m-%d").to_string()
 }
 
 /// Build the inline metadata suffix for a task/project line.
@@ -513,10 +514,10 @@ fn taskpaper_metadata(
     }
 
     if let Some(d) = deadline {
-        parts.push(format!("@due({})", format_date_taskpaper(d)));
+        parts.push(format!("@due({})", d.format("%Y-%m-%d")));
     }
     if let Some(d) = start_date {
-        parts.push(format!("@start({})", format_date_taskpaper(d)));
+        parts.push(format!("@start({})", d.format("%Y-%m-%d")));
     }
 
     for tag in tags {
@@ -572,8 +573,11 @@ fn write_taskpaper_task(out: &mut String, task: &Task, indent: usize, all_tasks:
         write_taskpaper_notes(out, notes, indent + 1);
     }
 
-    // Recurse into direct children (from task.children if populated, or from
-    // the flat all_tasks slice by parent_uuid match)
+    // Two sources of children depending on how the caller built ExportData:
+    // - task.children populated (nested model): recurse with &[] so each child
+    //   uses its own .children rather than re-scanning the flat list.
+    // - flat all_tasks list (flat model): scan for tasks whose parent_uuid
+    //   matches this task's uuid.
     if !task.children.is_empty() {
         for child in &task.children {
             write_taskpaper_task(out, child, indent + 1, &[]);
@@ -959,6 +963,10 @@ mod tests {
         assert!(debug_str.contains("ExportData"));
     }
 
+    // Not gated behind #[cfg(feature = "export-taskpaper")] intentionally:
+    // ExportFormat::TaskPaper is an unconditional enum variant and FromStr
+    // always matches "taskpaper" — the feature flag only controls whether the
+    // actual serialization work is compiled in.
     #[test]
     fn test_export_format_from_str_taskpaper() {
         assert_eq!(
@@ -1223,6 +1231,7 @@ mod tests {
             escape_taskpaper_title("Carriage\rreturn"),
             "Carriage return"
         );
+        assert_eq!(escape_taskpaper_title("Tab\there"), "Tab here");
         assert_eq!(
             escape_taskpaper_title("Ends with colon:"),
             "Ends with colon: "
