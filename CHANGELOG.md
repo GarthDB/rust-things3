@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.2.0] - 2026-04-27
 
 ### Added
 - **Predictive cache preloading** — new `CachePreloader` trait registered on `ThingsCache` via `set_preloader`/`clear_preloader`. After every `get_*` access the cache calls `predict(key)` to enqueue follow-up keys for warming; the warming-loop tick then calls `warm(key)` for each top-priority queued entry (replacing the previous no-op stub at `start_cache_warming`). Ships a `DefaultPreloader { Weak<ThingsCache>, Arc<ThingsDatabase> }` with three hardcoded heuristics over existing keys: `inbox:all → today:all`, `today:all → inbox:all`, `areas:all → projects:all`. `CacheStats` gains `warmed_keys` and `warming_runs` counters so tests and operators can confirm the loop is doing work. Default behavior unchanged for callers that don't register a preloader.
@@ -17,8 +17,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Cursor-based pagination on `TaskQueryBuilder`** — new `cursor` module exposing opaque `Cursor` and `Page<T>` types, plus `TaskQueryBuilder::after(cursor)` and `execute_paged()` (gated on both `advanced-queries` and `batch-operations`). Cursor anchors on `(created, uuid)`: `created` is immutable so cursors stay valid under concurrent edits, and `uuid` provides a deterministic tiebreak. Cursor encoding is URL-safe base64 of a compact JSON payload. Default page size is 100 (overridable via `.limit()`). `execute_paged` returns `ThingsError::InvalidCursor` if `.offset()` and `.after()` are both set, or if `.fuzzy_search()` and `.after()` are both set.
 - **Streaming results API on `TaskQueryBuilder`** — new `TaskQueryBuilder::execute_stream(db)` returns `Pin<Box<dyn Stream<Item = Result<Task>> + Send>>` (gated on both `advanced-queries` and `batch-operations`). Internally chunked via `execute_paged`: yields tasks in `(creationDate DESC, uuid DESC)` order, transparently fetching pages until exhausted. `.limit(n)` controls chunk size in the streaming context (default 100), not a cap on total emitted items. Validation errors (e.g. `.fuzzy_search()` + `.after()`) surface as the stream's first `Err` item. Pulls in `async-stream` and `futures-core` as optional deps under `batch-operations`.
 - **Batch fetch-by-id primitives on `ThingsDatabase`** — new `batch` module with `ThingsDatabase::get_tasks_batch(uuids)` and `ThingsDatabase::get_projects_batch(uuids)` (gated behind `batch-operations`). Mirrors filtering semantics of `get_task_by_uuid` / `get_project_by_uuid` (trashed rows omitted). Empty input returns `Ok(vec![])` with no SQL roundtrip; duplicate input UUIDs are de-duplicated; results are ordered by `(creationDate DESC, uuid DESC)`. Internally chunks at 500 UUIDs per query so callers can pass arbitrarily long lists without hitting SQLite's `SQLITE_LIMIT_VARIABLE_NUMBER`.
-
-### Changed
 - **`ThingsDatabase::query_tasks` ordering is now deterministic** — `ORDER BY` was tightened from `creationDate DESC` to `CAST(creationDate AS INTEGER) DESC, uuid DESC`. Previously, the order of tasks tied on truncated-second `creationDate` was unspecified; now it is well-defined. No effect on callers that already had distinct timestamps.
 
 ## [1.1.0] - 2026-04-26
