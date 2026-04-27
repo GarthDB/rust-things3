@@ -5279,7 +5279,7 @@ mod tests {
         #[cfg(feature = "batch-operations")]
         mod cursor_streaming_tests {
             use super::*;
-            use futures_util::StreamExt;
+            use futures_util::{StreamExt, TryStreamExt};
 
             #[tokio::test]
             async fn test_execute_stream_yields_all_tasks() {
@@ -5289,12 +5289,11 @@ mod tests {
                     inserted.push(insert_task(&db, &format!("task-{i}"), None, &[]).await);
                 }
 
-                let stream = TaskQueryBuilder::new().limit(2).execute_stream(&db);
-                let collected: Vec<_> = stream
-                    .collect::<Vec<crate::error::Result<crate::models::Task>>>()
+                let collected: Vec<_> = TaskQueryBuilder::new()
+                    .limit(2)
+                    .execute_stream(&db)
+                    .try_collect::<Vec<_>>()
                     .await
-                    .into_iter()
-                    .collect::<crate::error::Result<Vec<_>>>()
                     .unwrap();
 
                 let inserted_set: std::collections::HashSet<_> = inserted.iter().copied().collect();
@@ -5318,15 +5317,12 @@ mod tests {
                 let (db, _f) = open_test_db().await;
                 let target = insert_task(&db, "incomplete-task", None, &[]).await;
 
-                let stream = TaskQueryBuilder::new()
+                let tasks = TaskQueryBuilder::new()
                     .status(TaskStatus::Incomplete)
                     .limit(50)
-                    .execute_stream(&db);
-                let tasks: Vec<_> = stream
-                    .collect::<Vec<_>>()
+                    .execute_stream(&db)
+                    .try_collect::<Vec<_>>()
                     .await
-                    .into_iter()
-                    .collect::<crate::error::Result<Vec<_>>>()
                     .unwrap();
 
                 let uuids: std::collections::HashSet<_> = tasks.iter().map(|t| t.uuid).collect();
@@ -5344,15 +5340,12 @@ mod tests {
                 let a3 = insert_task_with_tags(&db, "a3", &["a"]).await;
                 let _b = insert_task_with_tags(&db, "b1", &["b"]).await;
 
-                let stream = TaskQueryBuilder::new()
+                let tasks = TaskQueryBuilder::new()
                     .any_tags(vec!["a".to_string()])
                     .limit(2)
-                    .execute_stream(&db);
-                let tasks: Vec<_> = stream
-                    .collect::<Vec<_>>()
+                    .execute_stream(&db)
+                    .try_collect::<Vec<_>>()
                     .await
-                    .into_iter()
-                    .collect::<crate::error::Result<Vec<_>>>()
                     .unwrap();
 
                 let uuids: std::collections::HashSet<_> = tasks.iter().map(|t| t.uuid).collect();
@@ -5366,41 +5359,73 @@ mod tests {
             async fn test_execute_stream_empty_result() {
                 let (db, _f) = open_test_db().await;
                 // Filter by a project UUID that doesn't exist → no matches.
-                let stream = TaskQueryBuilder::new()
+                let tasks = TaskQueryBuilder::new()
                     .project_uuid(Uuid::new_v4())
-                    .execute_stream(&db);
-                let tasks: Vec<_> = stream
-                    .collect::<Vec<_>>()
+                    .execute_stream(&db)
+                    .try_collect::<Vec<_>>()
                     .await
-                    .into_iter()
-                    .collect::<crate::error::Result<Vec<_>>>()
                     .unwrap();
                 assert!(tasks.is_empty());
             }
 
-            #[cfg(feature = "advanced-queries")]
             #[tokio::test]
-            async fn test_execute_stream_propagates_validation_error() {
+            async fn test_execute_stream_rejects_fuzzy_search() {
                 let (db, _f) = open_test_db().await;
-                let cursor = crate::cursor::Cursor::encode(&crate::cursor::CursorPayload {
-                    c: chrono::Utc::now(),
-                    u: Uuid::new_v4(),
-                })
-                .unwrap();
-
+                // fuzzy_search alone (no explicit .after()) must reject immediately.
+                // Previously execute_paged only guarded fuzzy_query && after.is_some(),
+                // so page 1 would silently return un-scored results and only page 2
+                // would error. This test catches that regression.
                 let mut stream = TaskQueryBuilder::new()
                     .fuzzy_search("anything")
-                    .after(cursor)
                     .execute_stream(&db);
-                let first = stream.next().await;
-                match first {
+                match stream.next().await {
                     Some(Err(crate::error::ThingsError::InvalidCursor(msg))) => {
                         assert!(msg.contains("fuzzy"), "msg: {msg}");
                     }
                     other => panic!("expected first item to be InvalidCursor, got {other:?}"),
                 }
-                // Stream terminates after the error.
                 assert!(stream.next().await.is_none());
+            }
+
+            #[tokio::test]
+            async fn test_execute_stream_cross_page_ordering() {
+                let (db, _f) = open_test_db().await;
+                for i in 0..5 {
+                    insert_task(&db, &format!("task-{i}"), None, &[]).await;
+                }
+
+                // Stream with chunk size 2 — cursor advances across 3 pages.
+                let stream_uuids: Vec<Uuid> = TaskQueryBuilder::new()
+                    .limit(2)
+                    .execute_stream(&db)
+                    .try_collect::<Vec<_>>()
+                    .await
+                    .unwrap()
+                    .into_iter()
+                    .map(|t| t.uuid)
+                    .collect();
+
+                // Single full query — same ORDER BY, no pagination.
+                let full_uuids: Vec<Uuid> = db
+                    .query_tasks(&TaskFilters::default())
+                    .await
+                    .unwrap()
+                    .into_iter()
+                    .map(|t| t.uuid)
+                    .collect();
+
+                // Every streamed UUID must appear in the full query result, and
+                // their relative order must be the same.
+                let stream_set: std::collections::HashSet<_> =
+                    stream_uuids.iter().copied().collect();
+                let filtered_full: Vec<Uuid> = full_uuids
+                    .into_iter()
+                    .filter(|u| stream_set.contains(u))
+                    .collect();
+                assert_eq!(
+                    stream_uuids, filtered_full,
+                    "stream ordering should agree with full-query (creationDate DESC, uuid DESC)"
+                );
             }
         }
     }

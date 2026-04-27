@@ -404,9 +404,9 @@ impl TaskQueryBuilder {
         &self,
         db: &crate::database::ThingsDatabase,
     ) -> crate::error::Result<crate::cursor::Page<crate::models::Task>> {
-        if self.fuzzy_query.is_some() && self.after.is_some() {
+        if self.fuzzy_query.is_some() {
             return Err(crate::error::ThingsError::InvalidCursor(
-                "cursor pagination is not compatible with fuzzy_search".to_string(),
+                "execute_paged and execute_stream do not support fuzzy_search; use execute_ranked instead".to_string(),
             ));
         }
         if self.filters.offset.is_some() && self.after.is_some() {
@@ -888,7 +888,7 @@ mod tests {
 
         #[cfg(feature = "advanced-queries")]
         #[tokio::test]
-        async fn test_execute_paged_rejects_fuzzy_and_after() {
+        async fn test_execute_paged_rejects_fuzzy_search() {
             use tempfile::NamedTempFile;
             let f = NamedTempFile::new().unwrap();
             crate::test_utils::create_test_database(f.path())
@@ -898,9 +898,9 @@ mod tests {
                 .await
                 .unwrap();
 
+            // fuzzy_search alone must be rejected — no .after() needed to trigger.
             let result = TaskQueryBuilder::new()
                 .fuzzy_search("anything")
-                .after(sample_cursor())
                 .execute_paged(&db)
                 .await;
             match result {
