@@ -47,10 +47,34 @@ impl TaskQueryBuilder {
         self
     }
 
-    /// Filter by tags
+    /// Filter by tags (AND semantics — task must contain every listed tag).
     #[must_use]
     pub fn tags(mut self, tags: Vec<String>) -> Self {
         self.filters.tags = Some(tags);
+        self
+    }
+
+    /// Filter to tasks containing **any** of these tags (OR semantics).
+    ///
+    /// Composes with `.tags()` (AND) and `.exclude_tags()` (NOT) — all
+    /// active tag filters must be satisfied.
+    #[must_use]
+    pub fn any_tags(mut self, tags: Vec<String>) -> Self {
+        self.filters.any_tags = Some(tags);
+        self
+    }
+
+    /// Filter out tasks containing any of these tags.
+    #[must_use]
+    pub fn exclude_tags(mut self, tags: Vec<String>) -> Self {
+        self.filters.exclude_tags = Some(tags);
+        self
+    }
+
+    /// Filter to tasks with at least `min` tags total.
+    #[must_use]
+    pub const fn tag_count(mut self, min: usize) -> Self {
+        self.filters.tag_count_min = Some(min);
         self
     }
 
@@ -269,6 +293,43 @@ mod tests {
         let filters = builder.build();
 
         assert_eq!(filters.tags, Some(tags));
+    }
+
+    #[test]
+    fn test_task_query_builder_any_tags() {
+        let tags = vec!["a".to_string(), "b".to_string()];
+        let filters = TaskQueryBuilder::new().any_tags(tags.clone()).build();
+        assert_eq!(filters.any_tags, Some(tags));
+    }
+
+    #[test]
+    fn test_task_query_builder_exclude_tags() {
+        let tags = vec!["archived".to_string()];
+        let filters = TaskQueryBuilder::new().exclude_tags(tags.clone()).build();
+        assert_eq!(filters.exclude_tags, Some(tags));
+    }
+
+    #[test]
+    fn test_task_query_builder_tag_count() {
+        let filters = TaskQueryBuilder::new().tag_count(2).build();
+        assert_eq!(filters.tag_count_min, Some(2));
+    }
+
+    #[test]
+    fn test_task_query_builder_chaining_tag_methods() {
+        let filters = TaskQueryBuilder::new()
+            .tags(vec!["a".to_string()])
+            .any_tags(vec!["b".to_string(), "c".to_string()])
+            .exclude_tags(vec!["d".to_string()])
+            .tag_count(1)
+            .build();
+        assert_eq!(filters.tags, Some(vec!["a".to_string()]));
+        assert_eq!(
+            filters.any_tags,
+            Some(vec!["b".to_string(), "c".to_string()])
+        );
+        assert_eq!(filters.exclude_tags, Some(vec!["d".to_string()]));
+        assert_eq!(filters.tag_count_min, Some(1));
     }
 
     #[test]
