@@ -4874,7 +4874,8 @@ mod tests {
 
         #[tokio::test]
         async fn test_execute_fuzzy_with_search_collision() {
-            // fuzzy_search should win over search(); substring search is dropped
+            // If substring search were applied, "zzznomatch" would filter out the
+            // target row and tasks would be empty — proving fuzzy suppressed it.
             let (db, _f) = open_test_db().await;
             let target = insert_task(&db, "meeting agenda", None, &[]).await;
             let tasks = TaskQueryBuilder::new()
@@ -4883,9 +4884,13 @@ mod tests {
                 .execute(&db)
                 .await
                 .unwrap();
-            let uuids: Vec<Uuid> = tasks.iter().map(|t| t.uuid).collect();
-            assert!(
-                uuids.contains(&target),
+            assert_eq!(
+                tasks.len(),
+                1,
+                "only the 'meeting agenda' row should match; substring filter must be suppressed"
+            );
+            assert_eq!(
+                tasks[0].uuid, target,
                 "fuzzy should win over substring search"
             );
         }

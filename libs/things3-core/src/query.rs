@@ -290,8 +290,8 @@ impl TaskQueryBuilder {
         let tasks = db.query_tasks(&filters_no_page).await?;
         let mut tasks = Self::apply_tag_filters(
             tasks,
-            &self.any_tags,
-            &self.exclude_tags,
+            self.any_tags.as_deref(),
+            self.exclude_tags.as_deref(),
             self.tag_count_min,
         );
 
@@ -307,16 +307,16 @@ impl TaskQueryBuilder {
     #[cfg(feature = "advanced-queries")]
     fn apply_tag_filters(
         mut tasks: Vec<crate::models::Task>,
-        any_tags: &Option<Vec<String>>,
-        exclude_tags: &Option<Vec<String>>,
+        any_tags: Option<&[String]>,
+        exclude_tags: Option<&[String]>,
         tag_count_min: Option<usize>,
     ) -> Vec<crate::models::Task> {
-        if let Some(ref any) = any_tags {
+        if let Some(any) = any_tags {
             if !any.is_empty() {
                 tasks.retain(|task| any.iter().any(|f| task.tags.contains(f)));
             }
         }
-        if let Some(ref excl) = exclude_tags {
+        if let Some(excl) = exclude_tags {
             if !excl.is_empty() {
                 tasks.retain(|task| !excl.iter().any(|f| task.tags.contains(f)));
             }
@@ -367,8 +367,8 @@ impl TaskQueryBuilder {
         let tasks = db.query_tasks(&filters_no_page).await?;
         let tasks = Self::apply_tag_filters(
             tasks,
-            &self.any_tags,
-            &self.exclude_tags,
+            self.any_tags.as_deref(),
+            self.exclude_tags.as_deref(),
             self.tag_count_min,
         );
 
@@ -436,7 +436,7 @@ fn best_window_score(query: &str, field: &str) -> f32 {
         return 0.0;
     }
     let window_len = (2 * query.len()).min(field.len());
-    let step = (query.len() / 2).max(1);
+    let step = 1;
     let chars: Vec<char> = field.chars().collect();
     let n = chars.len();
     let mut best = 0.0f32;
