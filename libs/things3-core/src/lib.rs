@@ -62,6 +62,9 @@ pub mod error;
 pub mod filter_expr;
 
 #[cfg(feature = "batch-operations")]
+pub mod batch;
+
+#[cfg(feature = "batch-operations")]
 pub mod cursor;
 
 #[cfg(any(feature = "export-csv", feature = "export-opml"))]

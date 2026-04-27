@@ -257,7 +257,7 @@ pub struct ComprehensiveHealthStatus {
 /// This provides async, Send + Sync compatible database access
 #[derive(Debug, Clone)]
 pub struct ThingsDatabase {
-    pool: SqlitePool,
+    pub(crate) pool: SqlitePool,
     config: DatabasePoolConfig,
 }
 
