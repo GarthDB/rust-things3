@@ -59,6 +59,7 @@ fn test_cache_stats_zero_hits_misses() {
         misses: 0,
         entries: 0,
         hit_rate: 0.0,
+        ..Default::default()
     };
 
     stats.calculate_hit_rate();
@@ -76,6 +77,7 @@ fn test_cache_stats_only_hits() {
         misses: 0,
         entries: 50,
         hit_rate: 0.0,
+        ..Default::default()
     };
 
     stats.calculate_hit_rate();
@@ -90,6 +92,7 @@ fn test_cache_stats_only_misses() {
         misses: 100,
         entries: 0,
         hit_rate: 0.0,
+        ..Default::default()
     };
 
     stats.calculate_hit_rate();
@@ -107,6 +110,7 @@ fn test_cache_stats_mixed() {
         misses: 25,
         entries: 50,
         hit_rate: 0.0,
+        ..Default::default()
     };
 
     stats.calculate_hit_rate();
