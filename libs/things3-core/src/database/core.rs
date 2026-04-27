@@ -1012,14 +1012,16 @@ impl ThingsDatabase {
             ));
         }
 
-        if let Some((after_seconds, after_uuid)) = after {
+        if let Some((after_seconds, _)) = after {
             // Strictly less than the cursor in (truncated_seconds DESC, uuid DESC)
             // ordering — i.e. older second, or same second with smaller uuid.
             // Casting to INTEGER matches the precision of `Task::created`,
             // which is reconstructed at second precision when reading rows.
+            // UUID is bound as a parameter (?) rather than interpolated for
+            // consistency with the rest of the codebase's query practices.
             conditions.push(format!(
                 "(CAST(creationDate AS INTEGER) < {after_seconds} \
-                 OR (CAST(creationDate AS INTEGER) = {after_seconds} AND uuid < '{after_uuid}'))"
+                 OR (CAST(creationDate AS INTEGER) = {after_seconds} AND uuid < ?))"
             ));
         }
 
@@ -1054,10 +1056,15 @@ impl ThingsDatabase {
             }
         }
 
-        let rows = sqlx::query(&sql)
-            .fetch_all(&self.pool)
-            .await
-            .map_err(|e| ThingsError::unknown(format!("Failed to query tasks: {e}")))?;
+        let rows = if let Some((_, after_uuid)) = after {
+            sqlx::query(&sql)
+                .bind(after_uuid.to_string())
+                .fetch_all(&self.pool)
+                .await
+        } else {
+            sqlx::query(&sql).fetch_all(&self.pool).await
+        }
+        .map_err(|e| ThingsError::unknown(format!("Failed to query tasks: {e}")))?;
 
         let mut tasks = rows
             .iter()

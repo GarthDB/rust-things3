@@ -95,12 +95,15 @@ pub(crate) struct CursorPayload {
 }
 
 /// A page of results plus an optional cursor for the next page.
-///
-/// `next_cursor` is `None` when the page is the last one (i.e. the page
-/// returned fewer items than the configured page size).
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Page<T> {
     pub items: Vec<T>,
+    /// Cursor for the next page, or `None` when this is the last page.
+    ///
+    /// Uses the "full page → maybe more" heuristic: a cursor is returned
+    /// whenever `items.len() == page_size`, even if no further rows exist.
+    /// In that case the subsequent fetch returns an empty `Page` with
+    /// `next_cursor: None`. This is standard keyset pagination behavior.
     pub next_cursor: Option<Cursor>,
 }
 
