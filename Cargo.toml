@@ -39,6 +39,11 @@ strsim = "0.11"
 # Cursor pagination (batch-operations feature)
 base64 = "0.22"
 
+# Streaming (batch-operations feature)
+async-stream = "0.3"
+futures-core = "0.3"
+futures-util = "0.3"
+
 # CLI
 clap = { version = "4.0", features = ["derive"] }
 

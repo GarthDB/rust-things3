@@ -5275,5 +5275,133 @@ mod tests {
                 );
             }
         }
+
+        #[cfg(feature = "batch-operations")]
+        mod cursor_streaming_tests {
+            use super::*;
+            use futures_util::StreamExt;
+
+            #[tokio::test]
+            async fn test_execute_stream_yields_all_tasks() {
+                let (db, _f) = open_test_db().await;
+                let mut inserted = vec![];
+                for i in 0..5 {
+                    inserted.push(insert_task(&db, &format!("task-{i}"), None, &[]).await);
+                }
+
+                let stream = TaskQueryBuilder::new().limit(2).execute_stream(&db);
+                let collected: Vec<_> = stream
+                    .collect::<Vec<crate::error::Result<crate::models::Task>>>()
+                    .await
+                    .into_iter()
+                    .collect::<crate::error::Result<Vec<_>>>()
+                    .unwrap();
+
+                let inserted_set: std::collections::HashSet<_> = inserted.iter().copied().collect();
+                let collected_set: std::collections::HashSet<_> =
+                    collected.iter().map(|t| t.uuid).collect();
+                for uuid in &inserted_set {
+                    assert!(
+                        collected_set.contains(uuid),
+                        "stream missing inserted uuid {uuid}"
+                    );
+                }
+                assert_eq!(
+                    collected.len(),
+                    collected_set.len(),
+                    "stream yielded duplicates"
+                );
+            }
+
+            #[tokio::test]
+            async fn test_execute_stream_with_status_filter() {
+                let (db, _f) = open_test_db().await;
+                let target = insert_task(&db, "incomplete-task", None, &[]).await;
+
+                let stream = TaskQueryBuilder::new()
+                    .status(TaskStatus::Incomplete)
+                    .limit(50)
+                    .execute_stream(&db);
+                let tasks: Vec<_> = stream
+                    .collect::<Vec<_>>()
+                    .await
+                    .into_iter()
+                    .collect::<crate::error::Result<Vec<_>>>()
+                    .unwrap();
+
+                let uuids: std::collections::HashSet<_> = tasks.iter().map(|t| t.uuid).collect();
+                assert!(uuids.contains(&target));
+                for task in &tasks {
+                    assert_eq!(task.status, TaskStatus::Incomplete);
+                }
+            }
+
+            #[tokio::test]
+            async fn test_execute_stream_with_any_tags_post_filter() {
+                let (db, _f) = open_test_db().await;
+                let a1 = insert_task_with_tags(&db, "a1", &["a"]).await;
+                let a2 = insert_task_with_tags(&db, "a2", &["a"]).await;
+                let a3 = insert_task_with_tags(&db, "a3", &["a"]).await;
+                let _b = insert_task_with_tags(&db, "b1", &["b"]).await;
+
+                let stream = TaskQueryBuilder::new()
+                    .any_tags(vec!["a".to_string()])
+                    .limit(2)
+                    .execute_stream(&db);
+                let tasks: Vec<_> = stream
+                    .collect::<Vec<_>>()
+                    .await
+                    .into_iter()
+                    .collect::<crate::error::Result<Vec<_>>>()
+                    .unwrap();
+
+                let uuids: std::collections::HashSet<_> = tasks.iter().map(|t| t.uuid).collect();
+                assert!(uuids.contains(&a1));
+                assert!(uuids.contains(&a2));
+                assert!(uuids.contains(&a3));
+                assert_eq!(uuids.len(), 3, "should yield only a-tagged tasks");
+            }
+
+            #[tokio::test]
+            async fn test_execute_stream_empty_result() {
+                let (db, _f) = open_test_db().await;
+                // Filter by a project UUID that doesn't exist → no matches.
+                let stream = TaskQueryBuilder::new()
+                    .project_uuid(Uuid::new_v4())
+                    .execute_stream(&db);
+                let tasks: Vec<_> = stream
+                    .collect::<Vec<_>>()
+                    .await
+                    .into_iter()
+                    .collect::<crate::error::Result<Vec<_>>>()
+                    .unwrap();
+                assert!(tasks.is_empty());
+            }
+
+            #[cfg(feature = "advanced-queries")]
+            #[tokio::test]
+            async fn test_execute_stream_propagates_validation_error() {
+                let (db, _f) = open_test_db().await;
+                let cursor = crate::cursor::Cursor::encode(&crate::cursor::CursorPayload {
+                    c: chrono::Utc::now(),
+                    u: Uuid::new_v4(),
+                })
+                .unwrap();
+
+                let mut stream = TaskQueryBuilder::new()
+                    .fuzzy_search("anything")
+                    .after(cursor)
+                    .execute_stream(&db);
+                let first = stream.next().await;
+                match first {
+                    Some(Err(crate::error::ThingsError::InvalidCursor(msg))) => {
+                        assert!(msg.contains("fuzzy"), "msg: {msg}");
+                    }
+                    other => panic!("expected first item to be InvalidCursor, got {other:?}"),
+                }
+                // Stream terminates after the error.
+                assert!(stream.next().await.is_none());
+            }
+        }
     }
 }

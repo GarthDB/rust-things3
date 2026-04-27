@@ -19,7 +19,7 @@ export-csv = ["dep:csv"]
 export-opml = ["dep:quick-xml"]
 observability = ["dep:metrics"]
 advanced-queries = []
-batch-operations = ["dep:base64"]
+batch-operations = ["dep:base64", "dep:async-stream", "dep:futures-core"]
 full = ["export-csv", "export-opml", "observability", "advanced-queries", "batch-operations"]
 
 [dependencies]
@@ -40,6 +40,10 @@ strsim.workspace = true
 
 # Cursor pagination (optional, gated behind `batch-operations`)
 base64 = { workspace = true, optional = true }
+
+# Streaming (optional, gated behind `batch-operations`)
+async-stream = { workspace = true, optional = true }
+futures-core = { workspace = true, optional = true }
 
 # Async
 tokio.workspace = true
@@ -80,6 +84,7 @@ tempfile.workspace = true
 [dev-dependencies]
 criterion.workspace = true
 serial_test = "3.1"
+futures-util = { workspace = true }
 
 [[bench]]
 name = "database_benchmarks"

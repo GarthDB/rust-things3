@@ -479,6 +479,66 @@ impl TaskQueryBuilder {
         })
     }
 
+    /// Execute the query as a [`futures_core::Stream`] of tasks, internally
+    /// chunked via cursor pagination.
+    ///
+    /// Yields tasks one at a time in `(creationDate DESC, uuid DESC)` order,
+    /// transparently fetching the next page when the current one is exhausted.
+    /// The stream completes when the underlying query has no more rows.
+    ///
+    /// `self.filters.limit` (overridable via [`limit`](Self::limit)) sets the
+    /// **chunk size** in this context, not a cap on total emitted items —
+    /// defaults to `100` if unset. Pre-filters and post-filters
+    /// (`status`, `any_tags`, `where_expr`, etc.) compose with streaming
+    /// exactly as they do with [`execute_paged`](Self::execute_paged).
+    ///
+    /// The first item is `Err(ThingsError)` if the underlying `execute_paged`
+    /// call rejects the query (e.g. `.offset()` and `.after()` both set, or
+    /// `.fuzzy_search()` and `.after()` both set). After any error, the
+    /// stream terminates.
+    ///
+    /// Requires both the `advanced-queries` and `batch-operations` feature
+    /// flags.
+    ///
+    /// # Examples
+    ///
+    /// ```ignore
+    /// use futures_util::StreamExt;
+    /// let mut stream = TaskQueryBuilder::new()
+    ///     .status(TaskStatus::Incomplete)
+    ///     .limit(50) // chunk size, not total cap
+    ///     .execute_stream(&db);
+    /// while let Some(task) = stream.next().await {
+    ///     let task = task?;
+    ///     // process task
+    /// }
+    /// # Ok::<(), things3_core::ThingsError>(())
+    /// ```
+    #[cfg(all(feature = "advanced-queries", feature = "batch-operations"))]
+    pub fn execute_stream<'a>(
+        mut self,
+        db: &'a crate::database::ThingsDatabase,
+    ) -> std::pin::Pin<
+        Box<dyn futures_core::Stream<Item = crate::error::Result<crate::models::Task>> + Send + 'a>,
+    >
+    where
+        Self: Send + 'a,
+    {
+        Box::pin(async_stream::try_stream! {
+            loop {
+                let page = self.execute_paged(db).await?;
+                let next = page.next_cursor;
+                for task in page.items {
+                    yield task;
+                }
+                match next {
+                    Some(c) => self.after = Some(c),
+                    None => break,
+                }
+            }
+        })
+    }
+
     /// Execute the query and return tasks paired with their fuzzy-match scores,
     /// sorted by score descending (ties broken by UUID for determinism).
     ///
