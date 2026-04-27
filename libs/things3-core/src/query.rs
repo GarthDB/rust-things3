@@ -8,6 +8,15 @@ use uuid::Uuid;
 #[derive(Debug, Clone)]
 pub struct TaskQueryBuilder {
     filters: TaskFilters,
+    /// OR-semantics / exclusion / count tag filters applied by `execute()` in Rust.
+    /// Kept off `TaskFilters` to preserve the stable public struct surface.
+    /// Only present in `advanced-queries` builds (same gate as `execute()`).
+    #[cfg(feature = "advanced-queries")]
+    any_tags: Option<Vec<String>>,
+    #[cfg(feature = "advanced-queries")]
+    exclude_tags: Option<Vec<String>>,
+    #[cfg(feature = "advanced-queries")]
+    tag_count_min: Option<usize>,
 }
 
 impl TaskQueryBuilder {
@@ -16,6 +25,12 @@ impl TaskQueryBuilder {
     pub fn new() -> Self {
         Self {
             filters: TaskFilters::default(),
+            #[cfg(feature = "advanced-queries")]
+            any_tags: None,
+            #[cfg(feature = "advanced-queries")]
+            exclude_tags: None,
+            #[cfg(feature = "advanced-queries")]
+            tag_count_min: None,
         }
     }
 
@@ -47,10 +62,46 @@ impl TaskQueryBuilder {
         self
     }
 
-    /// Filter by tags
+    /// Filter by tags (AND semantics — task must contain every listed tag).
     #[must_use]
     pub fn tags(mut self, tags: Vec<String>) -> Self {
         self.filters.tags = Some(tags);
+        self
+    }
+
+    /// Filter to tasks containing **any** of these tags (OR semantics).
+    ///
+    /// Composes with `.tags()` (AND) and `.exclude_tags()` (NOT) — all
+    /// active tag filters must be satisfied. Applied in Rust by `execute()`;
+    /// not reflected in `build()`.
+    ///
+    /// Requires the `advanced-queries` feature flag.
+    #[cfg(feature = "advanced-queries")]
+    #[must_use]
+    pub fn any_tags(mut self, tags: Vec<String>) -> Self {
+        self.any_tags = Some(tags);
+        self
+    }
+
+    /// Filter out tasks containing any of these tags. Applied in Rust by `execute()`;
+    /// not reflected in `build()`.
+    ///
+    /// Requires the `advanced-queries` feature flag.
+    #[cfg(feature = "advanced-queries")]
+    #[must_use]
+    pub fn exclude_tags(mut self, tags: Vec<String>) -> Self {
+        self.exclude_tags = Some(tags);
+        self
+    }
+
+    /// Filter to tasks with at least `min` tags total. Applied in Rust by `execute()`;
+    /// not reflected in `build()`.
+    ///
+    /// Requires the `advanced-queries` feature flag.
+    #[cfg(feature = "advanced-queries")]
+    #[must_use]
+    pub fn tag_count(mut self, min: usize) -> Self {
+        self.tag_count_min = Some(min);
         self
     }
 
@@ -165,6 +216,12 @@ impl TaskQueryBuilder {
 
     /// Execute the query against a live database connection.
     ///
+    /// SQL-level filters (`status`, `type`, project/area UUIDs, date ranges) and the
+    /// `tags` AND-filter are handled by `query_tasks`. The builder-only tag predicates
+    /// (`any_tags`, `exclude_tags`, `tag_count`) are applied in Rust afterward;
+    /// when any of them are active, `limit`/`offset` pagination is also deferred to
+    /// Rust so pages count only matching rows.
+    ///
     /// Requires the `advanced-queries` feature flag.
     ///
     /// # Errors
@@ -175,7 +232,42 @@ impl TaskQueryBuilder {
         &self,
         db: &crate::database::ThingsDatabase,
     ) -> crate::error::Result<Vec<crate::models::Task>> {
-        db.query_tasks(&self.filters).await
+        let has_builder_post_filters = self.any_tags.as_ref().is_some_and(|t| !t.is_empty())
+            || self.exclude_tags.as_ref().is_some_and(|t| !t.is_empty())
+            || self.tag_count_min.is_some();
+
+        if !has_builder_post_filters {
+            return db.query_tasks(&self.filters).await;
+        }
+
+        // Fetch without SQL LIMIT/OFFSET; apply pagination in Rust after tag filtering.
+        let mut filters_no_page = self.filters.clone();
+        let limit = filters_no_page.limit.take();
+        let offset = filters_no_page.offset.take();
+
+        let mut tasks = db.query_tasks(&filters_no_page).await?;
+
+        if let Some(ref any) = self.any_tags {
+            if !any.is_empty() {
+                tasks.retain(|task| any.iter().any(|f| task.tags.contains(f)));
+            }
+        }
+        if let Some(ref excl) = self.exclude_tags {
+            if !excl.is_empty() {
+                tasks.retain(|task| !excl.iter().any(|f| task.tags.contains(f)));
+            }
+        }
+        if let Some(min) = self.tag_count_min {
+            tasks.retain(|task| task.tags.len() >= min);
+        }
+
+        let offset = offset.unwrap_or(0);
+        tasks = tasks.into_iter().skip(offset).collect();
+        if let Some(limit) = limit {
+            tasks.truncate(limit);
+        }
+
+        Ok(tasks)
     }
 }
 
@@ -269,6 +361,46 @@ mod tests {
         let filters = builder.build();
 
         assert_eq!(filters.tags, Some(tags));
+    }
+
+    #[cfg(feature = "advanced-queries")]
+    #[test]
+    fn test_task_query_builder_any_tags() {
+        let tags = vec!["a".to_string(), "b".to_string()];
+        let builder = TaskQueryBuilder::new().any_tags(tags.clone());
+        assert_eq!(builder.any_tags, Some(tags));
+    }
+
+    #[cfg(feature = "advanced-queries")]
+    #[test]
+    fn test_task_query_builder_exclude_tags() {
+        let tags = vec!["archived".to_string()];
+        let builder = TaskQueryBuilder::new().exclude_tags(tags.clone());
+        assert_eq!(builder.exclude_tags, Some(tags));
+    }
+
+    #[cfg(feature = "advanced-queries")]
+    #[test]
+    fn test_task_query_builder_tag_count() {
+        let builder = TaskQueryBuilder::new().tag_count(2);
+        assert_eq!(builder.tag_count_min, Some(2));
+    }
+
+    #[cfg(feature = "advanced-queries")]
+    #[test]
+    fn test_task_query_builder_chaining_tag_methods() {
+        let builder = TaskQueryBuilder::new()
+            .tags(vec!["a".to_string()])
+            .any_tags(vec!["b".to_string(), "c".to_string()])
+            .exclude_tags(vec!["d".to_string()])
+            .tag_count(1);
+        assert_eq!(builder.filters.tags, Some(vec!["a".to_string()]));
+        assert_eq!(
+            builder.any_tags,
+            Some(vec!["b".to_string(), "c".to_string()])
+        );
+        assert_eq!(builder.exclude_tags, Some(vec!["d".to_string()]));
+        assert_eq!(builder.tag_count_min, Some(1));
     }
 
     #[test]

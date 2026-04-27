@@ -919,6 +919,8 @@ impl ThingsDatabase {
     /// `LIMIT`/`OFFSET` is also applied in Rust so pagination counts only
     /// matching rows; without post-filters it is applied in SQL for efficiency.
     ///
+    /// Tag matching via `filters.tags` is case-sensitive.
+    ///
     /// Filtering by [`TaskStatus::Trashed`] queries rows where `trashed = 1`
     /// rather than adding a `status` condition, matching Things 3's soft-delete
     /// semantics (trashed rows keep their original status value).
@@ -996,8 +998,8 @@ impl ThingsDatabase {
         let mut sql =
             format!("SELECT {COLS} FROM TMTask WHERE {where_clause} ORDER BY creationDate DESC");
 
-        // When tags or search_query are active, LIMIT/OFFSET must be applied in Rust after
-        // post-filtering, because SQL LIMIT would count non-matching rows and produce incorrect pages.
+        // When tags or search_query are active, LIMIT/OFFSET must be applied in Rust
+        // after post-filtering, because SQL LIMIT would count non-matching rows.
         let has_post_filters =
             filters.tags.as_ref().is_some_and(|t| !t.is_empty()) || filters.search_query.is_some();
 
@@ -4498,6 +4500,7 @@ mod tests {
     mod query_tasks_tests {
         use super::*;
         use crate::models::TaskFilters;
+        use crate::query::TaskQueryBuilder;
         use tempfile::NamedTempFile;
 
         async fn open_test_db() -> (ThingsDatabase, NamedTempFile) {
@@ -4656,6 +4659,124 @@ mod tests {
                     offset: Some(1),
                     ..TaskFilters::default()
                 })
+                .await
+                .unwrap();
+            assert_eq!(page0.len(), 1);
+            assert_eq!(page1.len(), 1);
+            assert_ne!(page0[0].uuid, page1[0].uuid);
+        }
+
+        /// Insert a TMTask row with the given tags pre-serialised into cachedTags.
+        /// Used to seed positive-match tag tests; bypasses create_test_database which
+        /// inserts only untagged rows.
+        async fn insert_task_with_tags(db: &ThingsDatabase, title: &str, tags: &[&str]) -> Uuid {
+            let uuid = Uuid::new_v4();
+            let owned: Vec<String> = tags.iter().map(|s| (*s).to_string()).collect();
+            let blob = serialize_tags_to_blob(&owned).unwrap();
+            sqlx::query(
+                "INSERT INTO TMTask \
+                 (uuid, title, type, status, trashed, creationDate, userModificationDate, cachedTags) \
+                 VALUES (?, ?, 0, 0, 0, 0, 0, ?)",
+            )
+            .bind(uuid.to_string())
+            .bind(title)
+            .bind(blob)
+            .execute(&db.pool)
+            .await
+            .unwrap();
+            uuid
+        }
+
+        async fn open_db_with_tagged_rows() -> (ThingsDatabase, NamedTempFile, Uuid, Uuid, Uuid) {
+            let (db, f) = open_test_db().await;
+            let a = insert_task_with_tags(&db, "task-a", &["a"]).await;
+            let b = insert_task_with_tags(&db, "task-b", &["b"]).await;
+            let c = insert_task_with_tags(&db, "task-c", &["c"]).await;
+            (db, f, a, b, c)
+        }
+
+        #[tokio::test]
+        async fn test_query_tasks_any_tags_or_semantics() {
+            let (db, _f, a, b, c) = open_db_with_tagged_rows().await;
+            let tasks = TaskQueryBuilder::new()
+                .any_tags(vec!["a".to_string(), "b".to_string()])
+                .execute(&db)
+                .await
+                .unwrap();
+            let uuids: std::collections::HashSet<_> = tasks.iter().map(|t| t.uuid).collect();
+            assert!(uuids.contains(&a));
+            assert!(uuids.contains(&b));
+            assert!(!uuids.contains(&c));
+        }
+
+        #[tokio::test]
+        async fn test_query_tasks_exclude_tags() {
+            let (db, _f, a, b, c) = open_db_with_tagged_rows().await;
+            let tasks = TaskQueryBuilder::new()
+                .exclude_tags(vec!["b".to_string()])
+                .execute(&db)
+                .await
+                .unwrap();
+            let uuids: std::collections::HashSet<_> = tasks.iter().map(|t| t.uuid).collect();
+            assert!(uuids.contains(&a));
+            assert!(!uuids.contains(&b));
+            assert!(uuids.contains(&c));
+        }
+
+        #[tokio::test]
+        async fn test_query_tasks_tag_count_min() {
+            let (db, _f) = open_test_db().await;
+            insert_task_with_tags(&db, "zero-tags", &[]).await;
+            insert_task_with_tags(&db, "one-tag", &["x"]).await;
+            let two = insert_task_with_tags(&db, "two-tags", &["x", "y"]).await;
+            let tasks = TaskQueryBuilder::new()
+                .tag_count(2)
+                .execute(&db)
+                .await
+                .unwrap();
+            let uuids: Vec<Uuid> = tasks.iter().map(|t| t.uuid).collect();
+            assert_eq!(uuids, vec![two]);
+        }
+
+        #[tokio::test]
+        async fn test_query_tasks_combined_tag_filters() {
+            let (db, _f) = open_test_db().await;
+            let target = insert_task_with_tags(&db, "target", &["a", "x"]).await;
+            let _wrong_required = insert_task_with_tags(&db, "no-a", &["x"]).await;
+            let _excluded = insert_task_with_tags(&db, "has-z", &["a", "x", "z"]).await;
+            let _no_any = insert_task_with_tags(&db, "no-x", &["a"]).await;
+
+            let tasks = TaskQueryBuilder::new()
+                .tags(vec!["a".to_string()])
+                .any_tags(vec!["x".to_string(), "y".to_string()])
+                .exclude_tags(vec!["z".to_string()])
+                .execute(&db)
+                .await
+                .unwrap();
+            let uuids: Vec<Uuid> = tasks.iter().map(|t| t.uuid).collect();
+            assert_eq!(uuids, vec![target]);
+        }
+
+        #[tokio::test]
+        async fn test_query_tasks_pagination_with_any_tags() {
+            // execute() must defer LIMIT/OFFSET to Rust when any_tags is set so
+            // pages count only matching rows.
+            let (db, _f) = open_test_db().await;
+            insert_task_with_tags(&db, "a1", &["a"]).await;
+            insert_task_with_tags(&db, "a2", &["a"]).await;
+            insert_task_with_tags(&db, "a3", &["a"]).await;
+            let page0 = TaskQueryBuilder::new()
+                .any_tags(vec!["a".to_string()])
+                .limit(1)
+                .offset(0)
+                .execute(&db)
+                .await
+                .unwrap();
+            let page1 = TaskQueryBuilder::new()
+                .any_tags(vec!["a".to_string()])
+                .limit(1)
+                .offset(1)
+                .execute(&db)
                 .await
                 .unwrap();
             assert_eq!(page0.len(), 1);

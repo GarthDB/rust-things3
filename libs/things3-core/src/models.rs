@@ -338,7 +338,7 @@ pub struct TaskFilters {
     pub project_uuid: Option<Uuid>,
     /// Filter by area UUID
     pub area_uuid: Option<Uuid>,
-    /// Filter by tags
+    /// Filter by tags (AND semantics — task must contain every listed tag).
     pub tags: Option<Vec<String>>,
     /// Filter by start date range
     pub start_date_from: Option<NaiveDate>,
