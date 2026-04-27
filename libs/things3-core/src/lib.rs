@@ -73,6 +73,9 @@ pub mod query;
 pub mod query_cache;
 pub mod query_performance;
 
+#[cfg(feature = "advanced-queries")]
+pub mod saved_queries;
+
 #[cfg(any(test, feature = "test-utils"))]
 pub mod test_utils;
 
@@ -115,11 +118,14 @@ pub use performance::{
     PerformanceStats, PerformanceSummary, QueryMetrics,
 };
 pub use query_cache::{QueryCache, QueryCacheConfig, QueryCacheStats};
+
 pub use query_performance::{
     ImplementationEffort, OptimizationPriority, OptimizationType, QueryContext,
     QueryOptimizationSuggestion, QueryPerformanceMetrics, QueryPerformanceStats,
     QueryPerformanceSummary, QueryPerformanceTracker,
 };
+#[cfg(feature = "advanced-queries")]
+pub use saved_queries::{SavedQuery, SavedQueryStore};
 
 /// Re-export commonly used types
 pub use chrono::{DateTime, NaiveDate, Utc};

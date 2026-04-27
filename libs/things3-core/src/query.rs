@@ -399,6 +399,47 @@ impl TaskQueryBuilder {
 
         Ok(scored)
     }
+
+    /// Snapshot the full builder state — both [`TaskFilters`] and the
+    /// builder-only post-1.0.0 predicates — into a [`crate::saved_queries::SavedQuery`].
+    ///
+    /// Combine with [`crate::saved_queries::SavedQueryStore`] to persist queries
+    /// to disk and replay them later via [`Self::from_saved_query`].
+    ///
+    /// Requires the `advanced-queries` feature flag.
+    #[cfg(feature = "advanced-queries")]
+    #[must_use]
+    pub fn to_saved_query(&self, name: impl Into<String>) -> crate::saved_queries::SavedQuery {
+        crate::saved_queries::SavedQuery {
+            name: name.into(),
+            description: None,
+            filters: self.filters.clone(),
+            any_tags: self.any_tags.clone(),
+            exclude_tags: self.exclude_tags.clone(),
+            tag_count_min: self.tag_count_min,
+            fuzzy_query: self.fuzzy_query.clone(),
+            fuzzy_threshold: self.fuzzy_threshold,
+            created: chrono::Utc::now(),
+        }
+    }
+
+    /// Reconstruct a builder from a previously-saved [`crate::saved_queries::SavedQuery`].
+    /// The returned builder can be executed directly via [`Self::execute`] or
+    /// [`Self::execute_ranked`].
+    ///
+    /// Requires the `advanced-queries` feature flag.
+    #[cfg(feature = "advanced-queries")]
+    #[must_use]
+    pub fn from_saved_query(query: &crate::saved_queries::SavedQuery) -> Self {
+        Self {
+            filters: query.filters.clone(),
+            any_tags: query.any_tags.clone(),
+            exclude_tags: query.exclude_tags.clone(),
+            tag_count_min: query.tag_count_min,
+            fuzzy_query: query.fuzzy_query.clone(),
+            fuzzy_threshold: query.fuzzy_threshold,
+        }
+    }
 }
 
 impl Default for TaskQueryBuilder {
@@ -664,6 +705,87 @@ mod tests {
             };
             let score = task_fuzzy_score("agenda", &task);
             assert_eq!(score, 1.0, "notes contains 'agenda', score should be 1.0");
+        }
+    }
+
+    #[cfg(feature = "advanced-queries")]
+    mod saved_query_conversion_tests {
+        use super::*;
+
+        #[test]
+        fn test_to_saved_query_captures_all_state() {
+            let from = NaiveDate::from_ymd_opt(2026, 1, 1).unwrap();
+            let to = NaiveDate::from_ymd_opt(2026, 12, 31).unwrap();
+            let project = Uuid::new_v4();
+
+            let builder = TaskQueryBuilder::new()
+                .status(TaskStatus::Incomplete)
+                .task_type(TaskType::Todo)
+                .project_uuid(project)
+                .tags(vec!["work".to_string()])
+                .any_tags(vec!["urgent".to_string(), "p0".to_string()])
+                .exclude_tags(vec!["archived".to_string()])
+                .tag_count(2)
+                .fuzzy_search("budget")
+                .fuzzy_threshold(0.75)
+                .start_date_range(Some(from), Some(to))
+                .limit(10)
+                .offset(5);
+
+            let saved = builder.to_saved_query("everything");
+            assert_eq!(saved.name, "everything");
+            assert_eq!(saved.filters.status, Some(TaskStatus::Incomplete));
+            assert_eq!(saved.filters.task_type, Some(TaskType::Todo));
+            assert_eq!(saved.filters.project_uuid, Some(project));
+            assert_eq!(saved.filters.tags, Some(vec!["work".to_string()]));
+            assert_eq!(saved.filters.start_date_from, Some(from));
+            assert_eq!(saved.filters.limit, Some(10));
+            assert_eq!(saved.filters.offset, Some(5));
+            assert_eq!(
+                saved.any_tags,
+                Some(vec!["urgent".to_string(), "p0".to_string()])
+            );
+            assert_eq!(saved.exclude_tags, Some(vec!["archived".to_string()]));
+            assert_eq!(saved.tag_count_min, Some(2));
+            assert_eq!(saved.fuzzy_query, Some("budget".to_string()));
+            assert_eq!(saved.fuzzy_threshold, Some(0.75));
+        }
+
+        #[test]
+        fn test_from_saved_query_restores_all_state() {
+            let original = TaskQueryBuilder::new()
+                .status(TaskStatus::Completed)
+                .any_tags(vec!["a".to_string()])
+                .fuzzy_search("hello")
+                .fuzzy_threshold(0.9)
+                .limit(7);
+            let saved = original.to_saved_query("test");
+            let rebuilt = TaskQueryBuilder::from_saved_query(&saved);
+
+            assert_eq!(rebuilt.filters.status, Some(TaskStatus::Completed));
+            assert_eq!(rebuilt.filters.limit, Some(7));
+            assert_eq!(rebuilt.any_tags, Some(vec!["a".to_string()]));
+            assert_eq!(rebuilt.fuzzy_query, Some("hello".to_string()));
+            assert_eq!(rebuilt.fuzzy_threshold, Some(0.9));
+        }
+
+        #[test]
+        fn test_saved_query_roundtrip_through_json() {
+            let original = TaskQueryBuilder::new()
+                .status(TaskStatus::Incomplete)
+                .any_tags(vec!["x".to_string()])
+                .fuzzy_search("foo")
+                .fuzzy_threshold(0.5);
+
+            let saved = original.to_saved_query("rt");
+            let json = serde_json::to_string(&saved).unwrap();
+            let restored: crate::saved_queries::SavedQuery = serde_json::from_str(&json).unwrap();
+            let rebuilt = TaskQueryBuilder::from_saved_query(&restored);
+
+            assert_eq!(rebuilt.filters.status, Some(TaskStatus::Incomplete));
+            assert_eq!(rebuilt.any_tags, Some(vec!["x".to_string()]));
+            assert_eq!(rebuilt.fuzzy_query, Some("foo".to_string()));
+            assert_eq!(rebuilt.fuzzy_threshold, Some(0.5));
         }
     }
 
