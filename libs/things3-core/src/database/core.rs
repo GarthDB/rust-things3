@@ -919,11 +919,7 @@ impl ThingsDatabase {
     /// `LIMIT`/`OFFSET` is also applied in Rust so pagination counts only
     /// matching rows; without post-filters it is applied in SQL for efficiency.
     ///
-    /// Tag predicates compose with AND across filter types: `tags` requires
-    /// every listed tag (AND), `any_tags` requires at least one (OR),
-    /// `exclude_tags` rejects tasks containing any of the listed tags, and
-    /// `tag_count_min` requires at least N tags total. Tag matching is
-    /// case-sensitive.
+    /// Tag matching via `filters.tags` is case-sensitive.
     ///
     /// Filtering by [`TaskStatus::Trashed`] queries rows where `trashed = 1`
     /// rather than adding a `status` condition, matching Things 3's soft-delete
@@ -1002,14 +998,10 @@ impl ThingsDatabase {
         let mut sql =
             format!("SELECT {COLS} FROM TMTask WHERE {where_clause} ORDER BY creationDate DESC");
 
-        // When tags, any_tags, exclude_tags, tag_count_min, or search_query are active,
-        // LIMIT/OFFSET must be applied in Rust after post-filtering, because SQL LIMIT
-        // would count non-matching rows and produce incorrect pages.
-        let has_post_filters = filters.tags.as_ref().is_some_and(|t| !t.is_empty())
-            || filters.any_tags.as_ref().is_some_and(|t| !t.is_empty())
-            || filters.exclude_tags.as_ref().is_some_and(|t| !t.is_empty())
-            || filters.tag_count_min.is_some()
-            || filters.search_query.is_some();
+        // When tags or search_query are active, LIMIT/OFFSET must be applied in Rust
+        // after post-filtering, because SQL LIMIT would count non-matching rows.
+        let has_post_filters =
+            filters.tags.as_ref().is_some_and(|t| !t.is_empty()) || filters.search_query.is_some();
 
         if !has_post_filters {
             match (filters.limit, filters.offset) {
@@ -1041,22 +1033,6 @@ impl ThingsDatabase {
             if !filter_tags.is_empty() {
                 tasks.retain(|task| filter_tags.iter().all(|f| task.tags.contains(f)));
             }
-        }
-
-        if let Some(ref any) = filters.any_tags {
-            if !any.is_empty() {
-                tasks.retain(|task| any.iter().any(|f| task.tags.contains(f)));
-            }
-        }
-
-        if let Some(ref excl) = filters.exclude_tags {
-            if !excl.is_empty() {
-                tasks.retain(|task| !excl.iter().any(|f| task.tags.contains(f)));
-            }
-        }
-
-        if let Some(min) = filters.tag_count_min {
-            tasks.retain(|task| task.tags.len() >= min);
         }
 
         if let Some(ref q) = filters.search_query {
@@ -4524,6 +4500,7 @@ mod tests {
     mod query_tasks_tests {
         use super::*;
         use crate::models::TaskFilters;
+        use crate::query::TaskQueryBuilder;
         use tempfile::NamedTempFile;
 
         async fn open_test_db() -> (ThingsDatabase, NamedTempFile) {
@@ -4721,11 +4698,9 @@ mod tests {
         #[tokio::test]
         async fn test_query_tasks_any_tags_or_semantics() {
             let (db, _f, a, b, c) = open_db_with_tagged_rows().await;
-            let tasks = db
-                .query_tasks(&TaskFilters {
-                    any_tags: Some(vec!["a".to_string(), "b".to_string()]),
-                    ..TaskFilters::default()
-                })
+            let tasks = TaskQueryBuilder::new()
+                .any_tags(vec!["a".to_string(), "b".to_string()])
+                .execute(&db)
                 .await
                 .unwrap();
             let uuids: std::collections::HashSet<_> = tasks.iter().map(|t| t.uuid).collect();
@@ -4737,11 +4712,9 @@ mod tests {
         #[tokio::test]
         async fn test_query_tasks_exclude_tags() {
             let (db, _f, a, b, c) = open_db_with_tagged_rows().await;
-            let tasks = db
-                .query_tasks(&TaskFilters {
-                    exclude_tags: Some(vec!["b".to_string()]),
-                    ..TaskFilters::default()
-                })
+            let tasks = TaskQueryBuilder::new()
+                .exclude_tags(vec!["b".to_string()])
+                .execute(&db)
                 .await
                 .unwrap();
             let uuids: std::collections::HashSet<_> = tasks.iter().map(|t| t.uuid).collect();
@@ -4756,11 +4729,9 @@ mod tests {
             insert_task_with_tags(&db, "zero-tags", &[]).await;
             insert_task_with_tags(&db, "one-tag", &["x"]).await;
             let two = insert_task_with_tags(&db, "two-tags", &["x", "y"]).await;
-            let tasks = db
-                .query_tasks(&TaskFilters {
-                    tag_count_min: Some(2),
-                    ..TaskFilters::default()
-                })
+            let tasks = TaskQueryBuilder::new()
+                .tag_count(2)
+                .execute(&db)
                 .await
                 .unwrap();
             let uuids: Vec<Uuid> = tasks.iter().map(|t| t.uuid).collect();
@@ -4769,20 +4740,17 @@ mod tests {
 
         #[tokio::test]
         async fn test_query_tasks_combined_tag_filters() {
-            // Insert a task that matches everything and one that fails each predicate.
             let (db, _f) = open_test_db().await;
             let target = insert_task_with_tags(&db, "target", &["a", "x"]).await;
             let _wrong_required = insert_task_with_tags(&db, "no-a", &["x"]).await;
             let _excluded = insert_task_with_tags(&db, "has-z", &["a", "x", "z"]).await;
             let _no_any = insert_task_with_tags(&db, "no-x", &["a"]).await;
 
-            let tasks = db
-                .query_tasks(&TaskFilters {
-                    tags: Some(vec!["a".to_string()]),
-                    any_tags: Some(vec!["x".to_string(), "y".to_string()]),
-                    exclude_tags: Some(vec!["z".to_string()]),
-                    ..TaskFilters::default()
-                })
+            let tasks = TaskQueryBuilder::new()
+                .tags(vec!["a".to_string()])
+                .any_tags(vec!["x".to_string(), "y".to_string()])
+                .exclude_tags(vec!["z".to_string()])
+                .execute(&db)
                 .await
                 .unwrap();
             let uuids: Vec<Uuid> = tasks.iter().map(|t| t.uuid).collect();
@@ -4791,28 +4759,24 @@ mod tests {
 
         #[tokio::test]
         async fn test_query_tasks_pagination_with_any_tags() {
-            // Active any_tags must force LIMIT/OFFSET to apply post-filter, so
+            // execute() must defer LIMIT/OFFSET to Rust when any_tags is set so
             // pages count only matching rows.
             let (db, _f) = open_test_db().await;
             insert_task_with_tags(&db, "a1", &["a"]).await;
             insert_task_with_tags(&db, "a2", &["a"]).await;
             insert_task_with_tags(&db, "a3", &["a"]).await;
-            let page0 = db
-                .query_tasks(&TaskFilters {
-                    any_tags: Some(vec!["a".to_string()]),
-                    limit: Some(1),
-                    offset: Some(0),
-                    ..TaskFilters::default()
-                })
+            let page0 = TaskQueryBuilder::new()
+                .any_tags(vec!["a".to_string()])
+                .limit(1)
+                .offset(0)
+                .execute(&db)
                 .await
                 .unwrap();
-            let page1 = db
-                .query_tasks(&TaskFilters {
-                    any_tags: Some(vec!["a".to_string()]),
-                    limit: Some(1),
-                    offset: Some(1),
-                    ..TaskFilters::default()
-                })
+            let page1 = TaskQueryBuilder::new()
+                .any_tags(vec!["a".to_string()])
+                .limit(1)
+                .offset(1)
+                .execute(&db)
                 .await
                 .unwrap();
             assert_eq!(page0.len(), 1);

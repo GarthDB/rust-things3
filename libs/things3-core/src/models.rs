@@ -340,12 +340,6 @@ pub struct TaskFilters {
     pub area_uuid: Option<Uuid>,
     /// Filter by tags (AND semantics — task must contain every listed tag).
     pub tags: Option<Vec<String>>,
-    /// Filter by tags (OR semantics — task must contain at least one of these).
-    pub any_tags: Option<Vec<String>>,
-    /// Exclude tasks containing any of these tags.
-    pub exclude_tags: Option<Vec<String>>,
-    /// Require at least this many tags on the task.
-    pub tag_count_min: Option<usize>,
     /// Filter by start date range
     pub start_date_from: Option<NaiveDate>,
     pub start_date_to: Option<NaiveDate>,
@@ -890,9 +884,6 @@ mod tests {
             project_uuid: Some(project_uuid),
             area_uuid: None,
             tags: Some(vec!["work".to_string()]),
-            any_tags: None,
-            exclude_tags: None,
-            tag_count_min: None,
             start_date_from: Some(start_date),
             start_date_to: None,
             deadline_from: None,
@@ -918,9 +909,6 @@ mod tests {
             project_uuid: None,
             area_uuid: None,
             tags: None,
-            any_tags: None,
-            exclude_tags: None,
-            tag_count_min: None,
             start_date_from: None,
             start_date_to: None,
             deadline_from: None,
