@@ -6,7 +6,7 @@
 use crate::{
     database::{safe_timestamp_convert, things_date_to_naive_date, things_uuid_to_uuid},
     error::Result as ThingsResult,
-    models::{Task, TaskStatus, TaskType},
+    models::{Project, Task, TaskStatus, TaskType},
 };
 use chrono::{DateTime, Utc};
 use sqlx::sqlite::SqliteRow;
@@ -127,6 +127,40 @@ pub fn map_task_row(row: &SqliteRow) -> ThingsResult<Task> {
         tags,
         children: Vec::new(),
     })
+}
+
+/// Map a `TMTask` row (where `type = 1`) into a [`Project`].
+pub fn map_project_row(row: &SqliteRow) -> Project {
+    Project {
+        uuid: parse_uuid_with_fallback(&row.get::<String, _>("uuid")),
+        title: row.get("title"),
+        status: match row.get::<i32, _>("status") {
+            1 => TaskStatus::Completed,
+            2 => TaskStatus::Canceled,
+            3 => TaskStatus::Trashed,
+            _ => TaskStatus::Incomplete,
+        },
+        area_uuid: parse_optional_uuid(row.get::<Option<String>, _>("area")),
+        notes: row.get("notes"),
+        deadline: row
+            .get::<Option<i64>, _>("deadline")
+            .and_then(|ts| DateTime::from_timestamp(ts, 0))
+            .map(|dt| dt.date_naive()),
+        start_date: row
+            .get::<Option<i64>, _>("startDate")
+            .and_then(|ts| DateTime::from_timestamp(ts, 0))
+            .map(|dt| dt.date_naive()),
+        tags: Vec::new(),
+        tasks: Vec::new(),
+        created: {
+            let ts = safe_timestamp_convert(row.get::<f64, _>("creationDate"));
+            DateTime::from_timestamp(ts, 0).unwrap_or_else(Utc::now)
+        },
+        modified: {
+            let ts = safe_timestamp_convert(row.get::<f64, _>("userModificationDate"));
+            DateTime::from_timestamp(ts, 0).unwrap_or_else(Utc::now)
+        },
+    }
 }
 
 #[cfg(test)]
