@@ -202,12 +202,12 @@ impl FilterPredicate {
             FilterPredicate::DeadlineBefore(d) => task.deadline.is_some_and(|dl| dl < *d),
             FilterPredicate::DeadlineAfter(d) => task.deadline.is_some_and(|dl| dl > *d),
             FilterPredicate::TitleContains(needle) => {
-                task.title.to_lowercase().contains(needle.as_str())
+                task.title.to_lowercase().contains(&needle.to_lowercase())
             }
             FilterPredicate::NotesContains(needle) => task
                 .notes
                 .as_deref()
-                .is_some_and(|n| n.to_lowercase().contains(needle.as_str())),
+                .is_some_and(|n| n.to_lowercase().contains(&needle.to_lowercase())),
         }
     }
 }
