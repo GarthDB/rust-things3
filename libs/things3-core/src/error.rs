@@ -44,6 +44,9 @@ pub enum ThingsError {
     #[error("Validation error: {message}")]
     Validation { message: String },
 
+    #[error("Invalid cursor: {0}")]
+    InvalidCursor(String),
+
     #[error("Configuration error: {message}")]
     Configuration { message: String },
 

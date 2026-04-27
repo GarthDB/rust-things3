@@ -1,4 +1,4 @@
-#[cfg(feature = "advanced-queries")]
+#[cfg(any(feature = "advanced-queries", feature = "batch-operations"))]
 use crate::models::TaskFilters;
 use crate::{
     database::{mappers::map_task_row, query_builders::TaskUpdateBuilder, validators},
@@ -928,8 +928,26 @@ impl ThingsDatabase {
     /// # Errors
     ///
     /// Returns an error if the database query fails or task data cannot be mapped.
-    #[cfg(feature = "advanced-queries")]
+    #[cfg(any(feature = "advanced-queries", feature = "batch-operations"))]
     pub async fn query_tasks(&self, filters: &TaskFilters) -> ThingsResult<Vec<Task>> {
+        self.query_tasks_inner(filters, None).await
+    }
+
+    /// Internal query path that optionally applies a cursor WHERE clause.
+    ///
+    /// `after` is `(seconds_since_unix_epoch, uuid)` of the last-returned
+    /// task. When `Some`, an additional `WHERE` clause restricts results to
+    /// rows strictly older than that anchor in the canonical
+    /// `CAST(creationDate AS INTEGER) DESC, uuid DESC` ordering.
+    ///
+    /// Gated on either `advanced-queries` or `batch-operations` because both
+    /// public surfaces (`query_tasks` and `execute_paged`) share this engine.
+    #[cfg(any(feature = "advanced-queries", feature = "batch-operations"))]
+    pub(crate) async fn query_tasks_inner(
+        &self,
+        filters: &TaskFilters,
+        after: Option<(i64, Uuid)>,
+    ) -> ThingsResult<Vec<Task>> {
         const COLS: &str = "uuid, title, type, status, notes, startDate, deadline, stopDate, \
                             creationDate, userModificationDate, project, area, heading, cachedTags";
 
@@ -994,9 +1012,26 @@ impl ThingsDatabase {
             ));
         }
 
+        if let Some((after_seconds, after_uuid)) = after {
+            // Strictly less than the cursor in (truncated_seconds DESC, uuid DESC)
+            // ordering — i.e. older second, or same second with smaller uuid.
+            // Casting to INTEGER matches the precision of `Task::created`,
+            // which is reconstructed at second precision when reading rows.
+            conditions.push(format!(
+                "(CAST(creationDate AS INTEGER) < {after_seconds} \
+                 OR (CAST(creationDate AS INTEGER) = {after_seconds} AND uuid < '{after_uuid}'))"
+            ));
+        }
+
         let where_clause = conditions.join(" AND ");
-        let mut sql =
-            format!("SELECT {COLS} FROM TMTask WHERE {where_clause} ORDER BY creationDate DESC");
+        // ORDER BY uses the truncated-second value so it agrees with the
+        // cursor pagination logic (which compares at second precision because
+        // `Task::created` is reconstructed at second precision). `uuid DESC` is
+        // a deterministic tiebreak within the same second.
+        let mut sql = format!(
+            "SELECT {COLS} FROM TMTask WHERE {where_clause} \
+             ORDER BY CAST(creationDate AS INTEGER) DESC, uuid DESC"
+        );
 
         // When tags or search_query are active, LIMIT/OFFSET must be applied in Rust
         // after post-filtering, because SQL LIMIT would count non-matching rows.
@@ -5088,6 +5123,150 @@ mod tests {
             let uuids: std::collections::HashSet<_> = tasks.iter().map(|t| t.uuid).collect();
             assert!(uuids.contains(&target));
             assert_eq!(tasks.len(), 1);
+        }
+
+        #[cfg(feature = "batch-operations")]
+        mod cursor_pagination_tests {
+            use super::*;
+
+            #[tokio::test]
+            async fn test_execute_paged_walks_through_all_tasks() {
+                let (db, _f) = open_test_db().await;
+                let mut inserted = vec![];
+                for i in 0..5 {
+                    inserted.push(insert_task(&db, &format!("task-{i}"), None, &[]).await);
+                }
+
+                let mut all_collected: Vec<Uuid> = vec![];
+                let mut cursor = None;
+                let mut page_count = 0;
+                loop {
+                    let mut builder = TaskQueryBuilder::new().limit(2);
+                    if let Some(c) = cursor.take() {
+                        builder = builder.after(c);
+                    }
+                    let page = builder.execute_paged(&db).await.unwrap();
+                    page_count += 1;
+                    all_collected.extend(page.items.iter().map(|t| t.uuid));
+                    if let Some(next) = page.next_cursor {
+                        cursor = Some(next);
+                    } else {
+                        break;
+                    }
+                    assert!(page_count < 10, "runaway pagination loop");
+                }
+
+                let inserted_set: std::collections::HashSet<_> = inserted.iter().copied().collect();
+                let collected_set: std::collections::HashSet<_> =
+                    all_collected.iter().copied().collect();
+                for uuid in &inserted_set {
+                    assert!(collected_set.contains(uuid), "missing inserted uuid {uuid}");
+                }
+                let mut sorted = all_collected.clone();
+                sorted.sort();
+                sorted.dedup();
+                assert_eq!(sorted.len(), all_collected.len(), "duplicates in pages");
+            }
+
+            #[tokio::test]
+            async fn test_execute_paged_last_page_has_no_next_cursor() {
+                let (db, _f) = open_test_db().await;
+                insert_task(&db, "only-task", None, &[]).await;
+                let page = TaskQueryBuilder::new()
+                    .status(TaskStatus::Incomplete)
+                    .limit(100)
+                    .execute_paged(&db)
+                    .await
+                    .unwrap();
+                assert!(
+                    page.next_cursor.is_none(),
+                    "non-full page should not have a next cursor"
+                );
+            }
+
+            #[tokio::test]
+            async fn test_execute_paged_with_status_filter() {
+                let (db, _f) = open_test_db().await;
+                let target = insert_task(&db, "incomplete-task", None, &[]).await;
+                let page = TaskQueryBuilder::new()
+                    .status(TaskStatus::Incomplete)
+                    .limit(50)
+                    .execute_paged(&db)
+                    .await
+                    .unwrap();
+                let uuids: std::collections::HashSet<_> =
+                    page.items.iter().map(|t| t.uuid).collect();
+                assert!(uuids.contains(&target));
+                for task in &page.items {
+                    assert_eq!(task.status, TaskStatus::Incomplete);
+                }
+            }
+
+            #[tokio::test]
+            async fn test_execute_paged_with_post_filter_any_tags() {
+                let (db, _f) = open_test_db().await;
+                let a1 = insert_task_with_tags(&db, "a1", &["a"]).await;
+                let a2 = insert_task_with_tags(&db, "a2", &["a"]).await;
+                let a3 = insert_task_with_tags(&db, "a3", &["a"]).await;
+                let _b = insert_task_with_tags(&db, "b1", &["b"]).await;
+
+                let mut all: Vec<Uuid> = vec![];
+                let mut cursor = None;
+                loop {
+                    let mut builder = TaskQueryBuilder::new()
+                        .any_tags(vec!["a".to_string()])
+                        .limit(2);
+                    if let Some(c) = cursor.take() {
+                        builder = builder.after(c);
+                    }
+                    let page = builder.execute_paged(&db).await.unwrap();
+                    all.extend(page.items.iter().map(|t| t.uuid));
+                    if let Some(n) = page.next_cursor {
+                        cursor = Some(n);
+                    } else {
+                        break;
+                    }
+                }
+
+                let collected: std::collections::HashSet<_> = all.iter().copied().collect();
+                assert!(collected.contains(&a1));
+                assert!(collected.contains(&a2));
+                assert!(collected.contains(&a3));
+                assert_eq!(collected.len(), 3, "should contain only a-tagged tasks");
+            }
+
+            #[tokio::test]
+            async fn test_execute_paged_default_page_size_when_no_limit() {
+                let (db, _f) = open_test_db().await;
+                // Confirm a builder without `.limit()` doesn't error and returns a Page.
+                // Default page size is 100 — with the empty test DB, all tasks fit and
+                // we expect no next_cursor.
+                let page = TaskQueryBuilder::new()
+                    .status(TaskStatus::Incomplete)
+                    .execute_paged(&db)
+                    .await
+                    .unwrap();
+                assert!(page.items.len() <= 100);
+                assert!(page.next_cursor.is_none());
+            }
+
+            #[tokio::test]
+            async fn test_query_tasks_order_is_deterministic_by_uuid_tiebreak() {
+                let (db, _f) = open_test_db().await;
+                // insert_task hardcodes creationDate = 0, so all tasks tie. ORDER BY
+                // uuid DESC gives a deterministic tiebreak.
+                for i in 0..3 {
+                    insert_task(&db, &format!("dup-time-{i}"), None, &[]).await;
+                }
+                let first = db.query_tasks(&TaskFilters::default()).await.unwrap();
+                let second = db.query_tasks(&TaskFilters::default()).await.unwrap();
+                let first_uuids: Vec<_> = first.iter().map(|t| t.uuid).collect();
+                let second_uuids: Vec<_> = second.iter().map(|t| t.uuid).collect();
+                assert_eq!(
+                    first_uuids, second_uuids,
+                    "tied-creationDate ordering should be deterministic"
+                );
+            }
         }
     }
 }
