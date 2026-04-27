@@ -180,7 +180,7 @@ pub struct CacheStats {
     pub hit_rate: f64,
     /// Total number of times the warming loop has called `preloader.warm(key)`.
     pub warmed_keys: u64,
-    /// Total number of warming loop ticks that found at least one queued entry.
+    /// Total number of warming loop ticks that dispatched at least one key to the registered preloader.
     pub warming_runs: u64,
 }
 
@@ -689,13 +689,26 @@ impl ThingsCache {
         *self.preloader.write() = None;
     }
 
+    /// Returns `true` if `key` is present in any of the four underlying caches.
+    fn contains_cached_key(&self, key: &str) -> bool {
+        self.tasks.contains_key(key)
+            || self.projects.contains_key(key)
+            || self.areas.contains_key(key)
+            || self.search_results.contains_key(key)
+    }
+
     /// Snapshot the registered preloader and call its `predict`, pushing any
     /// returned `(key, priority)` pairs into `warming_entries`.
+    /// Keys already present in the cache are skipped — this prevents a
+    /// self-reinforcing loop where warming a key triggers predict on its
+    /// counterpart, which re-enqueues the original key indefinitely.
     fn notify_preloader(&self, accessed_key: &str) {
         let p_snapshot = self.preloader.read().clone();
         let Some(p) = p_snapshot else { return };
         for (k, prio) in p.predict(accessed_key) {
-            self.add_to_warming(k, prio);
+            if !self.contains_cached_key(&k) {
+                self.add_to_warming(k, prio);
+            }
         }
     }
 
@@ -837,6 +850,14 @@ where
 ///
 /// Other keys produce no predictions. Future preloaders (per-project tasks,
 /// search-history-driven) plug in via the same trait.
+///
+/// # Warm-loop behaviour
+///
+/// The `inbox:all` ↔ `today:all` pair is mutually predictive, which would
+/// ordinarily create a perpetual warming loop. [`ThingsCache::notify_preloader`]
+/// guards against this: a predicted key is only enqueued when it is *not*
+/// already present in the cache. Once both keys are warm, no further
+/// enqueuing occurs until one of them expires or is invalidated.
 pub struct DefaultPreloader {
     cache: std::sync::Weak<ThingsCache>,
     db: Arc<crate::database::ThingsDatabase>,
@@ -1640,36 +1661,29 @@ mod tests {
         }
     }
 
-    #[test]
-    fn test_default_preloader_predict_rules() {
-        // Direct unit test of the heuristic table — no DB / cache needed since
-        // `predict` doesn't touch them.
-        struct Stub;
-        impl CachePreloader for Stub {
-            fn predict(&self, accessed: &str) -> Vec<(String, u32)> {
-                // Inline the same match arms we expect DefaultPreloader to use.
-                match accessed {
-                    "inbox:all" => vec![("today:all".to_string(), 8)],
-                    "today:all" => vec![("inbox:all".to_string(), 10)],
-                    "areas:all" => vec![("projects:all".to_string(), 7)],
-                    _ => vec![],
-                }
-            }
-            fn warm(&self, _key: &str) {}
-        }
-        // Directly exercise DefaultPreloader's predict via a constructed instance.
-        // We can't easily build a real ThingsDatabase here, so we use Stub above
-        // as the canonical reference and do a smoke check that the trait shape
-        // works. The full DefaultPreloader is exercised in the integration test
-        // below.
-        let s = Stub;
-        assert_eq!(s.predict("inbox:all"), vec![("today:all".to_string(), 8)]);
-        assert_eq!(s.predict("today:all"), vec![("inbox:all".to_string(), 10)]);
+    #[tokio::test]
+    async fn test_default_preloader_predict_rules() {
+        // All three heuristic rules tested against the real DefaultPreloader.
+        // predict() is pure (doesn't touch self.cache or self.db), so we only
+        // need a minimal DB to satisfy DefaultPreloader::new.
+        let f = tempfile::NamedTempFile::new().unwrap();
+        crate::test_utils::create_test_database(f.path())
+            .await
+            .unwrap();
+        let db = Arc::new(crate::ThingsDatabase::new(f.path()).await.unwrap());
+        let cache = Arc::new(ThingsCache::new_default());
+        let pre = DefaultPreloader::new(&cache, db);
+
+        assert_eq!(pre.predict("inbox:all"), vec![("today:all".to_string(), 8)]);
         assert_eq!(
-            s.predict("areas:all"),
+            pre.predict("today:all"),
+            vec![("inbox:all".to_string(), 10)]
+        );
+        assert_eq!(
+            pre.predict("areas:all"),
             vec![("projects:all".to_string(), 7)]
         );
-        assert!(s.predict("search:foo").is_empty());
+        assert!(pre.predict("search:foo").is_empty());
     }
 
     #[tokio::test]
