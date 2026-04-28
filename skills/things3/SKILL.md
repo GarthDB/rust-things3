@@ -152,7 +152,7 @@ Tools are grouped by domain. One-line signatures below; full parameter schemas i
 
 ## Prompts (4)
 
-The server also exposes five prompt templates: `task_review`, `project_planning`, `productivity_analysis`, `backup_strategy`. Call these via `prompts/get` in the MCP protocol, not `tools/call`.
+The server also exposes four prompt templates: `task_review`, `project_planning`, `productivity_analysis`, `backup_strategy`. Call these via `prompts/get` in the MCP protocol, not `tools/call`.
 
 ## Notes
 
