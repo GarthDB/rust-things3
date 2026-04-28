@@ -492,12 +492,22 @@ pub struct ReadResourceResult {
     pub contents: Vec<Content>,
 }
 
+/// Describes an argument that an MCP prompt can accept.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct PromptArgument {
+    pub name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub required: Option<bool>,
+}
+
 /// MCP Prompt for reusable templates
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Prompt {
     pub name: String,
     pub description: String,
-    pub arguments: Value,
+    pub arguments: Vec<PromptArgument>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -3734,122 +3744,127 @@ impl ThingsMcpServer {
         ]
     }
 
-    /// Create task review prompt
     fn create_task_review_prompt() -> Prompt {
         Prompt {
             name: "task_review".to_string(),
             description: "Review task for completeness and clarity".to_string(),
-            arguments: serde_json::json!({
-                "type": "object",
-                "properties": {
-                    "task_title": {
-                        "type": "string",
-                        "description": "The title of the task to review"
-                    },
-                    "task_notes": {
-                        "type": "string",
-                        "description": "Optional notes or description of the task"
-                    },
-                    "context": {
-                        "type": "string",
-                        "description": "Optional context about the task or project"
-                    }
+            arguments: vec![
+                PromptArgument {
+                    name: "task_title".to_string(),
+                    description: Some("The title of the task to review".to_string()),
+                    required: Some(true),
                 },
-                "required": ["task_title"]
-            }),
+                PromptArgument {
+                    name: "task_notes".to_string(),
+                    description: Some("Optional notes or description of the task".to_string()),
+                    required: None,
+                },
+                PromptArgument {
+                    name: "context".to_string(),
+                    description: Some("Optional context about the task or project".to_string()),
+                    required: None,
+                },
+            ],
         }
     }
 
-    /// Create project planning prompt
     fn create_project_planning_prompt() -> Prompt {
         Prompt {
             name: "project_planning".to_string(),
             description: "Help plan projects with tasks and deadlines".to_string(),
-            arguments: serde_json::json!({
-                "type": "object",
-                "properties": {
-                    "project_title": {
-                        "type": "string",
-                        "description": "The title of the project to plan"
-                    },
-                    "project_description": {
-                        "type": "string",
-                        "description": "Description of what the project aims to achieve"
-                    },
-                    "deadline": {
-                        "type": "string",
-                        "description": "Optional deadline for the project"
-                    },
-                    "complexity": {
-                        "type": "string",
-                        "description": "Project complexity level",
-                        "enum": ["simple", "medium", "complex"]
-                    }
+            arguments: vec![
+                PromptArgument {
+                    name: "project_title".to_string(),
+                    description: Some("The title of the project to plan".to_string()),
+                    required: Some(true),
                 },
-                "required": ["project_title"]
-            }),
+                PromptArgument {
+                    name: "project_description".to_string(),
+                    description: Some(
+                        "Description of what the project aims to achieve".to_string(),
+                    ),
+                    required: None,
+                },
+                PromptArgument {
+                    name: "deadline".to_string(),
+                    description: Some("Optional deadline for the project".to_string()),
+                    required: None,
+                },
+                PromptArgument {
+                    name: "complexity".to_string(),
+                    description: Some(
+                        "Project complexity level: simple, medium, or complex".to_string(),
+                    ),
+                    required: None,
+                },
+            ],
         }
     }
 
-    /// Create productivity analysis prompt
     fn create_productivity_analysis_prompt() -> Prompt {
         Prompt {
             name: "productivity_analysis".to_string(),
             description: "Analyze productivity patterns".to_string(),
-            arguments: serde_json::json!({
-                "type": "object",
-                "properties": {
-                    "time_period": {
-                        "type": "string",
-                        "description": "Time period to analyze",
-                        "enum": ["week", "month", "quarter", "year"]
-                    },
-                    "focus_area": {
-                        "type": "string",
-                        "description": "Specific area to focus analysis on",
-                        "enum": ["completion_rate", "time_management", "task_distribution", "all"]
-                    },
-                    "include_recommendations": {
-                        "type": "boolean",
-                        "description": "Whether to include improvement recommendations"
-                    }
+            arguments: vec![
+                PromptArgument {
+                    name: "time_period".to_string(),
+                    description: Some(
+                        "Time period to analyze: week, month, quarter, or year".to_string(),
+                    ),
+                    required: Some(true),
                 },
-                "required": ["time_period"]
-            }),
+                PromptArgument {
+                    name: "focus_area".to_string(),
+                    description: Some(
+                        "Specific area to focus on: completion_rate, time_management, task_distribution, or all".to_string(),
+                    ),
+                    required: None,
+                },
+                PromptArgument {
+                    name: "include_recommendations".to_string(),
+                    description: Some(
+                        "Whether to include improvement recommendations".to_string(),
+                    ),
+                    required: None,
+                },
+            ],
         }
     }
 
-    /// Create backup strategy prompt
     fn create_backup_strategy_prompt() -> Prompt {
         Prompt {
             name: "backup_strategy".to_string(),
             description: "Suggest backup strategies".to_string(),
-            arguments: serde_json::json!({
-                "type": "object",
-                "properties": {
-                    "data_volume": {
-                        "type": "string",
-                        "description": "Estimated data volume",
-                        "enum": ["small", "medium", "large"]
-                    },
-                    "frequency": {
-                        "type": "string",
-                        "description": "Desired backup frequency",
-                        "enum": ["daily", "weekly", "monthly"]
-                    },
-                    "retention_period": {
-                        "type": "string",
-                        "description": "How long to keep backups",
-                        "enum": ["1_month", "3_months", "6_months", "1_year", "indefinite"]
-                    },
-                    "storage_preference": {
-                        "type": "string",
-                        "description": "Preferred storage type",
-                        "enum": ["local", "cloud", "hybrid"]
-                    }
+            arguments: vec![
+                PromptArgument {
+                    name: "data_volume".to_string(),
+                    description: Some(
+                        "Estimated data volume: small, medium, or large".to_string(),
+                    ),
+                    required: Some(true),
                 },
-                "required": ["data_volume", "frequency"]
-            }),
+                PromptArgument {
+                    name: "frequency".to_string(),
+                    description: Some(
+                        "Desired backup frequency: daily, weekly, or monthly".to_string(),
+                    ),
+                    required: Some(true),
+                },
+                PromptArgument {
+                    name: "retention_period".to_string(),
+                    description: Some(
+                        "How long to keep backups: 1_month, 3_months, 6_months, 1_year, or indefinite".to_string(),
+                    ),
+                    required: None,
+                },
+                PromptArgument {
+                    name: "storage_preference".to_string(),
+                    description: Some(
+                        "Preferred storage type: local, cloud, or hybrid".to_string(),
+                    ),
+                    required: None,
+                },
+            ],
         }
     }
 
