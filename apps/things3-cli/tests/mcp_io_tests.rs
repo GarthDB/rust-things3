@@ -56,8 +56,11 @@ fn mcp_schema(version: &str) -> &'static serde_json::Value {
 /// 2024-11-05 uses draft-07 (`definitions`); 2025-11-25 uses draft 2020-12 (`$defs`).
 fn compile_validator(version: &str, type_name: &str) -> JSONSchema {
     let full = mcp_schema(version);
-    // 2024-11-05 and 2025-03-26 use JSON Schema draft-07 with `definitions`;
-    // 2025-11-25+ use draft 2020-12 with `$defs`.
+    // MCP schemas through 2025-03-26 use JSON Schema draft-07 with `definitions`;
+    // 2025-11-25+ switched to draft 2020-12 with `$defs`. The threshold is set
+    // to the midpoint between those two known versions. If a new schema version
+    // changes the draft, update this threshold to the first version using the
+    // new draft.
     let (defs_key, draft) = if version < "2025-06-18" {
         ("definitions", Draft::Draft7)
     } else {
@@ -283,6 +286,11 @@ async fn test_tools_list() {
     // The schema check below also verifies each tool's `inputSchema` field
     // (camelCase, as required by the spec) — this catches any regression in
     // the `#[serde(rename = "inputSchema")]` attribute on `Tool`.
+    // Note: no initialize handshake is performed here, so no protocol version
+    // is negotiated. We validate against 2025-11-25 because ListToolsResult
+    // is structurally identical across all known schema versions. If that ever
+    // changes, this test should be preceded by an initialize handshake and use
+    // the negotiated version instead.
     validate_result("2025-11-25", "ListToolsResult", &response);
 
     let tools = response["result"]["tools"]

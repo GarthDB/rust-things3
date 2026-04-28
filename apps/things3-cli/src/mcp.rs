@@ -4330,8 +4330,11 @@ impl ThingsMcpServer {
                     .get("protocolVersion")
                     .and_then(|v| v.as_str())
                     .unwrap_or("2024-11-05");
+                // Supported versions (oldest → newest). When adding support for
+                // a new spec version, add a branch here and update the
+                // accepted_response_versions list in test_initialize_handshake_2025_11_25.
                 let protocol_version = if client_version >= "2025-03-26" {
-                    "2025-03-26"
+                    "2025-03-26" // also handles 2025-06-18 and 2025-11-25 requests
                 } else {
                     "2024-11-05"
                 };
