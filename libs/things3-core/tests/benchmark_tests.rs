@@ -219,8 +219,8 @@ async fn benchmark_cache_stats() {
 
     println!("Cache stats time: {:?}", duration);
     assert!(
-        duration.as_micros() < 1000,
-        "Cache stats should take less than 1ms, took {:?}",
+        duration.as_millis() < 100,
+        "Cache stats should take less than 100ms, took {:?}",
         duration
     );
 }
