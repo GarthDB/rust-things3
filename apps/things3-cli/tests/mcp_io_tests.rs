@@ -158,13 +158,13 @@ async fn test_tools_list() {
     assert_eq!(response["jsonrpc"], "2.0");
     assert_eq!(response["id"], 2);
 
-    // The result is the tools array directly
+    // The result is an object with a "tools" array
     assert!(
-        response["result"].is_array(),
-        "Result should be an array of tools"
+        response["result"]["tools"].is_array(),
+        "Result should have a tools array"
     );
 
-    let tools = response["result"].as_array().unwrap();
+    let tools = response["result"]["tools"].as_array().unwrap();
     assert!(!tools.is_empty(), "Should have at least one tool");
 
     // Verify tool structure
@@ -525,8 +525,8 @@ async fn test_empty_line_handling() {
 
     assert_eq!(response["jsonrpc"], "2.0");
     assert_eq!(response["id"], 12);
-    // tools/list returns an array
-    assert!(response["result"].is_array());
+    // tools/list returns an object with a tools array
+    assert!(response["result"]["tools"].is_array());
 }
 
 // ============================================================================
@@ -554,8 +554,8 @@ async fn test_multiple_sequential_requests() {
 
         assert_eq!(response["jsonrpc"], "2.0");
         assert_eq!(response["id"], i);
-        // tools/list returns an array
-        assert!(response["result"].is_array());
+        // tools/list returns an object with a tools array
+        assert!(response["result"]["tools"].is_array());
     }
 }
 
@@ -752,7 +752,7 @@ async fn test_all_available_tools() {
     });
 
     let response = send_request_read_response(&mut client_io, tools_list_request).await;
-    let tools = response["result"].as_array().unwrap();
+    let tools = response["result"]["tools"].as_array().unwrap();
 
     assert!(!tools.is_empty(), "Should have at least one tool");
 
