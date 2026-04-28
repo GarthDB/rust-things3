@@ -2,9 +2,9 @@
 
 Complete parameter schemas for all 46 tools exposed by `things3 mcp`.
 
-Source of truth: `apps/things3-cli/src/mcp.rs` — `get_available_tools()` and the dispatch table at line 1907.
+Derived from `apps/things3-cli/src/mcp.rs` — `get_available_tools()` and its dispatch table. Last audited against the source at commit 5f99673. Tool count can be verified with `things3 mcp --list-tools | wc -l`; if the count drifts from 46, re-audit this file.
 
-> **Note:** `docs/MCP_INTEGRATION.md` documents a subset of these tools in narrative form. This file is the authoritative catalog.
+> **Note:** `docs/MCP_INTEGRATION.md` documents a subset of these tools in narrative form. This file is the more complete catalog.
 
 ---
 
@@ -352,7 +352,9 @@ Full data export. No parameters.
 Create a database backup. No parameters.
 
 ### `restore_database`
-Restore from backup. No parameters.
+Restore from backup. No parameters in the current MCP API — the backup path cannot be specified via this tool. If you have multiple backups (see `list_backups`), you will need to restore the desired file to the default backup location before calling this tool, or restore manually outside the MCP server.
+
+> **Known gap**: `list_backups` accepts a `backup_dir` and implies multiple backups may exist, but `restore_database` provides no way to select among them. This is likely a missing parameter — tracked as a follow-up.
 
 ### `list_backups`
 ```json

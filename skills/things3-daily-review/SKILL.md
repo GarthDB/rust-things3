@@ -58,7 +58,7 @@ Returns unscheduled, uncategorised tasks awaiting triage.
 ```json
 {
   "name": "get_recent_tasks",
-  "arguments": { "limit": 20, "hours": 24 }
+  "arguments": { "limit": 50, "hours": 24 }
 }
 ```
 

@@ -86,7 +86,7 @@ Tools are grouped by domain. One-line signatures below; full parameter schemas i
 
 | Tool | Key params | When to use |
 |---|---|---|
-| `bulk_move` | `task_uuids*, project_uuid?, area_uuid?` | Move many tasks at once |
+| `bulk_move` | `task_uuids*, project_uuid?, area_uuid?` | Move many tasks at once (`project_uuid` and `area_uuid` are mutually exclusive — provide exactly one) |
 | `bulk_update_dates` | `task_uuids*, start_date?, deadline?, clear_start_date?, clear_deadline?` | Reschedule many tasks |
 | `bulk_complete` | `task_uuids*` | Complete many tasks |
 | `bulk_delete` | `task_uuids*` | Delete many tasks |
