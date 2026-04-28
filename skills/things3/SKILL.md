@@ -33,7 +33,7 @@ The `things3` CLI must be installed and the MCP server must be configured in you
 - Querying the logbook for completed work
 - Exporting data or pulling performance / cache diagnostics
 
-## Tool catalog (45 tools)
+## Tool catalog (46 tools)
 
 Tools are grouped by domain. One-line signatures below; full parameter schemas in [`references/TOOLS.md`](references/TOOLS.md).
 
@@ -148,9 +148,9 @@ Tools are grouped by domain. One-line signatures below; full parameter schemas i
 | `get_system_metrics` | — | Current resource usage |
 | `get_cache_stats` | — | Cache hit rates |
 
-`*` = required. Full schemas: [`references/TOOLS.md`](references/TOOLS.md).
+`*` = required. Full schemas: [`references/TOOLS.md`](references/TOOLS.md). (46 tools total)
 
-## Prompts (5)
+## Prompts (4)
 
 The server also exposes five prompt templates: `task_review`, `project_planning`, `productivity_analysis`, `backup_strategy`. Call these via `prompts/get` in the MCP protocol, not `tools/call`.
 

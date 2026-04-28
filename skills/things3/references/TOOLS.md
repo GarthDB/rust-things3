@@ -1,6 +1,6 @@
 # things3 MCP Tool Reference
 
-Complete parameter schemas for all 45 tools exposed by `things3 mcp`.
+Complete parameter schemas for all 46 tools exposed by `things3 mcp`.
 
 Source of truth: `apps/things3-cli/src/mcp.rs` — `get_available_tools()` and the dispatch table at line 1907.
 

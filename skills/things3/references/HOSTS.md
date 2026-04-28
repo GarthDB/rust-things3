@@ -111,17 +111,19 @@ Or add to `.claude/settings.json` manually:
 
 ```json
 {
-  "mcp": {
+  "context_servers": {
     "things3": {
-      "command": "things3",
-      "args": ["mcp"],
-      "env": {
-        "THINGS_DB_PATH": "/path/to/main.sqlite"
-      }
+      "command": {
+        "path": "things3",
+        "args": ["mcp"]
+      },
+      "settings": {}
     }
   }
 }
 ```
+
+Set `THINGS_DB_PATH` via the shell environment (e.g. in `~/.zshenv`) or wrap `things3` in a small shell script that sets it before exec.
 
 ---
 
