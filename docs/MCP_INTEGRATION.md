@@ -27,7 +27,7 @@ graph LR
 ```
 
 ### Key Features
-- **21 Tools**: Comprehensive Things 3 operations including bulk operations
+- **45 Tools**: Comprehensive Things 3 operations including bulk operations (see [`skills/things3/references/TOOLS.md`](../skills/things3/references/TOOLS.md) for the complete catalog)
 - **Middleware System**: Logging, validation, auth, rate limiting
 - **Async I/O**: Non-blocking request handling
 - **Type-Safe**: Compile-time validation
