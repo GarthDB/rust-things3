@@ -4380,7 +4380,11 @@ impl ThingsMcpServer {
                 let resources_result = self.list_resources().map_err(|e| {
                     things3_core::ThingsError::unknown(format!("Failed to list resources: {}", e))
                 })?;
-                json!(resources_result.resources)
+                // Spec: must return ListResourcesResult `{ "resources": [...] }`,
+                // not a bare array. Returning the array directly causes
+                // spec-strict clients (e.g. Claude Code 2.1+) to drop the
+                // resources just like the tools-bug fix in PR #118.
+                json!(resources_result)
             }
             "resources/read" => {
                 let uri = params["uri"]
@@ -4401,7 +4405,9 @@ impl ThingsMcpServer {
                 let prompts_result = self.list_prompts().map_err(|e| {
                     things3_core::ThingsError::unknown(format!("Failed to list prompts: {}", e))
                 })?;
-                json!(prompts_result.prompts)
+                // Spec: must return ListPromptsResult `{ "prompts": [...] }`,
+                // not a bare array. See note on resources/list above.
+                json!(prompts_result)
             }
             "prompts/get" => {
                 let prompt_name = params["name"]
