@@ -1103,7 +1103,7 @@ async fn test_list_prompts() {
     for prompt in &result.prompts {
         assert!(!prompt.name.is_empty());
         assert!(!prompt.description.is_empty());
-        assert!(prompt.arguments.is_object());
+        assert!(!prompt.arguments.is_empty());
     }
 }
 
@@ -1112,40 +1112,22 @@ async fn test_prompt_schemas_validation() {
     let server = create_test_mcp_server().await;
     let result = server.list_prompts().unwrap();
 
-    // Check that each prompt has proper schema
     for prompt in &result.prompts {
+        let required: Vec<&str> = prompt
+            .arguments
+            .iter()
+            .filter(|a| a.required)
+            .map(|a| a.name.as_str())
+            .collect();
         match prompt.name.as_str() {
-            "task_review" => {
-                let schema = &prompt.arguments;
-                assert!(schema["required"]
-                    .as_array()
-                    .unwrap()
-                    .contains(&json!("task_title")));
-            }
-            "project_planning" => {
-                let schema = &prompt.arguments;
-                assert!(schema["required"]
-                    .as_array()
-                    .unwrap()
-                    .contains(&json!("project_title")));
-            }
-            "productivity_analysis" => {
-                let schema = &prompt.arguments;
-                assert!(schema["required"]
-                    .as_array()
-                    .unwrap()
-                    .contains(&json!("time_period")));
-            }
+            "task_review" => assert!(required.contains(&"task_title")),
+            "project_planning" => assert!(required.contains(&"project_title")),
+            "productivity_analysis" => assert!(required.contains(&"time_period")),
             "backup_strategy" => {
-                let schema = &prompt.arguments;
-                let required = schema["required"].as_array().unwrap();
-                assert!(required.contains(&json!("data_volume")));
-                assert!(required.contains(&json!("frequency")));
+                assert!(required.contains(&"data_volume"));
+                assert!(required.contains(&"frequency"));
             }
-            _ => {
-                // Unknown prompt
-                panic!("Unknown prompt: {}", prompt.name);
-            }
+            _ => panic!("Unknown prompt: {}", prompt.name),
         }
     }
 }
@@ -1526,68 +1508,34 @@ async fn test_prompt_error_handling() {
 }
 
 #[tokio::test]
-async fn test_prompt_schema_enum_validation() {
+async fn test_prompt_argument_names() {
     let server = create_test_mcp_server().await;
     let result = server.list_prompts().unwrap();
 
-    // Check that enum values are properly defined in schemas
     for prompt in &result.prompts {
+        let names: Vec<&str> = prompt.arguments.iter().map(|a| a.name.as_str()).collect();
         match prompt.name.as_str() {
+            "task_review" => {
+                assert!(names.contains(&"task_title"));
+                assert!(names.contains(&"task_notes"));
+                assert!(names.contains(&"context"));
+            }
             "project_planning" => {
-                let schema = &prompt.arguments;
-                let complexity_enum = &schema["properties"]["complexity"]["enum"];
-                assert!(complexity_enum
-                    .as_array()
-                    .unwrap()
-                    .contains(&json!("simple")));
-                assert!(complexity_enum
-                    .as_array()
-                    .unwrap()
-                    .contains(&json!("medium")));
-                assert!(complexity_enum
-                    .as_array()
-                    .unwrap()
-                    .contains(&json!("complex")));
+                assert!(names.contains(&"project_title"));
+                assert!(names.contains(&"complexity"));
             }
             "productivity_analysis" => {
-                let schema = &prompt.arguments;
-                let time_period_enum = &schema["properties"]["time_period"]["enum"];
-                assert!(time_period_enum
-                    .as_array()
-                    .unwrap()
-                    .contains(&json!("week")));
-                assert!(time_period_enum
-                    .as_array()
-                    .unwrap()
-                    .contains(&json!("month")));
-                assert!(time_period_enum
-                    .as_array()
-                    .unwrap()
-                    .contains(&json!("quarter")));
-                assert!(time_period_enum
-                    .as_array()
-                    .unwrap()
-                    .contains(&json!("year")));
+                assert!(names.contains(&"time_period"));
+                assert!(names.contains(&"focus_area"));
+                assert!(names.contains(&"include_recommendations"));
             }
             "backup_strategy" => {
-                let schema = &prompt.arguments;
-                let data_volume_enum = &schema["properties"]["data_volume"]["enum"];
-                assert!(data_volume_enum
-                    .as_array()
-                    .unwrap()
-                    .contains(&json!("small")));
-                assert!(data_volume_enum
-                    .as_array()
-                    .unwrap()
-                    .contains(&json!("medium")));
-                assert!(data_volume_enum
-                    .as_array()
-                    .unwrap()
-                    .contains(&json!("large")));
+                assert!(names.contains(&"data_volume"));
+                assert!(names.contains(&"frequency"));
+                assert!(names.contains(&"retention_period"));
+                assert!(names.contains(&"storage_preference"));
             }
-            _ => {
-                // Other prompts may not have enums
-            }
+            _ => panic!("Unknown prompt: {}", prompt.name),
         }
     }
 }

@@ -559,16 +559,7 @@ async fn test_prompts_list() {
 
     assert_eq!(response["jsonrpc"], "2.0");
     assert_eq!(response["id"], 8);
-    // Spec: result must be a `ListPromptsResult` object containing a
-    // `prompts` array — not a bare array.
-    //
-    // Full ListPromptsResult schema validation is intentionally skipped:
-    // `Prompt.arguments` currently holds a JSON Schema object instead of the
-    // spec-mandated `Vec<PromptArgument>`. Tracked in issue #119.
-    assert!(
-        response["result"]["prompts"].is_array(),
-        "ListPromptsResult.prompts must be an array"
-    );
+    validate_result("2025-11-25", "ListPromptsResult", &response);
 }
 
 #[tokio::test]
