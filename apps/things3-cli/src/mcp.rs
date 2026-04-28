@@ -498,8 +498,9 @@ pub struct PromptArgument {
     pub name: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub required: Option<bool>,
+    /// Omitted from JSON when false; `true` serializes as `"required": true`.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub required: bool,
 }
 
 /// MCP Prompt for reusable templates
@@ -3752,17 +3753,17 @@ impl ThingsMcpServer {
                 PromptArgument {
                     name: "task_title".to_string(),
                     description: Some("The title of the task to review".to_string()),
-                    required: Some(true),
+                    required: true,
                 },
                 PromptArgument {
                     name: "task_notes".to_string(),
                     description: Some("Optional notes or description of the task".to_string()),
-                    required: None,
+                    required: false,
                 },
                 PromptArgument {
                     name: "context".to_string(),
                     description: Some("Optional context about the task or project".to_string()),
-                    required: None,
+                    required: false,
                 },
             ],
         }
@@ -3776,26 +3777,26 @@ impl ThingsMcpServer {
                 PromptArgument {
                     name: "project_title".to_string(),
                     description: Some("The title of the project to plan".to_string()),
-                    required: Some(true),
+                    required: true,
                 },
                 PromptArgument {
                     name: "project_description".to_string(),
                     description: Some(
                         "Description of what the project aims to achieve".to_string(),
                     ),
-                    required: None,
+                    required: false,
                 },
                 PromptArgument {
                     name: "deadline".to_string(),
                     description: Some("Optional deadline for the project".to_string()),
-                    required: None,
+                    required: false,
                 },
                 PromptArgument {
                     name: "complexity".to_string(),
                     description: Some(
                         "Project complexity level: simple, medium, or complex".to_string(),
                     ),
-                    required: None,
+                    required: false,
                 },
             ],
         }
@@ -3811,21 +3812,21 @@ impl ThingsMcpServer {
                     description: Some(
                         "Time period to analyze: week, month, quarter, or year".to_string(),
                     ),
-                    required: Some(true),
+                    required: true,
                 },
                 PromptArgument {
                     name: "focus_area".to_string(),
                     description: Some(
                         "Specific area to focus on: completion_rate, time_management, task_distribution, or all".to_string(),
                     ),
-                    required: None,
+                    required: false,
                 },
                 PromptArgument {
                     name: "include_recommendations".to_string(),
                     description: Some(
                         "Whether to include improvement recommendations".to_string(),
                     ),
-                    required: None,
+                    required: false,
                 },
             ],
         }
@@ -3841,28 +3842,28 @@ impl ThingsMcpServer {
                     description: Some(
                         "Estimated data volume: small, medium, or large".to_string(),
                     ),
-                    required: Some(true),
+                    required: true,
                 },
                 PromptArgument {
                     name: "frequency".to_string(),
                     description: Some(
                         "Desired backup frequency: daily, weekly, or monthly".to_string(),
                     ),
-                    required: Some(true),
+                    required: true,
                 },
                 PromptArgument {
                     name: "retention_period".to_string(),
                     description: Some(
                         "How long to keep backups: 1_month, 3_months, 6_months, 1_year, or indefinite".to_string(),
                     ),
-                    required: None,
+                    required: false,
                 },
                 PromptArgument {
                     name: "storage_preference".to_string(),
                     description: Some(
                         "Preferred storage type: local, cloud, or hybrid".to_string(),
                     ),
-                    required: None,
+                    required: false,
                 },
             ],
         }

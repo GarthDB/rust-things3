@@ -1116,7 +1116,7 @@ async fn test_prompt_schemas_validation() {
         let required: Vec<&str> = prompt
             .arguments
             .iter()
-            .filter(|a| a.required == Some(true))
+            .filter(|a| a.required)
             .map(|a| a.name.as_str())
             .collect();
         match prompt.name.as_str() {
@@ -1515,6 +1515,11 @@ async fn test_prompt_argument_names() {
     for prompt in &result.prompts {
         let names: Vec<&str> = prompt.arguments.iter().map(|a| a.name.as_str()).collect();
         match prompt.name.as_str() {
+            "task_review" => {
+                assert!(names.contains(&"task_title"));
+                assert!(names.contains(&"task_notes"));
+                assert!(names.contains(&"context"));
+            }
             "project_planning" => {
                 assert!(names.contains(&"project_title"));
                 assert!(names.contains(&"complexity"));
@@ -1530,7 +1535,7 @@ async fn test_prompt_argument_names() {
                 assert!(names.contains(&"retention_period"));
                 assert!(names.contains(&"storage_preference"));
             }
-            _ => {}
+            _ => panic!("Unknown prompt: {}", prompt.name),
         }
     }
 }
