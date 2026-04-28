@@ -3,13 +3,101 @@
 //! These tests verify that the MCP server correctly handles JSON-RPC protocol
 //! communication over the I/O abstraction layer.
 
+use jsonschema::{Draft, JSONSchema};
 use serde_json::json;
-use std::sync::Arc;
+use std::collections::HashMap;
+use std::sync::{Arc, OnceLock};
 use tempfile::NamedTempFile;
 use things3_cli::mcp::io_wrapper::{McpIo, MockIo};
 use things3_cli::mcp::start_mcp_server_generic;
 use things3_core::{ThingsConfig, ThingsDatabase};
 use tokio::time::{timeout, Duration};
+
+// ============================================================================
+// MCP spec compliance — schema validation helpers
+// ============================================================================
+//
+// These helpers validate JSON-RPC `result` payloads against the official MCP
+// JSON Schemas vendored under `tests/fixtures/`. They're a tripwire for the
+// protocol-compliance bugs that motivated this suite (PR #118): hardcoded
+// `protocolVersion` and the `Content` enum's tagged-union shape. If the wire
+// format ever diverges from the spec again, schema validation fails loudly
+// with a pointer at the offending field.
+
+const MCP_SCHEMA_2024_11_05: &str = include_str!("fixtures/mcp-schema-2024-11-05.json");
+const MCP_SCHEMA_2025_03_26: &str = include_str!("fixtures/mcp-schema-2025-03-26.json");
+const MCP_SCHEMA_2025_11_25: &str = include_str!("fixtures/mcp-schema-2025-11-25.json");
+
+fn mcp_schema(version: &str) -> &'static serde_json::Value {
+    static CACHE: OnceLock<HashMap<&'static str, serde_json::Value>> = OnceLock::new();
+    let cache = CACHE.get_or_init(|| {
+        let mut m = HashMap::new();
+        m.insert(
+            "2024-11-05",
+            serde_json::from_str(MCP_SCHEMA_2024_11_05).expect("valid 2024-11-05 schema"),
+        );
+        m.insert(
+            "2025-03-26",
+            serde_json::from_str(MCP_SCHEMA_2025_03_26).expect("valid 2025-03-26 schema"),
+        );
+        m.insert(
+            "2025-11-25",
+            serde_json::from_str(MCP_SCHEMA_2025_11_25).expect("valid 2025-11-25 schema"),
+        );
+        m
+    });
+    cache
+        .get(version)
+        .unwrap_or_else(|| panic!("no vendored MCP schema for version {version}"))
+}
+
+/// Build a wrapper schema that `$ref`s into a specific definition of the bundled MCP schema.
+///
+/// 2024-11-05 uses draft-07 (`definitions`); 2025-11-25 uses draft 2020-12 (`$defs`).
+fn compile_validator(version: &str, type_name: &str) -> JSONSchema {
+    let full = mcp_schema(version);
+    // MCP schemas through 2025-03-26 use JSON Schema draft-07 with `definitions`;
+    // 2025-11-25+ switched to draft 2020-12 with `$defs`. The threshold is set
+    // to the midpoint between those two known versions. If a new schema version
+    // changes the draft, update this threshold to the first version using the
+    // new draft.
+    let (defs_key, draft) = if version < "2025-06-18" {
+        ("definitions", Draft::Draft7)
+    } else {
+        ("$defs", Draft::Draft202012)
+    };
+    let wrapper = json!({
+        "$ref": format!("#/{defs_key}/{type_name}"),
+        defs_key: full[defs_key].clone(),
+    });
+    JSONSchema::options()
+        .with_draft(draft)
+        .compile(&wrapper)
+        .expect("MCP schema compiles")
+}
+
+/// Validate a JSON-RPC response's `result` field against the named MCP type.
+///
+/// Panics with a diagnostic message if validation fails — the panic includes
+/// every JSON-pointer path where the response diverged from the spec, plus
+/// the full pretty-printed result, so a regression is debuggable straight
+/// from `cargo test` output.
+fn validate_result(version: &str, type_name: &str, response: &serde_json::Value) {
+    let validator = compile_validator(version, type_name);
+    let result = &response["result"];
+    let details: Option<Vec<String>> = validator.validate(result).err().map(|errors| {
+        errors
+            .map(|e| format!("  - {} (at {})", e, e.instance_path))
+            .collect()
+    });
+    if let Some(details) = details {
+        panic!(
+            "MCP {version} response failed schema validation against {type_name}:\n{}\n\nResult was:\n{}",
+            details.join("\n"),
+            serde_json::to_string_pretty(result).unwrap_or_else(|_| "<unprintable>".into())
+        );
+    }
+}
 
 /// Helper to create a test database
 async fn create_test_db() -> (NamedTempFile, Arc<ThingsDatabase>) {
@@ -49,24 +137,36 @@ async fn send_request_read_response(
 // Initialize Handshake Tests
 // ============================================================================
 
-#[tokio::test]
-async fn test_initialize_handshake() {
+/// Drive a complete `initialize` handshake using `requested_version` and
+/// assert the server's response is spec-compliant.
+///
+/// `accepted_response_versions` lists the protocol versions we'll accept in
+/// the response. Per spec the server MUST respond with the requested version
+/// if it supports it, otherwise with another version it supports (always
+/// downgrading, never upgrading).
+///
+/// Schema validation is performed against the version the server *actually*
+/// responded with, not the version the client requested. This avoids false
+/// failures if a newer schema version introduces required fields that an older
+/// negotiated response legitimately omits.
+async fn run_initialize_handshake_for(
+    requested_version: &str,
+    accepted_response_versions: &[&str],
+) {
     let (_temp, db) = create_test_db().await;
     let config = ThingsConfig::default();
 
     let (server_io, mut client_io) = MockIo::create_pair(4096);
 
-    // Start server in background
     let server_handle =
         tokio::spawn(async move { start_mcp_server_generic(db, config, server_io).await });
 
-    // Send initialize request
     let initialize_request = json!({
         "jsonrpc": "2.0",
         "id": 1,
         "method": "initialize",
         "params": {
-            "protocolVersion": "2024-11-05",
+            "protocolVersion": requested_version,
             "capabilities": {},
             "clientInfo": {
                 "name": "test-client",
@@ -77,31 +177,55 @@ async fn test_initialize_handshake() {
 
     let response = send_request_read_response(&mut client_io, initialize_request).await;
 
-    // Verify response structure
     assert_eq!(response["jsonrpc"], "2.0");
     assert_eq!(response["id"], 1);
-    assert!(response["result"].is_object());
-    assert_eq!(response["result"]["protocolVersion"], "2024-11-05");
-    assert!(response["result"]["capabilities"].is_object());
+
+    let response_version = response["result"]["protocolVersion"]
+        .as_str()
+        .expect("InitializeResult must include protocolVersion as a string");
+    assert!(
+        accepted_response_versions.contains(&response_version),
+        "server returned protocolVersion {response_version:?} when client requested \
+         {requested_version:?}; expected one of {accepted_response_versions:?}. \
+         (Per spec the server must echo the requested version if it supports it, or \
+         negotiate to a version it does support — never to an arbitrary newer version.)"
+    );
     assert_eq!(response["result"]["serverInfo"]["name"], "things3-mcp");
 
-    // Send initialized notification (should be silently handled)
+    // Validate against the version the server responded with, not what the client requested.
+    validate_result(response_version, "InitializeResult", &response);
+
     let initialized_notification = json!({
         "jsonrpc": "2.0",
         "method": "notifications/initialized"
     });
-
     let notification_str = serde_json::to_string(&initialized_notification).unwrap();
     client_io.write_line(&notification_str).await.unwrap();
     client_io.flush().await.unwrap();
 
-    // Close client to signal EOF
     drop(client_io);
 
-    // Server should complete without error
     let result = timeout(Duration::from_secs(2), server_handle).await;
     assert!(result.is_ok(), "Server should complete");
     assert!(result.unwrap().is_ok(), "Server should not error");
+}
+
+#[tokio::test]
+async fn test_initialize_handshake_2024_11_05() {
+    // Server supports 2024-11-05 directly, so it must echo the request verbatim.
+    run_initialize_handshake_for("2024-11-05", &["2024-11-05"]).await;
+}
+
+#[tokio::test]
+async fn test_initialize_handshake_2025_11_25() {
+    // Tripwire for PR #118: the server used to hardcode "2024-11-05" in its
+    // initialize response, which caused Claude Code 2.1+ (which sends
+    // "2025-11-25") to silently drop all tools. Today the server doesn't yet
+    // implement 2025-11-25 features, so it negotiates down to the newest
+    // version it does support (2025-03-26) — which is spec-compliant.
+    // What is NOT acceptable is responding with 2024-11-05 to a 2025-11-25
+    // request: that would mean we regressed the fix.
+    run_initialize_handshake_for("2025-11-25", &["2025-03-26", "2025-06-18", "2025-11-25"]).await;
 }
 
 #[tokio::test]
@@ -158,21 +282,21 @@ async fn test_tools_list() {
     assert_eq!(response["jsonrpc"], "2.0");
     assert_eq!(response["id"], 2);
 
-    // The result is the tools array directly
-    assert!(
-        response["result"].is_array(),
-        "Result should be an array of tools"
-    );
+    // Spec: result is a `ListToolsResult` object containing a `tools` array.
+    // The schema check below also verifies each tool's `inputSchema` field
+    // (camelCase, as required by the spec) — this catches any regression in
+    // the `#[serde(rename = "inputSchema")]` attribute on `Tool`.
+    // Note: no initialize handshake is performed here, so no protocol version
+    // is negotiated. We validate against 2025-11-25 because ListToolsResult
+    // is structurally identical across all known schema versions. If that ever
+    // changes, this test should be preceded by an initialize handshake and use
+    // the negotiated version instead.
+    validate_result("2025-11-25", "ListToolsResult", &response);
 
-    let tools = response["result"].as_array().unwrap();
+    let tools = response["result"]["tools"]
+        .as_array()
+        .expect("ListToolsResult.tools must be an array");
     assert!(!tools.is_empty(), "Should have at least one tool");
-
-    // Verify tool structure
-    let first_tool = &tools[0];
-    assert!(first_tool["name"].is_string());
-    assert!(first_tool["description"].is_string());
-    // inputSchema might be input_schema (snake_case) in the serialization
-    assert!(first_tool["inputSchema"].is_object() || first_tool["input_schema"].is_object());
 }
 
 #[tokio::test]
@@ -198,10 +322,12 @@ async fn test_tools_call_get_today() {
 
     assert_eq!(response["jsonrpc"], "2.0");
     assert_eq!(response["id"], 3);
-    assert!(response["result"].is_object());
-    assert!(response["result"]["content"].is_array());
-    // Check is_error field (note: JSON uses camelCase)
-    let is_error = response["result"]["is_error"].as_bool().unwrap_or(false);
+    // Tripwire for PR #118 bug #2: the `Content` enum was serialized as
+    // `{"Text":{"text":"..."}}` instead of the spec's tagged-union form
+    // `{"type":"text","text":"..."}`. Schema validation would reject the
+    // former because it doesn't match any variant of `ToolResultContent`.
+    validate_result("2025-11-25", "CallToolResult", &response);
+    let is_error = response["result"]["isError"].as_bool().unwrap_or(false);
     assert!(!is_error, "Tool call should not error");
 }
 
@@ -230,9 +356,66 @@ async fn test_tools_call_get_inbox() {
 
     assert_eq!(response["jsonrpc"], "2.0");
     assert_eq!(response["id"], 4);
-    assert!(response["result"].is_object());
-    let is_error = response["result"]["is_error"].as_bool().unwrap_or(false);
+    validate_result("2025-11-25", "CallToolResult", &response);
+    let is_error = response["result"]["isError"].as_bool().unwrap_or(false);
     assert!(!is_error, "Tool call should not error");
+}
+
+/// Belt-and-suspenders check for the `Content` enum's wire format.
+///
+/// PR #118 fixed bug #2 by adding `#[serde(tag = "type", rename_all =
+/// "lowercase")]` to the `Content` enum so it serializes as
+/// `{"type":"text","text":"..."}` instead of the default
+/// `{"Text":{"text":"..."}}`. The CallToolResult schema check above will
+/// catch a regression too, but this test fails with a clearer assertion
+/// message — useful when the schema crate is ever swapped or upgraded.
+#[tokio::test]
+async fn test_content_block_serialization() {
+    let (_temp, db) = create_test_db().await;
+    let config = ThingsConfig::default();
+
+    let (server_io, mut client_io) = MockIo::create_pair(4096);
+
+    tokio::spawn(async move { start_mcp_server_generic(db, config, server_io).await });
+
+    let response = send_request_read_response(
+        &mut client_io,
+        json!({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": { "name": "get_today", "arguments": {} }
+        }),
+    )
+    .await;
+
+    let content = response["result"]["content"]
+        .as_array()
+        .expect("CallToolResult.content must be an array");
+    assert!(
+        !content.is_empty(),
+        "Tool that returned successfully must have at least one content block"
+    );
+
+    let first = &content[0];
+    let type_field = first.get("type").and_then(|v| v.as_str());
+    assert_eq!(
+        type_field,
+        Some("text"),
+        "First content block must be tagged with `type: \"text\"` (was {first}). \
+         If this fails as `\"Text\"` or with a missing `type` field, the `Content` \
+         enum's `#[serde(tag = \"type\", rename_all = \"lowercase\")]` attribute \
+         has been removed or broken."
+    );
+    assert!(
+        first.get("text").and_then(|v| v.as_str()).is_some(),
+        "Text content block must include a `text` string field; got {first}"
+    );
+    assert!(
+        !first.as_object().unwrap().contains_key("Text"),
+        "Wire format must not include a top-level `Text` key — that's the \
+         externally-tagged form the spec rejects. Got {first}"
+    );
 }
 
 #[tokio::test]
@@ -304,10 +487,12 @@ async fn test_resources_list() {
 
     assert_eq!(response["jsonrpc"], "2.0");
     assert_eq!(response["id"], 6);
-    // Result is the resources array directly
+    // Spec: result must be a `ListResourcesResult` object containing a
+    // `resources` array — not a bare array.
+    validate_result("2025-11-25", "ListResourcesResult", &response);
     assert!(
-        response["result"].is_array(),
-        "Result should be an array of resources"
+        response["result"]["resources"].is_array(),
+        "ListResourcesResult.resources must be an array"
     );
 }
 
@@ -374,10 +559,15 @@ async fn test_prompts_list() {
 
     assert_eq!(response["jsonrpc"], "2.0");
     assert_eq!(response["id"], 8);
-    // Result is the prompts array directly
+    // Spec: result must be a `ListPromptsResult` object containing a
+    // `prompts` array — not a bare array.
+    //
+    // Full ListPromptsResult schema validation is intentionally skipped:
+    // `Prompt.arguments` currently holds a JSON Schema object instead of the
+    // spec-mandated `Vec<PromptArgument>`. Tracked in issue #119.
     assert!(
-        response["result"].is_array(),
-        "Result should be an array of prompts"
+        response["result"]["prompts"].is_array(),
+        "ListPromptsResult.prompts must be an array"
     );
 }
 
@@ -525,8 +715,8 @@ async fn test_empty_line_handling() {
 
     assert_eq!(response["jsonrpc"], "2.0");
     assert_eq!(response["id"], 12);
-    // tools/list returns an array
-    assert!(response["result"].is_array());
+    // tools/list returns an object with a tools array
+    assert!(response["result"]["tools"].is_array());
 }
 
 // ============================================================================
@@ -554,8 +744,8 @@ async fn test_multiple_sequential_requests() {
 
         assert_eq!(response["jsonrpc"], "2.0");
         assert_eq!(response["id"], i);
-        // tools/list returns an array
-        assert!(response["result"].is_array());
+        // tools/list returns an object with a tools array
+        assert!(response["result"]["tools"].is_array());
     }
 }
 
@@ -752,7 +942,7 @@ async fn test_all_available_tools() {
     });
 
     let response = send_request_read_response(&mut client_io, tools_list_request).await;
-    let tools = response["result"].as_array().unwrap();
+    let tools = response["result"]["tools"].as_array().unwrap();
 
     assert!(!tools.is_empty(), "Should have at least one tool");
 
