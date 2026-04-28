@@ -354,7 +354,7 @@ Create a database backup. No parameters.
 ### `restore_database`
 Restore from backup. No parameters in the current MCP API — the backup path cannot be specified via this tool. If you have multiple backups (see `list_backups`), you will need to restore the desired file to the default backup location before calling this tool, or restore manually outside the MCP server.
 
-> **Known gap**: `list_backups` accepts a `backup_dir` and implies multiple backups may exist, but `restore_database` provides no way to select among them. This is likely a missing parameter — tracked as a follow-up.
+> **Known gap**: `list_backups` accepts a `backup_dir` and implies multiple backups may exist, but `restore_database` provides no way to select among them. Tracked in #126.
 
 ### `list_backups`
 ```json

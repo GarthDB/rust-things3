@@ -9,13 +9,18 @@ Drive Things 3 from your AI agent via the [rust-things3](https://github.com/Gart
 
 ## Claude Code slash command
 
-To register `/things3` as a slash command in Claude Code, add a `trigger` key to the frontmatter:
+To use `/things3` as a Claude Code slash command, copy the skill to your local skills directory and patch in a `trigger` key. The canonical file omits it because `skills-ref validate` rejects unknown frontmatter fields.
 
-```yaml
-trigger: /things3
+```bash
+cp -r skills/things3 ~/.claude/skills/things3
+python3 -c "
+import pathlib, re
+p = pathlib.Path('~/.claude/skills/things3/SKILL.md').expanduser()
+p.write_text(re.sub(r'(?m)^---\$(?=\n\n)', 'trigger: /things3\n---', p.read_text(), count=1))
+"
 ```
 
-This is a Claude Code extension field. The agentskills.io spec validator (`skills-ref validate`) currently flags it as unknown and will fail; add it only to your local working copy, not to the canonical `SKILL.md` in the repository. See [`references/HOSTS.md`](references/HOSTS.md) for installation.
+See [`references/HOSTS.md`](references/HOSTS.md) for MCP server installation.
 
 ## Prerequisites
 

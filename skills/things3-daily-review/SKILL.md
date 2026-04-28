@@ -9,13 +9,16 @@ A read-only workflow skill that drives a daily review over your Things 3 databas
 
 ## Claude Code slash command
 
-To register `/things3-daily-review` as a slash command in Claude Code, add a `trigger` key to the frontmatter:
+To use `/things3-daily-review` as a Claude Code slash command, copy the skill to your local skills directory and patch in a `trigger` key. The canonical file omits it because `skills-ref validate` rejects unknown frontmatter fields.
 
-```yaml
-trigger: /things3-daily-review
+```bash
+cp skills/things3-daily-review/SKILL.md ~/.claude/skills/things3-daily-review/SKILL.md
+python3 -c "
+import pathlib, re
+p = pathlib.Path('~/.claude/skills/things3-daily-review/SKILL.md').expanduser()
+p.write_text(re.sub(r'(?m)^---\$(?=\n\n)', 'trigger: /things3-daily-review\n---', p.read_text(), count=1))
+"
 ```
-
-This is a Claude Code extension field. The agentskills.io spec validator (`skills-ref validate`) currently flags it as unknown and will fail; add it only to your local working copy, not to the canonical `SKILL.md` in the repository.
 
 ## Prerequisites
 
@@ -62,7 +65,7 @@ Returns unscheduled, uncategorised tasks awaiting triage.
 }
 ```
 
-Returns recently modified tasks from the last `hours` window. To target **completed** tasks specifically, use `logbook_search` instead:
+Returns recently modified **incomplete** tasks from the last `hours` window — completed tasks are not included. For recently completed work, use `logbook_search` instead:
 
 ```json
 {
@@ -79,6 +82,8 @@ Returns recently modified tasks from the last `hours` window. To target **comple
 
 Produce a Markdown summary with these three sections, grouped by area then project. Omit empty sections.
 
+Tasks without an `area_uuid` fall under a **No area** top-level group; tasks without a `project_uuid` fall under a _No project_ sub-group within their area group.
+
 ```markdown
 ## Daily Review — YYYY-MM-DD
 
@@ -91,6 +96,12 @@ Produce a Markdown summary with these three sections, grouped by area then proje
 - _No project_
   - Task title
 
+**No area**
+- _Project Name_
+  - Task title
+- _No project_
+  - Task title
+
 ### Inbox (N)
 
 - Task title
@@ -99,6 +110,12 @@ Produce a Markdown summary with these three sections, grouped by area then proje
 ### Recent (N)
 
 **Area Name**
+- _Project Name_
+  - Task title
+- _No project_
+  - Task title
+
+**No area**
 - _Project Name_
   - Task title
 - _No project_
@@ -119,4 +136,3 @@ Flag overdue items in both the **Today** and **Recent** sections wherever they a
 
 - This skill is read-only — it makes no mutations. For processing inbox items, see the companion `things3-inbox-triage` skill (coming soon).
 - Things 3 must be running on macOS for the MCP server to reach its database.
-- Tasks without an `area_uuid` or `project_uuid` fall under a _No area_ or _No project_ group respectively.
