@@ -439,6 +439,7 @@ impl From<std::io::Error> for McpError {
 pub struct Tool {
     pub name: String,
     pub description: String,
+    #[serde(rename = "inputSchema")]
     pub input_schema: Value,
 }
 
@@ -451,10 +452,12 @@ pub struct CallToolRequest {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct CallToolResult {
     pub content: Vec<Content>,
+    #[serde(rename = "isError")]
     pub is_error: bool,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "lowercase")]
 pub enum Content {
     Text { text: String },
 }
@@ -470,6 +473,7 @@ pub struct Resource {
     pub uri: String,
     pub name: String,
     pub description: String,
+    #[serde(rename = "mimeType")]
     pub mime_type: Option<String>,
 }
 
@@ -4318,9 +4322,21 @@ impl ThingsMcpServer {
 
         let result = match method {
             "initialize" => {
-                // Handle initialize request
+                // Negotiate protocol version: respond with the highest version we support
+                // that is <= the client's requested version. Claude Code 2.1+ uses
+                // 2025-03-26 or newer; responding with 2024-11-05 causes it to silently
+                // drop the server's tools from its deferred-tool catalog.
+                let client_version = params
+                    .get("protocolVersion")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("2024-11-05");
+                let protocol_version = if client_version >= "2025-03-26" {
+                    "2025-03-26"
+                } else {
+                    "2024-11-05"
+                };
                 json!({
-                    "protocolVersion": "2024-11-05",
+                    "protocolVersion": protocol_version,
                     "capabilities": {
                         "tools": { "listChanged": false },
                         "resources": { "subscribe": false, "listChanged": false },
@@ -4336,7 +4352,7 @@ impl ThingsMcpServer {
                 let tools_result = self.list_tools().map_err(|e| {
                     things3_core::ThingsError::unknown(format!("Failed to list tools: {}", e))
                 })?;
-                json!(tools_result.tools)
+                json!(tools_result)
             }
             "tools/call" => {
                 let tool_name = params["name"]
