@@ -9,13 +9,18 @@ Drive Things 3 from your AI agent via the [rust-things3](https://github.com/Gart
 
 ## Claude Code slash command
 
-To register `/things3` as a slash command in Claude Code, add a `trigger` key to the frontmatter:
+To use `/things3` as a Claude Code slash command, copy the skill to your local skills directory and patch in a `trigger` key. The canonical file omits it because `skills-ref validate` rejects unknown frontmatter fields.
 
-```yaml
-trigger: /things3
+```bash
+cp -r skills/things3 ~/.claude/skills/things3
+python3 -c "
+import pathlib, re
+p = pathlib.Path('~/.claude/skills/things3/SKILL.md').expanduser()
+p.write_text(re.sub(r'(?m)^---\$(?=\n\n)', 'trigger: /things3\n---', p.read_text(), count=1))
+"
 ```
 
-This is a Claude Code extension field. The agentskills.io spec validator (`skills-ref validate`) currently flags it as unknown and will fail; add it only to your local working copy, not to the canonical `SKILL.md` in the repository. See [`references/HOSTS.md`](references/HOSTS.md) for installation.
+See [`references/HOSTS.md`](references/HOSTS.md) for MCP server installation.
 
 ## Prerequisites
 
@@ -86,7 +91,7 @@ Tools are grouped by domain. One-line signatures below; full parameter schemas i
 
 | Tool | Key params | When to use |
 |---|---|---|
-| `bulk_move` | `task_uuids*, project_uuid?, area_uuid?` | Move many tasks at once |
+| `bulk_move` | `task_uuids*, project_uuid?, area_uuid?` | Move many tasks at once (`project_uuid` and `area_uuid` are mutually exclusive — provide exactly one) |
 | `bulk_update_dates` | `task_uuids*, start_date?, deadline?, clear_start_date?, clear_deadline?` | Reschedule many tasks |
 | `bulk_complete` | `task_uuids*` | Complete many tasks |
 | `bulk_delete` | `task_uuids*` | Delete many tasks |
@@ -152,7 +157,7 @@ Tools are grouped by domain. One-line signatures below; full parameter schemas i
 
 ## Prompts (4)
 
-The server also exposes five prompt templates: `task_review`, `project_planning`, `productivity_analysis`, `backup_strategy`. Call these via `prompts/get` in the MCP protocol, not `tools/call`.
+The server also exposes four prompt templates: `task_review`, `project_planning`, `productivity_analysis`, `backup_strategy`. Call these via `prompts/get` in the MCP protocol, not `tools/call`.
 
 ## Notes
 

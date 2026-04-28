@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - **Foundational `things3` agent skill** — new `skills/things3/` directory with an [agentskills.io](https://agentskills.io/specification)-compliant `SKILL.md`, plus `references/TOOLS.md` (complete 46-tool catalog sourced from `mcp.rs`, superseding the outdated 21-tool list in `docs/MCP_INTEGRATION.md`) and `references/HOSTS.md` (copy-paste MCP config snippets for Claude Desktop, Claude Code, Cursor, VS Code, and Zed). Reconciles the tool-count discrepancy in `docs/MCP_INTEGRATION.md`. Closes #111.
+- **`things3-daily-review` workflow skill** — new `skills/things3-daily-review/SKILL.md` with a read-only daily-review recipe: pulls `get_today`, `get_inbox`, and `get_recent_tasks`; produces a structured Markdown summary grouped by area and project with overdue items flagged. References the foundational `things3` skill for MCP setup without duplicating install instructions. Closes #112.
 
 ## [1.3.0] - 2026-04-27
 
