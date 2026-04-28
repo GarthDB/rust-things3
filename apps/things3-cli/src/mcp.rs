@@ -452,7 +452,7 @@ pub struct CallToolRequest {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct CallToolResult {
     pub content: Vec<Content>,
-    #[serde(rename = "isError")]
+    #[serde(rename = "isError", skip_serializing_if = "std::ops::Not::not")]
     pub is_error: bool,
 }
 
@@ -4380,10 +4380,7 @@ impl ThingsMcpServer {
                 let resources_result = self.list_resources().map_err(|e| {
                     things3_core::ThingsError::unknown(format!("Failed to list resources: {}", e))
                 })?;
-                // Spec: must return ListResourcesResult `{ "resources": [...] }`,
-                // not a bare array. Returning the array directly causes
-                // spec-strict clients (e.g. Claude Code 2.1+) to drop the
-                // resources just like the tools-bug fix in PR #118.
+                // Spec: result must be ListResourcesResult `{"resources":[...]}`, not a bare array.
                 json!(resources_result)
             }
             "resources/read" => {
@@ -4405,8 +4402,7 @@ impl ThingsMcpServer {
                 let prompts_result = self.list_prompts().map_err(|e| {
                     things3_core::ThingsError::unknown(format!("Failed to list prompts: {}", e))
                 })?;
-                // Spec: must return ListPromptsResult `{ "prompts": [...] }`,
-                // not a bare array. See note on resources/list above.
+                // Spec: result must be ListPromptsResult `{"prompts":[...]}`, not a bare array.
                 json!(prompts_result)
             }
             "prompts/get" => {

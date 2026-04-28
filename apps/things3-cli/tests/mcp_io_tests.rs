@@ -25,6 +25,7 @@ use tokio::time::{timeout, Duration};
 // with a pointer at the offending field.
 
 const MCP_SCHEMA_2024_11_05: &str = include_str!("fixtures/mcp-schema-2024-11-05.json");
+const MCP_SCHEMA_2025_03_26: &str = include_str!("fixtures/mcp-schema-2025-03-26.json");
 const MCP_SCHEMA_2025_11_25: &str = include_str!("fixtures/mcp-schema-2025-11-25.json");
 
 fn mcp_schema(version: &str) -> &'static serde_json::Value {
@@ -34,6 +35,10 @@ fn mcp_schema(version: &str) -> &'static serde_json::Value {
         m.insert(
             "2024-11-05",
             serde_json::from_str(MCP_SCHEMA_2024_11_05).expect("valid 2024-11-05 schema"),
+        );
+        m.insert(
+            "2025-03-26",
+            serde_json::from_str(MCP_SCHEMA_2025_03_26).expect("valid 2025-03-26 schema"),
         );
         m.insert(
             "2025-11-25",
@@ -51,7 +56,9 @@ fn mcp_schema(version: &str) -> &'static serde_json::Value {
 /// 2024-11-05 uses draft-07 (`definitions`); 2025-11-25 uses draft 2020-12 (`$defs`).
 fn compile_validator(version: &str, type_name: &str) -> JSONSchema {
     let full = mcp_schema(version);
-    let (defs_key, draft) = if version == "2024-11-05" {
+    // 2024-11-05 and 2025-03-26 use JSON Schema draft-07 with `definitions`;
+    // 2025-11-25+ use draft 2020-12 with `$defs`.
+    let (defs_key, draft) = if version < "2025-06-18" {
         ("definitions", Draft::Draft7)
     } else {
         ("$defs", Draft::Draft202012)
@@ -133,12 +140,15 @@ async fn send_request_read_response(
 /// `accepted_response_versions` lists the protocol versions we'll accept in
 /// the response. Per spec the server MUST respond with the requested version
 /// if it supports it, otherwise with another version it supports (always
-/// downgrading, never upgrading). `validation_schema_version` selects which
-/// vendored schema to validate the `InitializeResult` against.
+/// downgrading, never upgrading).
+///
+/// Schema validation is performed against the version the server *actually*
+/// responded with, not the version the client requested. This avoids false
+/// failures if a newer schema version introduces required fields that an older
+/// negotiated response legitimately omits.
 async fn run_initialize_handshake_for(
     requested_version: &str,
     accepted_response_versions: &[&str],
-    validation_schema_version: &str,
 ) {
     let (_temp, db) = create_test_db().await;
     let config = ThingsConfig::default();
@@ -179,7 +189,8 @@ async fn run_initialize_handshake_for(
     );
     assert_eq!(response["result"]["serverInfo"]["name"], "things3-mcp");
 
-    validate_result(validation_schema_version, "InitializeResult", &response);
+    // Validate against the version the server responded with, not what the client requested.
+    validate_result(response_version, "InitializeResult", &response);
 
     let initialized_notification = json!({
         "jsonrpc": "2.0",
@@ -199,7 +210,7 @@ async fn run_initialize_handshake_for(
 #[tokio::test]
 async fn test_initialize_handshake_2024_11_05() {
     // Server supports 2024-11-05 directly, so it must echo the request verbatim.
-    run_initialize_handshake_for("2024-11-05", &["2024-11-05"], "2024-11-05").await;
+    run_initialize_handshake_for("2024-11-05", &["2024-11-05"]).await;
 }
 
 #[tokio::test]
@@ -211,12 +222,7 @@ async fn test_initialize_handshake_2025_11_25() {
     // version it does support (2025-03-26) — which is spec-compliant.
     // What is NOT acceptable is responding with 2024-11-05 to a 2025-11-25
     // request: that would mean we regressed the fix.
-    run_initialize_handshake_for(
-        "2025-11-25",
-        &["2025-03-26", "2025-06-18", "2025-11-25"],
-        "2025-11-25",
-    )
-    .await;
+    run_initialize_handshake_for("2025-11-25", &["2025-03-26", "2025-06-18", "2025-11-25"]).await;
 }
 
 #[tokio::test]
@@ -548,13 +554,9 @@ async fn test_prompts_list() {
     // Spec: result must be a `ListPromptsResult` object containing a
     // `prompts` array — not a bare array.
     //
-    // Full ListPromptsResult schema validation is intentionally NOT applied
-    // here: each `Prompt.arguments` field currently holds a JSON Schema
-    // object (e.g. `{"type":"object","properties":{...}}`) instead of the
-    // spec-mandated `Vec<PromptArgument>` (each `{name, description?,
-    // required?}`). Restructuring those four `create_*_prompt()` helpers
-    // is its own changeset; tracked as a follow-up. Until then we only
-    // assert the envelope shape that PR #118-class clients care about.
+    // Full ListPromptsResult schema validation is intentionally skipped:
+    // `Prompt.arguments` currently holds a JSON Schema object instead of the
+    // spec-mandated `Vec<PromptArgument>`. Tracked in issue #119.
     assert!(
         response["result"]["prompts"].is_array(),
         "ListPromptsResult.prompts must be an array"
