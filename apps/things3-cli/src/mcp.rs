@@ -1268,14 +1268,60 @@ impl ThingsMcpServer {
                     "properties": {
                         "tasks": {
                             "type": "array",
-                            "description": "Array of task objects to create",
+                            "description": "Array of task objects to create (1–1000 items)",
+                            "minItems": 1,
+                            "maxItems": 1000,
                             "items": {
                                 "type": "object",
                                 "properties": {
-                                    "title": {"type": "string"},
-                                    "notes": {"type": "string"},
-                                    "project_uuid": {"type": "string"},
-                                    "area_uuid": {"type": "string"}
+                                    "title": {
+                                        "type": "string",
+                                        "description": "Task title (required)"
+                                    },
+                                    "task_type": {
+                                        "type": "string",
+                                        "enum": ["to-do", "project", "heading"],
+                                        "description": "Task type (default: to-do)"
+                                    },
+                                    "notes": {
+                                        "type": "string",
+                                        "description": "Task notes"
+                                    },
+                                    "start_date": {
+                                        "type": "string",
+                                        "format": "date",
+                                        "description": "Start date (YYYY-MM-DD)"
+                                    },
+                                    "deadline": {
+                                        "type": "string",
+                                        "format": "date",
+                                        "description": "Deadline (YYYY-MM-DD)"
+                                    },
+                                    "project_uuid": {
+                                        "type": "string",
+                                        "format": "uuid",
+                                        "description": "Project UUID"
+                                    },
+                                    "area_uuid": {
+                                        "type": "string",
+                                        "format": "uuid",
+                                        "description": "Area UUID"
+                                    },
+                                    "parent_uuid": {
+                                        "type": "string",
+                                        "format": "uuid",
+                                        "description": "Parent task UUID (for subtasks)"
+                                    },
+                                    "tags": {
+                                        "type": "array",
+                                        "items": {"type": "string"},
+                                        "description": "Tag names"
+                                    },
+                                    "status": {
+                                        "type": "string",
+                                        "enum": ["incomplete", "completed", "canceled", "trashed"],
+                                        "description": "Initial status (default: incomplete)"
+                                    }
                                 },
                                 "required": ["title"]
                             }
@@ -1970,7 +2016,7 @@ impl ThingsMcpServer {
             "delete_area" => self.handle_delete_area(arguments).await,
             "get_productivity_metrics" => self.handle_get_productivity_metrics(arguments).await,
             "export_data" => self.handle_export_data(arguments).await,
-            "bulk_create_tasks" => Self::handle_bulk_create_tasks(&arguments),
+            "bulk_create_tasks" => self.handle_bulk_create_tasks(arguments).await,
             "get_recent_tasks" => self.handle_get_recent_tasks(arguments).await,
             "backup_database" => self.handle_backup_database(arguments).await,
             "restore_database" => self.handle_restore_database(arguments).await,
@@ -3016,16 +3062,32 @@ impl ThingsMcpServer {
         })
     }
 
-    fn handle_bulk_create_tasks(args: &Value) -> McpResult<CallToolResult> {
-        let tasks = args
-            .get("tasks")
+    async fn handle_bulk_create_tasks(&self, args: Value) -> McpResult<CallToolResult> {
+        // Validate top-level shape before delegating so we keep the historical
+        // "missing tasks" error contract — `serde_json::from_value` would also
+        // reject this, but with a less actionable error.
+        args.get("tasks")
             .and_then(|v| v.as_array())
             .ok_or_else(|| McpError::missing_parameter("tasks"))?;
 
+        let request: things3_core::models::BulkCreateTasksRequest = serde_json::from_value(args)
+            .map_err(|e| {
+                McpError::invalid_parameter(
+                    "tasks",
+                    format!("Failed to parse bulk_create_tasks request: {e}"),
+                )
+            })?;
+
+        let result = self
+            .mutations
+            .bulk_create_tasks(request)
+            .await
+            .map_err(|e| McpError::database_operation_failed("bulk_create_tasks", e))?;
+
         let response = serde_json::json!({
-            "message": "Bulk task creation not yet implemented",
-            "tasks_count": tasks.len(),
-            "status": "placeholder"
+            "success": result.success,
+            "processed_count": result.processed_count,
+            "message": result.message,
         });
 
         Ok(CallToolResult {
