@@ -13,12 +13,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Install skills-ref
+        run: pip install skills-ref==0.1.1
+
       - name: Validate each skill
         run: |
           failed=0
           for dir in skills/*/; do
             echo "Validating $dir"
-            if ! npx --yes skills-ref@0.1.5 validate "$dir"; then
+            if ! skills-ref validate "$dir"; then
               echo "::error::skills-ref validate failed for $dir"
               failed=1
             fi

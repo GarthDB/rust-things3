@@ -227,7 +227,7 @@ The dashboard provides:
 
 ## 🤖 MCP Integration
 
-The MCP (Model Context Protocol) server provides 21 tools for AI/LLM integration:
+The MCP (Model Context Protocol) server provides 46 tools for AI/LLM integration:
 
 ### Available MCP Tools
 

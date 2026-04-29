@@ -35,25 +35,14 @@ done
 
 Use with `/things3` and `/things3-daily-review` in Claude Code.
 
-### Claude Desktop
+### Claude Desktop, Cursor, Zed
 
-Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
+Check your host's documentation for the skills directory path, then copy the skill directories there:
 
-```json
-{
-  "skills": {
-    "directories": ["/path/to/rust-things3/skills"]
-  }
-}
+```bash
+cp -r skills/things3 /path/to/host/skills/things3
+cp -r skills/things3-daily-review /path/to/host/skills/things3-daily-review
 ```
-
-### Cursor
-
-Copy skill files into `.cursor/skills/` in your project or your global Cursor config directory.
-
-### Zed
-
-Copy skill files into the Zed skills directory (see Zed documentation for the platform path).
 
 ## Spec compliance
 
