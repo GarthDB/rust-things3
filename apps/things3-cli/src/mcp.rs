@@ -1268,14 +1268,60 @@ impl ThingsMcpServer {
                     "properties": {
                         "tasks": {
                             "type": "array",
-                            "description": "Array of task objects to create",
+                            "description": "Array of task objects to create (1–1000 items)",
+                            "minItems": 1,
+                            "maxItems": 1000,
                             "items": {
                                 "type": "object",
                                 "properties": {
-                                    "title": {"type": "string"},
-                                    "notes": {"type": "string"},
-                                    "project_uuid": {"type": "string"},
-                                    "area_uuid": {"type": "string"}
+                                    "title": {
+                                        "type": "string",
+                                        "description": "Task title (required)"
+                                    },
+                                    "task_type": {
+                                        "type": "string",
+                                        "enum": ["to-do", "project", "heading"],
+                                        "description": "Task type (default: to-do)"
+                                    },
+                                    "notes": {
+                                        "type": "string",
+                                        "description": "Task notes"
+                                    },
+                                    "start_date": {
+                                        "type": "string",
+                                        "format": "date",
+                                        "description": "Start date (YYYY-MM-DD)"
+                                    },
+                                    "deadline": {
+                                        "type": "string",
+                                        "format": "date",
+                                        "description": "Deadline (YYYY-MM-DD)"
+                                    },
+                                    "project_uuid": {
+                                        "type": "string",
+                                        "format": "uuid",
+                                        "description": "Project UUID"
+                                    },
+                                    "area_uuid": {
+                                        "type": "string",
+                                        "format": "uuid",
+                                        "description": "Area UUID"
+                                    },
+                                    "parent_uuid": {
+                                        "type": "string",
+                                        "format": "uuid",
+                                        "description": "Parent task UUID (for subtasks)"
+                                    },
+                                    "tags": {
+                                        "type": "array",
+                                        "items": {"type": "string"},
+                                        "description": "Tag names"
+                                    },
+                                    "status": {
+                                        "type": "string",
+                                        "enum": ["incomplete", "completed", "canceled", "trashed"],
+                                        "description": "Initial status (default: incomplete)"
+                                    }
                                 },
                                 "required": ["title"]
                             }

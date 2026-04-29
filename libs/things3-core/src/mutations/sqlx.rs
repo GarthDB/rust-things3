@@ -44,6 +44,19 @@ impl MutationBackend for SqlxBackend {
         &self,
         request: BulkCreateTasksRequest,
     ) -> ThingsResult<BulkOperationResult> {
+        const MAX_BULK_BATCH_SIZE: usize = 1000;
+        if request.tasks.is_empty() {
+            return Err(crate::error::ThingsError::validation(
+                "Tasks array cannot be empty",
+            ));
+        }
+        if request.tasks.len() > MAX_BULK_BATCH_SIZE {
+            return Err(crate::error::ThingsError::validation(format!(
+                "Batch size {} exceeds maximum of {}",
+                request.tasks.len(),
+                MAX_BULK_BATCH_SIZE
+            )));
+        }
         let total = request.tasks.len();
         let mut processed = 0usize;
         let mut errors: Vec<String> = Vec::new();
