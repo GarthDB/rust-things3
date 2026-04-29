@@ -24,11 +24,11 @@ use uuid::Uuid;
 
 use crate::error::Result as ThingsResult;
 use crate::models::{
-    BulkCompleteRequest, BulkDeleteRequest, BulkMoveRequest, BulkOperationResult,
-    BulkUpdateDatesRequest, CreateAreaRequest, CreateProjectRequest, CreateTagRequest,
-    CreateTaskRequest, DeleteChildHandling, ProjectChildHandling, TagAssignmentResult,
-    TagCreationResult, TagMatch, UpdateAreaRequest, UpdateProjectRequest, UpdateTagRequest,
-    UpdateTaskRequest,
+    BulkCompleteRequest, BulkCreateTasksRequest, BulkDeleteRequest, BulkMoveRequest,
+    BulkOperationResult, BulkUpdateDatesRequest, CreateAreaRequest, CreateProjectRequest,
+    CreateTagRequest, CreateTaskRequest, DeleteChildHandling, ProjectChildHandling,
+    TagAssignmentResult, TagCreationResult, TagMatch, UpdateAreaRequest, UpdateProjectRequest,
+    UpdateTagRequest, UpdateTaskRequest,
 };
 
 mod sqlx;
@@ -43,6 +43,12 @@ pub trait MutationBackend: Send + Sync {
     // ---- Tasks ----
 
     async fn create_task(&self, request: CreateTaskRequest) -> ThingsResult<Uuid>;
+    /// Create multiple tasks in one call. Best-effort and non-atomic — per-item
+    /// failures are reported via `BulkOperationResult`.
+    async fn bulk_create_tasks(
+        &self,
+        request: BulkCreateTasksRequest,
+    ) -> ThingsResult<BulkOperationResult>;
     async fn update_task(&self, request: UpdateTaskRequest) -> ThingsResult<()>;
     async fn complete_task(&self, uuid: &Uuid) -> ThingsResult<()>;
     async fn uncomplete_task(&self, uuid: &Uuid) -> ThingsResult<()>;

@@ -1970,7 +1970,7 @@ impl ThingsMcpServer {
             "delete_area" => self.handle_delete_area(arguments).await,
             "get_productivity_metrics" => self.handle_get_productivity_metrics(arguments).await,
             "export_data" => self.handle_export_data(arguments).await,
-            "bulk_create_tasks" => Self::handle_bulk_create_tasks(&arguments),
+            "bulk_create_tasks" => self.handle_bulk_create_tasks(arguments).await,
             "get_recent_tasks" => self.handle_get_recent_tasks(arguments).await,
             "backup_database" => self.handle_backup_database(arguments).await,
             "restore_database" => self.handle_restore_database(arguments).await,
@@ -3016,16 +3016,32 @@ impl ThingsMcpServer {
         })
     }
 
-    fn handle_bulk_create_tasks(args: &Value) -> McpResult<CallToolResult> {
-        let tasks = args
-            .get("tasks")
+    async fn handle_bulk_create_tasks(&self, args: Value) -> McpResult<CallToolResult> {
+        // Validate top-level shape before delegating so we keep the historical
+        // "missing tasks" error contract — `serde_json::from_value` would also
+        // reject this, but with a less actionable error.
+        args.get("tasks")
             .and_then(|v| v.as_array())
             .ok_or_else(|| McpError::missing_parameter("tasks"))?;
 
+        let request: things3_core::models::BulkCreateTasksRequest = serde_json::from_value(args)
+            .map_err(|e| {
+                McpError::invalid_parameter(
+                    "tasks",
+                    format!("Failed to parse bulk_create_tasks request: {e}"),
+                )
+            })?;
+
+        let result = self
+            .mutations
+            .bulk_create_tasks(request)
+            .await
+            .map_err(|e| McpError::database_operation_failed("bulk_create_tasks", e))?;
+
         let response = serde_json::json!({
-            "message": "Bulk task creation not yet implemented",
-            "tasks_count": tasks.len(),
-            "status": "placeholder"
+            "success": result.success,
+            "processed_count": result.processed_count,
+            "message": result.message,
         });
 
         Ok(CallToolResult {

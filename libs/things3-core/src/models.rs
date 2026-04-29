@@ -479,6 +479,16 @@ pub struct BulkDeleteRequest {
     pub task_uuids: Vec<Uuid>,
 }
 
+/// Request to create multiple tasks in one call.
+///
+/// Bulk creation is best-effort and non-atomic — each task is attempted
+/// independently and per-item failures are surfaced via `BulkOperationResult`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BulkCreateTasksRequest {
+    /// Tasks to create
+    pub tasks: Vec<CreateTaskRequest>,
+}
+
 /// Result of a bulk operation
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BulkOperationResult {

@@ -14,11 +14,11 @@ use super::MutationBackend;
 use crate::database::ThingsDatabase;
 use crate::error::Result as ThingsResult;
 use crate::models::{
-    BulkCompleteRequest, BulkDeleteRequest, BulkMoveRequest, BulkOperationResult,
-    BulkUpdateDatesRequest, CreateAreaRequest, CreateProjectRequest, CreateTagRequest,
-    CreateTaskRequest, DeleteChildHandling, ProjectChildHandling, TagAssignmentResult,
-    TagCreationResult, TagMatch, UpdateAreaRequest, UpdateProjectRequest, UpdateTagRequest,
-    UpdateTaskRequest,
+    BulkCompleteRequest, BulkCreateTasksRequest, BulkDeleteRequest, BulkMoveRequest,
+    BulkOperationResult, BulkUpdateDatesRequest, CreateAreaRequest, CreateProjectRequest,
+    CreateTagRequest, CreateTaskRequest, DeleteChildHandling, ProjectChildHandling,
+    TagAssignmentResult, TagCreationResult, TagMatch, UpdateAreaRequest, UpdateProjectRequest,
+    UpdateTagRequest, UpdateTaskRequest,
 };
 
 pub struct SqlxBackend {
@@ -38,6 +38,32 @@ impl MutationBackend for SqlxBackend {
 
     async fn create_task(&self, request: CreateTaskRequest) -> ThingsResult<Uuid> {
         self.db.create_task(request).await
+    }
+
+    async fn bulk_create_tasks(
+        &self,
+        request: BulkCreateTasksRequest,
+    ) -> ThingsResult<BulkOperationResult> {
+        let total = request.tasks.len();
+        let mut processed = 0usize;
+        let mut errors: Vec<String> = Vec::new();
+        for (idx, task) in request.tasks.into_iter().enumerate() {
+            match self.db.create_task(task).await {
+                Ok(_) => processed += 1,
+                Err(e) => errors.push(format!("task {idx}: {e}")),
+            }
+        }
+        let success = errors.is_empty();
+        let message = if success {
+            format!("Successfully created {processed} task(s)")
+        } else {
+            format!("Created {processed}/{total}; errors: {}", errors.join("; "))
+        };
+        Ok(BulkOperationResult {
+            success,
+            processed_count: processed,
+            message,
+        })
     }
 
     async fn update_task(&self, request: UpdateTaskRequest) -> ThingsResult<()> {

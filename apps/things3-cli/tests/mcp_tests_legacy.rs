@@ -588,8 +588,8 @@ async fn test_bulk_create_tasks_tool() {
     match &result.content[0] {
         Content::Text { text } => {
             let parsed: serde_json::Value = serde_json::from_str(text).unwrap();
-            assert_eq!(parsed["tasks_count"], 2);
-            assert_eq!(parsed["status"], "placeholder");
+            assert_eq!(parsed["success"], true);
+            assert_eq!(parsed["processed_count"], 2);
         }
     }
 }
