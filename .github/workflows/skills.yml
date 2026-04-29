@@ -18,21 +18,15 @@ jobs:
           python-version: '3.12'
 
       - name: Install skills-ref
-        run: |
-          pip install skills-ref==0.1.1
-          echo "--- pip show skills-ref ---"
-          pip show -f skills-ref || true
-          echo "--- which skills-ref / module check ---"
-          which skills-ref || true
-          python -c "import skills_ref; print(skills_ref.__file__)" || true
+        run: pip install skills-ref==0.1.1
 
       - name: Validate each skill
         run: |
           failed=0
           for dir in skills/*/; do
             echo "Validating $dir"
-            if ! python -m skills_ref validate "$dir"; then
-              echo "::error::skills-ref validate failed for $dir"
+            if ! agentskills validate "$dir"; then
+              echo "::error::agentskills validate failed for $dir"
               failed=1
             fi
           done

@@ -46,12 +46,12 @@ cp -r skills/things3-daily-review /path/to/host/skills/things3-daily-review
 
 ## Spec compliance
 
-Skills are validated with [`skills-ref`](https://pypi.org/project/skills-ref/):
+Skills are validated with [`skills-ref`](https://pypi.org/project/skills-ref/) (CLI is named `agentskills`):
 
 ```bash
 pip install skills-ref
-skills-ref validate skills/things3
-skills-ref validate skills/things3-daily-review
+agentskills validate skills/things3
+agentskills validate skills/things3-daily-review
 ```
 
 CI runs this automatically on every PR that touches `skills/`.
