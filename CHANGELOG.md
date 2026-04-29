@@ -5,11 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.4.0] - 2026-04-29
 
 ### Added
 - **Foundational `things3` agent skill** — new `skills/things3/` directory with an [agentskills.io](https://agentskills.io/specification)-compliant `SKILL.md`, plus `references/TOOLS.md` (complete 46-tool catalog sourced from `mcp.rs`, superseding the outdated 21-tool list in `docs/MCP_INTEGRATION.md`) and `references/HOSTS.md` (copy-paste MCP config snippets for Claude Desktop, Claude Code, Cursor, VS Code, and Zed). Reconciles the tool-count discrepancy in `docs/MCP_INTEGRATION.md`. Closes #111.
 - **`things3-daily-review` workflow skill** — new `skills/things3-daily-review/SKILL.md` with a read-only daily-review recipe: pulls `get_today`, `get_inbox`, and `get_recent_tasks`; produces a structured Markdown summary grouped by area and project with overdue items flagged. References the foundational `things3` skill for MCP setup without duplicating install instructions. Closes #112.
+- **Skills catalog README** (#115) — new `skills/README.md` listing the shipped skills with one-line descriptions and per-host install instructions (Claude Code; generic "check your host's docs" pointer for Claude Desktop / Cursor / Zed). Top-level `README.md` gains a "Use with Claude Code / your AI agent" section linking to the catalog. Tool count in the MCP Integration section corrected from 21 to 46.
+- **CI: skills frontmatter validation** (#114) — new `.github/workflows/skills.yml` runs `agentskills validate` (PyPI `skills-ref==0.1.1`) on every `skills/*/` directory for PRs that touch `skills/**`. Fails the job if any skill is spec-invalid.
+
+### Fixed
+- **MCP `Prompt.arguments` shape** (#119) — `Prompt.arguments` was a `serde_json::Value` holding a JSON Schema object, which is spec-invalid; the MCP 2025-11-25 spec requires `Vec<PromptArgument>`. Adds a `PromptArgument` struct (`name`, optional `description`, `required: bool`), rewrites the four `create_*_prompt()` helpers, and enables full `ListPromptsResult` schema validation in `test_prompts_list` (previously skipped because of this bug). Spec-strict clients like Claude Code 2.1+ now render prompt arguments correctly.
 
 ## [1.3.0] - 2026-04-27
 
