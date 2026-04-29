@@ -303,6 +303,17 @@ The MCP (Model Context Protocol) server provides 21 tools for AI/LLM integration
 }
 ```
 
+## Use with Claude Code / your AI agent
+
+rust-things3 ships agent skills that let you drive Things 3 directly from Claude Code, Claude Desktop, Cursor, Zed, and any other [agentskills.io](https://agentskills.io/specification)-compatible host.
+
+| Skill | What it does |
+|-------|-------------|
+| `/things3` | MCP setup + full tool catalog |
+| `/things3-daily-review` | Read-only daily review — today's tasks, inbox, overdue items |
+
+See **[skills/README.md](skills/README.md)** for install instructions and the full catalog.
+
 ## Documentation
 
 ### Getting Started
