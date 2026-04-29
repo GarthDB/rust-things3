@@ -4,8 +4,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::sync::Arc;
 use things3_core::{
-    BackupManager, DataExporter, DeleteChildHandling, McpServerConfig, PerformanceMonitor,
-    ThingsCache, ThingsConfig, ThingsDatabase, ThingsError,
+    BackupManager, DataExporter, DeleteChildHandling, McpServerConfig, MutationBackend,
+    PerformanceMonitor, SqlxBackend, ThingsCache, ThingsConfig, ThingsDatabase, ThingsError,
 };
 use thiserror::Error;
 use tokio::sync::Mutex;
@@ -532,6 +532,12 @@ pub struct GetPromptResult {
 pub struct ThingsMcpServer {
     #[allow(dead_code)]
     pub db: Arc<ThingsDatabase>,
+    /// Mutation backend used for all write operations.
+    ///
+    /// Defaults to `SqlxBackend` (direct DB writes — current behavior). Production
+    /// will switch to `AppleScriptBackend` once #124/#125 land; tests and the
+    /// `--unsafe-direct-db` opt-in continue to use `SqlxBackend`.
+    mutations: Arc<dyn MutationBackend>,
     #[allow(dead_code)]
     cache: Arc<Mutex<ThingsCache>>,
     #[allow(dead_code)]
@@ -701,6 +707,20 @@ pub async fn start_mcp_server_with_config_generic<I: McpIo>(
 impl ThingsMcpServer {
     #[must_use]
     pub fn new(db: Arc<ThingsDatabase>, config: ThingsConfig) -> Self {
+        let mutations: Arc<dyn MutationBackend> = Arc::new(SqlxBackend::new(Arc::clone(&db)));
+        Self::with_mutation_backend(db, mutations, config)
+    }
+
+    /// Create a new MCP server with a caller-provided mutation backend.
+    ///
+    /// Use this to inject `AppleScriptBackend` (issue #124) or a test double
+    /// without taking the default `SqlxBackend`.
+    #[must_use]
+    pub fn with_mutation_backend(
+        db: Arc<ThingsDatabase>,
+        mutations: Arc<dyn MutationBackend>,
+        config: ThingsConfig,
+    ) -> Self {
         let cache = ThingsCache::new_default();
         let performance_monitor = PerformanceMonitor::new_default();
         let exporter = DataExporter::new_default();
@@ -712,6 +732,7 @@ impl ThingsMcpServer {
 
         Self {
             db,
+            mutations,
             cache: Arc::new(Mutex::new(cache)),
             performance_monitor: Arc::new(Mutex::new(performance_monitor)),
             exporter,
@@ -727,6 +748,8 @@ impl ThingsMcpServer {
         config: ThingsConfig,
         middleware_config: MiddlewareConfig,
     ) -> Self {
+        let db = Arc::new(db);
+        let mutations: Arc<dyn MutationBackend> = Arc::new(SqlxBackend::new(Arc::clone(&db)));
         let cache = ThingsCache::new_default();
         let performance_monitor = PerformanceMonitor::new_default();
         let exporter = DataExporter::new_default();
@@ -734,7 +757,8 @@ impl ThingsMcpServer {
         let middleware_chain = middleware_config.build_chain();
 
         Self {
-            db: Arc::new(db),
+            db,
+            mutations,
             cache: Arc::new(Mutex::new(cache)),
             performance_monitor: Arc::new(Mutex::new(performance_monitor)),
             exporter,
@@ -750,6 +774,7 @@ impl ThingsMcpServer {
         config: ThingsConfig,
         mcp_config: McpServerConfig,
     ) -> Self {
+        let mutations: Arc<dyn MutationBackend> = Arc::new(SqlxBackend::new(Arc::clone(&db)));
         let cache = ThingsCache::new_default();
         let performance_monitor = PerformanceMonitor::new_default();
         let exporter = DataExporter::new_default();
@@ -812,6 +837,7 @@ impl ThingsMcpServer {
 
         Self {
             db,
+            mutations,
             cache: Arc::new(Mutex::new(cache)),
             performance_monitor: Arc::new(Mutex::new(performance_monitor)),
             exporter,
@@ -2157,7 +2183,7 @@ impl ThingsMcpServer {
 
         // Create task
         let uuid = self
-            .db
+            .mutations
             .create_task(request)
             .await
             .map_err(|e| McpError::database_operation_failed("create_task", e))?;
@@ -2188,7 +2214,7 @@ impl ThingsMcpServer {
             })?;
 
         // Update task
-        self.db
+        self.mutations
             .update_task(request)
             .await
             .map_err(|e| McpError::database_operation_failed("update_task", e))?;
@@ -2216,7 +2242,7 @@ impl ThingsMcpServer {
         let uuid = uuid::Uuid::parse_str(uuid_str)
             .map_err(|e| McpError::invalid_parameter("uuid", format!("Invalid UUID: {e}")))?;
 
-        self.db
+        self.mutations
             .complete_task(&uuid)
             .await
             .map_err(|e| McpError::database_operation_failed("complete_task", e))?;
@@ -2244,7 +2270,7 @@ impl ThingsMcpServer {
         let uuid = uuid::Uuid::parse_str(uuid_str)
             .map_err(|e| McpError::invalid_parameter("uuid", format!("Invalid UUID: {e}")))?;
 
-        self.db
+        self.mutations
             .uncomplete_task(&uuid)
             .await
             .map_err(|e| McpError::database_operation_failed("uncomplete_task", e))?;
@@ -2283,7 +2309,7 @@ impl ThingsMcpServer {
             _ => DeleteChildHandling::Error,
         };
 
-        self.db
+        self.mutations
             .delete_task(&uuid, child_handling)
             .await
             .map_err(|e| McpError::database_operation_failed("delete_task", e))?;
@@ -2354,7 +2380,7 @@ impl ThingsMcpServer {
         };
 
         let result = self
-            .db
+            .mutations
             .bulk_move(request)
             .await
             .map_err(|e| McpError::database_operation_failed("bulk_move", e))?;
@@ -2435,7 +2461,7 @@ impl ThingsMcpServer {
         };
 
         let result = self
-            .db
+            .mutations
             .bulk_update_dates(request)
             .await
             .map_err(|e| McpError::database_operation_failed("bulk_update_dates", e))?;
@@ -2477,7 +2503,7 @@ impl ThingsMcpServer {
         let request = things3_core::models::BulkCompleteRequest { task_uuids };
 
         let result = self
-            .db
+            .mutations
             .bulk_complete(request)
             .await
             .map_err(|e| McpError::database_operation_failed("bulk_complete", e))?;
@@ -2519,7 +2545,7 @@ impl ThingsMcpServer {
         let request = things3_core::models::BulkDeleteRequest { task_uuids };
 
         let result = self
-            .db
+            .mutations
             .bulk_delete(request)
             .await
             .map_err(|e| McpError::database_operation_failed("bulk_delete", e))?;
@@ -2594,7 +2620,7 @@ impl ThingsMcpServer {
         };
 
         let uuid = self
-            .db
+            .mutations
             .create_project(request)
             .await
             .map_err(|e| McpError::database_operation_failed("create_project", e))?;
@@ -2671,7 +2697,7 @@ impl ThingsMcpServer {
             tags,
         };
 
-        self.db
+        self.mutations
             .update_project(request)
             .await
             .map_err(|e| McpError::database_operation_failed("update_project", e))?;
@@ -2710,7 +2736,7 @@ impl ThingsMcpServer {
             _ => things3_core::models::ProjectChildHandling::Error,
         };
 
-        self.db
+        self.mutations
             .complete_project(&uuid, child_handling)
             .await
             .map_err(|e| McpError::database_operation_failed("complete_project", e))?;
@@ -2749,7 +2775,7 @@ impl ThingsMcpServer {
             _ => things3_core::models::ProjectChildHandling::Error,
         };
 
-        self.db
+        self.mutations
             .delete_project(&uuid, child_handling)
             .await
             .map_err(|e| McpError::database_operation_failed("delete_project", e))?;
@@ -2778,7 +2804,7 @@ impl ThingsMcpServer {
         let request = things3_core::models::CreateAreaRequest { title };
 
         let uuid = self
-            .db
+            .mutations
             .create_area(request)
             .await
             .map_err(|e| McpError::database_operation_failed("create_area", e))?;
@@ -2814,7 +2840,7 @@ impl ThingsMcpServer {
 
         let request = things3_core::models::UpdateAreaRequest { uuid, title };
 
-        self.db
+        self.mutations
             .update_area(request)
             .await
             .map_err(|e| McpError::database_operation_failed("update_area", e))?;
@@ -2842,7 +2868,7 @@ impl ThingsMcpServer {
         let uuid = uuid::Uuid::parse_str(uuid_str)
             .map_err(|e| McpError::invalid_parameter("uuid", format!("Invalid UUID: {e}")))?;
 
-        self.db
+        self.mutations
             .delete_area(&uuid)
             .await
             .map_err(|e| McpError::database_operation_failed("delete_area", e))?;
@@ -3354,50 +3380,42 @@ impl ThingsMcpServer {
             parent_uuid,
         };
 
-        let result = if force {
-            let uuid = self
-                .db
-                .create_tag_force(request)
-                .await
-                .map_err(|e| McpError::database_operation_failed("create_tag", e))?;
-            serde_json::json!({
-                "status": "created",
-                "uuid": uuid,
-                "message": "Tag created successfully (duplicate check skipped)"
-            })
-        } else {
-            match self
-                .db
-                .create_tag_smart(request)
-                .await
-                .map_err(|e| McpError::database_operation_failed("create_tag", e))?
-            {
-                things3_core::models::TagCreationResult::Created { uuid, .. } => {
-                    serde_json::json!({
-                        "status": "created",
-                        "uuid": uuid,
-                        "message": "Tag created successfully"
-                    })
-                }
-                things3_core::models::TagCreationResult::Existing { tag, .. } => {
-                    serde_json::json!({
-                        "status": "existing",
-                        "uuid": tag.uuid,
-                        "tag": tag,
-                        "message": "Tag already exists"
-                    })
-                }
-                things3_core::models::TagCreationResult::SimilarFound {
-                    similar_tags,
-                    requested_title,
-                } => {
-                    serde_json::json!({
-                        "status": "similar_found",
-                        "similar_tags": similar_tags,
-                        "requested_title": requested_title,
-                        "message": "Similar tags found. Use force=true to create anyway."
-                    })
-                }
+        let result = match self
+            .mutations
+            .create_tag(request, force)
+            .await
+            .map_err(|e| McpError::database_operation_failed("create_tag", e))?
+        {
+            things3_core::models::TagCreationResult::Created { uuid, .. } => {
+                let message = if force {
+                    "Tag created successfully (duplicate check skipped)"
+                } else {
+                    "Tag created successfully"
+                };
+                serde_json::json!({
+                    "status": "created",
+                    "uuid": uuid,
+                    "message": message,
+                })
+            }
+            things3_core::models::TagCreationResult::Existing { tag, .. } => {
+                serde_json::json!({
+                    "status": "existing",
+                    "uuid": tag.uuid,
+                    "tag": tag,
+                    "message": "Tag already exists"
+                })
+            }
+            things3_core::models::TagCreationResult::SimilarFound {
+                similar_tags,
+                requested_title,
+            } => {
+                serde_json::json!({
+                    "status": "similar_found",
+                    "similar_tags": similar_tags,
+                    "requested_title": requested_title,
+                    "message": "Similar tags found. Use force=true to create anyway."
+                })
             }
         };
 
@@ -3441,7 +3459,7 @@ impl ThingsMcpServer {
             parent_uuid,
         };
 
-        self.db
+        self.mutations
             .update_tag(request)
             .await
             .map_err(|e| McpError::database_operation_failed("update_tag", e))?;
@@ -3474,7 +3492,7 @@ impl ThingsMcpServer {
             .and_then(|v| v.as_bool())
             .unwrap_or(false);
 
-        self.db
+        self.mutations
             .delete_tag(&uuid, remove_from_tasks)
             .await
             .map_err(|e| McpError::database_operation_failed("delete_tag", e))?;
@@ -3516,7 +3534,7 @@ impl ThingsMcpServer {
                 )
             })?;
 
-        self.db
+        self.mutations
             .merge_tags(&source_uuid, &target_uuid)
             .await
             .map_err(|e| McpError::database_operation_failed("merge_tags", e))?;
@@ -3554,7 +3572,7 @@ impl ThingsMcpServer {
             .to_string();
 
         let result = self
-            .db
+            .mutations
             .add_tag_to_task(&task_uuid, &tag_title)
             .await
             .map_err(|e| McpError::database_operation_failed("add_tag_to_task", e))?;
@@ -3602,7 +3620,7 @@ impl ThingsMcpServer {
             })?
             .to_string();
 
-        self.db
+        self.mutations
             .remove_tag_from_task(&task_uuid, &tag_title)
             .await
             .map_err(|e| McpError::database_operation_failed("remove_tag_from_task", e))?;
@@ -3643,7 +3661,7 @@ impl ThingsMcpServer {
             .collect();
 
         let suggestions = self
-            .db
+            .mutations
             .set_task_tags(&task_uuid, tag_titles.clone())
             .await
             .map_err(|e| McpError::database_operation_failed("set_task_tags", e))?;

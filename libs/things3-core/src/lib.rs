@@ -80,6 +80,7 @@ pub mod export;
 pub mod mcp_cache_middleware;
 pub mod mcp_config;
 pub mod models;
+pub mod mutations;
 
 #[cfg(feature = "observability")]
 pub mod observability;
@@ -126,6 +127,7 @@ pub use export::{DataExporter, ExportConfig, ExportData, ExportFormat};
 pub use mcp_cache_middleware::{MCPCacheConfig, MCPCacheEntry, MCPCacheMiddleware, MCPCacheStats};
 pub use mcp_config::McpServerConfig;
 pub use models::*;
+pub use mutations::{MutationBackend, SqlxBackend};
 // Explicitly re-export DeleteChildHandling for clarity
 pub use models::DeleteChildHandling;
 
