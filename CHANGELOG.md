@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.4.0] - 2026-04-29
+## [1.4.0] - 2026-04-28
 
 ### Added
 - **Foundational `things3` agent skill** — new `skills/things3/` directory with an [agentskills.io](https://agentskills.io/specification)-compliant `SKILL.md`, plus `references/TOOLS.md` (complete 46-tool catalog sourced from `mcp.rs`, superseding the outdated 21-tool list in `docs/MCP_INTEGRATION.md`) and `references/HOSTS.md` (copy-paste MCP config snippets for Claude Desktop, Claude Code, Cursor, VS Code, and Zed). Reconciles the tool-count discrepancy in `docs/MCP_INTEGRATION.md`. Closes #111.
