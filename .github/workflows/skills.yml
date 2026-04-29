@@ -13,10 +13,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
       - name: Install skills-ref
-        run: |
-          pip install skills-ref==0.1.1
-          echo "$HOME/.local/bin" >> $GITHUB_PATH
+        run: pip install skills-ref==0.1.1
 
       - name: Validate each skill
         run: |
