@@ -42,6 +42,9 @@ pub(crate) async fn run_script(script: &str) -> Result<String> {
         .shutdown()
         .await
         .map_err(|e| ThingsError::applescript(format!("failed to close stdin: {e}")))?;
+    // Explicitly drop stdin to close the write end of the pipe. shutdown() marks
+    // the stream done but does not close the fd on Unix pipes — osascript hangs
+    // waiting for more input until the write end is closed.
     drop(stdin);
 
     let output = child
@@ -165,5 +168,21 @@ mod tests {
             .await
             .expect("osascript should run");
         assert!(out.contains("hello"));
+    }
+
+    #[tokio::test]
+    async fn run_script_escaped_string_round_trips() {
+        use crate::mutations::applescript::escape::as_applescript_string;
+
+        let title = "Buy \"organic\" milk\nand \\bread";
+        let escaped = as_applescript_string(title);
+        let script = format!("return {escaped}");
+        let out = run_script(&script).await.expect("osascript should run");
+        // Inner double-quote didn't break the string literal — "organic" is present
+        assert!(out.contains("organic"), "output was: {out:?}");
+        // Text after embedded newline survived
+        assert!(out.contains("bread"), "output was: {out:?}");
+        // Backslash round-tripped: \\ in source → single \ in output
+        assert!(out.contains('\\'), "output was: {out:?}");
     }
 }
