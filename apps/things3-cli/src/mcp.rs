@@ -417,6 +417,9 @@ impl From<ThingsError> for McpError {
             ThingsError::DateConversion(e) => {
                 McpError::validation_error(format!("Date conversion failed: {e}"))
             }
+            ThingsError::AppleScript { message } => {
+                McpError::internal_error(format!("AppleScript automation failed: {message}"))
+            }
             ThingsError::Unknown { message } => McpError::internal_error(message),
         }
     }

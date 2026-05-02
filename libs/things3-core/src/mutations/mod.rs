@@ -34,6 +34,9 @@ use crate::models::{
 mod sqlx;
 pub use sqlx::SqlxBackend;
 
+#[cfg(target_os = "macos")]
+mod applescript;
+
 /// Abstraction over every Things 3 mutation operation exposed as an MCP tool.
 ///
 /// All implementations must be `Send + Sync` so the server can share them across
