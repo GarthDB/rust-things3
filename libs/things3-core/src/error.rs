@@ -50,6 +50,9 @@ pub enum ThingsError {
     #[error("Configuration error: {message}")]
     Configuration { message: String },
 
+    #[error("AppleScript automation failed: {message}")]
+    AppleScript { message: String },
+
     #[error("Unknown error: {message}")]
     Unknown { message: String },
 }
@@ -72,6 +75,13 @@ impl ThingsError {
     /// Create an unknown error
     pub fn unknown(message: impl Into<String>) -> Self {
         Self::Unknown {
+            message: message.into(),
+        }
+    }
+
+    /// Create an AppleScript error
+    pub fn applescript(message: impl Into<String>) -> Self {
+        Self::AppleScript {
             message: message.into(),
         }
     }
@@ -198,6 +208,30 @@ mod tests {
 
         assert!(error.to_string().contains("Unknown error"));
         assert!(error.to_string().contains("Something went wrong"));
+    }
+
+    #[test]
+    fn test_applescript_error() {
+        let error = ThingsError::AppleScript {
+            message: "macOS Automation permission denied".to_string(),
+        };
+
+        assert!(error.to_string().contains("AppleScript automation failed"));
+        assert!(error
+            .to_string()
+            .contains("macOS Automation permission denied"));
+    }
+
+    #[test]
+    fn test_applescript_helper() {
+        let error = ThingsError::applescript("osascript not available");
+
+        match error {
+            ThingsError::AppleScript { message } => {
+                assert_eq!(message, "osascript not available");
+            }
+            _ => panic!("Expected AppleScript error"),
+        }
     }
 
     #[test]
