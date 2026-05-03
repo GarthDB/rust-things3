@@ -5,23 +5,23 @@ use things3_core::{
     database::ThingsDatabase,
     models::CreateTaskRequest,
     test_utils::{create_test_database_and_connect, TaskRequestBuilder},
+    ThingsId,
 };
-use uuid::Uuid;
 
 /// Helper to complete a task
-async fn complete_task(db: &ThingsDatabase, uuid: Uuid) {
+async fn complete_task(db: &ThingsDatabase, uuid: ThingsId) {
     db.complete_task(&uuid)
         .await
         .expect("Failed to complete task");
 }
 
 /// Helper to create and complete a task
-async fn create_and_complete_task(db: &ThingsDatabase, request: CreateTaskRequest) -> Uuid {
+async fn create_and_complete_task(db: &ThingsDatabase, request: CreateTaskRequest) -> ThingsId {
     let uuid = db
         .create_task(request)
         .await
         .expect("Failed to create task");
-    complete_task(db, uuid).await;
+    complete_task(db, uuid.clone()).await;
     uuid
 }
 
@@ -370,7 +370,7 @@ async fn test_search_logbook_project_filter() {
         &db,
         TaskRequestBuilder::new()
             .title("Project 1 task 1".to_string())
-            .project(project1_uuid)
+            .project(project1_uuid.clone())
             .build(),
     )
     .await;
@@ -379,7 +379,7 @@ async fn test_search_logbook_project_filter() {
         &db,
         TaskRequestBuilder::new()
             .title("Project 1 task 2".to_string())
-            .project(project1_uuid)
+            .project(project1_uuid.clone())
             .build(),
     )
     .await;
@@ -388,7 +388,7 @@ async fn test_search_logbook_project_filter() {
         &db,
         TaskRequestBuilder::new()
             .title("Project 2 task 1".to_string())
-            .project(project2_uuid)
+            .project(project2_uuid.clone())
             .build(),
     )
     .await;
@@ -403,14 +403,22 @@ async fn test_search_logbook_project_filter() {
 
     // Search by project 1
     let results = db
-        .search_logbook(None, None, None, Some(project1_uuid), None, None, None)
+        .search_logbook(
+            None,
+            None,
+            None,
+            Some(project1_uuid.clone()),
+            None,
+            None,
+            None,
+        )
         .await
         .expect("Failed to search logbook");
 
     assert_eq!(results.len(), 2, "Should find 2 tasks in project 1");
     assert!(results
         .iter()
-        .all(|t| t.project_uuid == Some(project1_uuid)));
+        .all(|t| t.project_uuid == Some(project1_uuid.clone())));
 
     // Search by project 2
     let results = db
@@ -447,7 +455,7 @@ async fn test_search_logbook_area_filter() {
         &db,
         TaskRequestBuilder::new()
             .title("Area 1 task 1".to_string())
-            .area(area1_uuid)
+            .area(area1_uuid.clone())
             .build(),
     )
     .await;
@@ -456,7 +464,7 @@ async fn test_search_logbook_area_filter() {
         &db,
         TaskRequestBuilder::new()
             .title("Area 1 task 2".to_string())
-            .area(area1_uuid)
+            .area(area1_uuid.clone())
             .build(),
     )
     .await;
@@ -465,19 +473,21 @@ async fn test_search_logbook_area_filter() {
         &db,
         TaskRequestBuilder::new()
             .title("Area 2 task 1".to_string())
-            .area(area2_uuid)
+            .area(area2_uuid.clone())
             .build(),
     )
     .await;
 
     // Search by area 1
     let results = db
-        .search_logbook(None, None, None, None, Some(area1_uuid), None, None)
+        .search_logbook(None, None, None, None, Some(area1_uuid.clone()), None, None)
         .await
         .expect("Failed to search logbook");
 
     assert_eq!(results.len(), 2, "Should find 2 tasks in area 1");
-    assert!(results.iter().all(|t| t.area_uuid == Some(area1_uuid)));
+    assert!(results
+        .iter()
+        .all(|t| t.area_uuid == Some(area1_uuid.clone())));
 
     // Search by area 2
     let results = db
@@ -642,7 +652,7 @@ async fn test_search_logbook_combined_filters() {
         &db,
         TaskRequestBuilder::new()
             .title("Matching project task".to_string())
-            .project(project_uuid)
+            .project(project_uuid.clone())
             .build(),
     )
     .await;
@@ -659,7 +669,7 @@ async fn test_search_logbook_combined_filters() {
         &db,
         TaskRequestBuilder::new()
             .title("Another matching project task".to_string())
-            .project(project_uuid)
+            .project(project_uuid.clone())
             .build(),
     )
     .await;
@@ -670,7 +680,7 @@ async fn test_search_logbook_combined_filters() {
             Some("matching".to_string()),
             Some(today),
             None,
-            Some(project_uuid),
+            Some(project_uuid.clone()),
             None,
             None,
             None,
@@ -679,9 +689,10 @@ async fn test_search_logbook_combined_filters() {
         .expect("Failed to search logbook");
 
     assert_eq!(results.len(), 2, "Should find 2 tasks matching all filters");
-    assert!(results.iter().all(
-        |t| t.project_uuid == Some(project_uuid) && t.title.to_lowercase().contains("matching")
-    ));
+    assert!(results
+        .iter()
+        .all(|t| t.project_uuid == Some(project_uuid.clone())
+            && t.title.to_lowercase().contains("matching")));
 }
 
 #[tokio::test]
@@ -760,7 +771,7 @@ async fn test_search_logbook_empty_results() {
     assert_eq!(results.len(), 0, "Should return empty vec, not error");
 
     // Search with non-existent UUID
-    let fake_uuid = Uuid::new_v4();
+    let fake_uuid = ThingsId::new_v4();
     let results = db
         .search_logbook(None, None, None, Some(fake_uuid), None, None, None)
         .await

@@ -1,6 +1,6 @@
 //! Caching layer for frequently accessed Things 3 data
 
-use crate::models::{Area, Project, Task};
+use crate::models::{Area, Project, Task, ThingsId};
 use anyhow::Result;
 use chrono::{DateTime, Utc};
 use moka::future::Cache;
@@ -9,7 +9,6 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
-use uuid::Uuid;
 
 /// Cache invalidation strategy
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -30,7 +29,7 @@ pub struct CacheDependency {
     /// The entity type this cache entry depends on
     pub entity_type: String,
     /// The specific entity ID this cache entry depends on
-    pub entity_id: Option<Uuid>,
+    pub entity_id: Option<ThingsId>,
     /// The operation that would invalidate this cache entry
     pub invalidating_operations: Vec<String>,
 }
@@ -42,12 +41,12 @@ impl CacheDependency {
     /// no specific id matches any concrete mutation of the same type, and a
     /// caller passing `None` matches every dependency of that type.
     #[must_use]
-    pub fn matches(&self, entity_type: &str, entity_id: Option<&Uuid>) -> bool {
+    pub fn matches(&self, entity_type: &str, entity_id: Option<&ThingsId>) -> bool {
         if self.entity_type != entity_type {
             return false;
         }
-        match (self.entity_id, entity_id) {
-            (Some(dep_id), Some(req_id)) => dep_id == *req_id,
+        match (&self.entity_id, entity_id) {
+            (Some(dep_id), Some(req_id)) => dep_id == req_id,
             _ => true,
         }
     }
@@ -164,7 +163,7 @@ impl<T> CachedData<T> {
         self.dependencies.push(dependency);
     }
 
-    pub fn has_dependency(&self, entity_type: &str, entity_id: Option<&Uuid>) -> bool {
+    pub fn has_dependency(&self, entity_type: &str, entity_id: Option<&ThingsId>) -> bool {
         self.dependencies
             .iter()
             .any(|dep| dep.matches(entity_type, entity_id))
@@ -534,7 +533,7 @@ impl ThingsCache {
         for task in tasks {
             dependencies.push(CacheDependency {
                 entity_type: "task".to_string(),
-                entity_id: Some(task.uuid),
+                entity_id: Some(task.uuid.clone()),
                 invalidating_operations: vec![
                     "task_updated".to_string(),
                     "task_deleted".to_string(),
@@ -543,10 +542,10 @@ impl ThingsCache {
             });
 
             // Add project dependency if task belongs to a project
-            if let Some(project_uuid) = task.project_uuid {
+            if let Some(project_uuid) = &task.project_uuid {
                 dependencies.push(CacheDependency {
                     entity_type: "project".to_string(),
-                    entity_id: Some(project_uuid),
+                    entity_id: Some(project_uuid.clone()),
                     invalidating_operations: vec![
                         "project_updated".to_string(),
                         "project_deleted".to_string(),
@@ -555,10 +554,10 @@ impl ThingsCache {
             }
 
             // Add area dependency if task belongs to an area
-            if let Some(area_uuid) = task.area_uuid {
+            if let Some(area_uuid) = &task.area_uuid {
                 dependencies.push(CacheDependency {
                     entity_type: "area".to_string(),
-                    entity_id: Some(area_uuid),
+                    entity_id: Some(area_uuid.clone()),
                     invalidating_operations: vec![
                         "area_updated".to_string(),
                         "area_deleted".to_string(),
@@ -577,17 +576,17 @@ impl ThingsCache {
         for project in projects {
             dependencies.push(CacheDependency {
                 entity_type: "project".to_string(),
-                entity_id: Some(project.uuid),
+                entity_id: Some(project.uuid.clone()),
                 invalidating_operations: vec![
                     "project_updated".to_string(),
                     "project_deleted".to_string(),
                 ],
             });
 
-            if let Some(area_uuid) = project.area_uuid {
+            if let Some(area_uuid) = &project.area_uuid {
                 dependencies.push(CacheDependency {
                     entity_type: "area".to_string(),
-                    entity_id: Some(area_uuid),
+                    entity_id: Some(area_uuid.clone()),
                     invalidating_operations: vec![
                         "area_updated".to_string(),
                         "area_deleted".to_string(),
@@ -606,7 +605,7 @@ impl ThingsCache {
         for area in areas {
             dependencies.push(CacheDependency {
                 entity_type: "area".to_string(),
-                entity_id: Some(area.uuid),
+                entity_id: Some(area.uuid.clone()),
                 invalidating_operations: vec![
                     "area_updated".to_string(),
                     "area_deleted".to_string(),
@@ -731,7 +730,11 @@ impl ThingsCache {
     /// `entity_id == None` is a wildcard that matches any cached entry
     /// depending on `entity_type`. Entries that do not depend on the mutated
     /// entity are left untouched.
-    pub async fn invalidate_by_entity(&self, entity_type: &str, entity_id: Option<&Uuid>) -> usize {
+    pub async fn invalidate_by_entity(
+        &self,
+        entity_type: &str,
+        entity_id: Option<&ThingsId>,
+    ) -> usize {
         let (task_keys, project_keys, area_keys, search_keys) = {
             let pred = |dep: &CacheDependency| dep.matches(entity_type, entity_id);
             (
@@ -1482,11 +1485,11 @@ mod tests {
 
     #[test]
     fn test_cache_dependency_matches_rules() {
-        let id_a = Uuid::new_v4();
-        let id_b = Uuid::new_v4();
+        let id_a = ThingsId::new_v4();
+        let id_b = ThingsId::new_v4();
         let dep_concrete = CacheDependency {
             entity_type: "task".to_string(),
-            entity_id: Some(id_a),
+            entity_id: Some(id_a.clone()),
             invalidating_operations: vec!["task_updated".to_string()],
         };
         let dep_wildcard = CacheDependency {
@@ -1512,7 +1515,7 @@ mod tests {
 
     /// Build a `Task` whose `uuid`, `project_uuid`, and `area_uuid` we control,
     /// so dependency lists carry the IDs we expect.
-    fn task_with_ids(uuid: Uuid, project: Option<Uuid>, area: Option<Uuid>) -> Task {
+    fn task_with_ids(uuid: ThingsId, project: Option<ThingsId>, area: Option<ThingsId>) -> Task {
         let mut t = create_mock_tasks().into_iter().next().unwrap();
         t.uuid = uuid;
         t.project_uuid = project;
@@ -1523,18 +1526,20 @@ mod tests {
     #[tokio::test]
     async fn test_invalidate_by_entity_selective_by_id() {
         let cache = ThingsCache::new_default();
-        let id_x = Uuid::new_v4();
-        let id_y = Uuid::new_v4();
+        let id_x = ThingsId::new_v4();
+        let id_y = ThingsId::new_v4();
 
+        let id_x2 = id_x.clone();
+        let id_y2 = id_y.clone();
         cache
             .get_tasks("key_x", || async {
-                Ok(vec![task_with_ids(id_x, None, None)])
+                Ok(vec![task_with_ids(id_x2, None, None)])
             })
             .await
             .unwrap();
         cache
             .get_tasks("key_y", || async {
-                Ok(vec![task_with_ids(id_y, None, None)])
+                Ok(vec![task_with_ids(id_y2, None, None)])
             })
             .await
             .unwrap();
@@ -1549,18 +1554,20 @@ mod tests {
     #[tokio::test]
     async fn test_invalidate_by_entity_wildcard_id() {
         let cache = ThingsCache::new_default();
-        let id_x = Uuid::new_v4();
-        let id_y = Uuid::new_v4();
+        let id_x = ThingsId::new_v4();
+        let id_y = ThingsId::new_v4();
 
+        let id_x2 = id_x.clone();
+        let id_y2 = id_y.clone();
         cache
             .get_tasks("key_x", || async {
-                Ok(vec![task_with_ids(id_x, None, None)])
+                Ok(vec![task_with_ids(id_x2, None, None)])
             })
             .await
             .unwrap();
         cache
             .get_tasks("key_y", || async {
-                Ok(vec![task_with_ids(id_y, None, None)])
+                Ok(vec![task_with_ids(id_y2, None, None)])
             })
             .await
             .unwrap();
@@ -1575,13 +1582,15 @@ mod tests {
     #[tokio::test]
     async fn test_invalidate_by_entity_leaves_unrelated_caches() {
         let cache = ThingsCache::new_default();
-        let task_id = Uuid::new_v4();
-        let project_id = Uuid::new_v4();
+        let task_id = ThingsId::new_v4();
+        let project_id = ThingsId::new_v4();
 
+        let task_id2 = task_id.clone();
+        let project_id2 = project_id.clone();
         // task entry depends on its own task_id AND on project_id
         cache
             .get_tasks("inbox", || async {
-                Ok(vec![task_with_ids(task_id, Some(project_id), None)])
+                Ok(vec![task_with_ids(task_id2, Some(project_id2), None)])
             })
             .await
             .unwrap();
@@ -1605,13 +1614,14 @@ mod tests {
     #[tokio::test]
     async fn test_invalidate_by_operation_selective() {
         let cache = ThingsCache::new_default();
-        let task_id = Uuid::new_v4();
-        let area_id = Uuid::new_v4();
+        let task_id = ThingsId::new_v4();
+        let area_id = ThingsId::new_v4();
 
+        let task_id2 = task_id.clone();
         // task entry: invalidating_operations include "task_updated"
         cache
             .get_tasks("inbox", || async {
-                Ok(vec![task_with_ids(task_id, None, None)])
+                Ok(vec![task_with_ids(task_id2, None, None)])
             })
             .await
             .unwrap();

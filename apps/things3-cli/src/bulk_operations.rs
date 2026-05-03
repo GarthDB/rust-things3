@@ -3,6 +3,7 @@
 use crate::events::{EventBroadcaster, EventType};
 use crate::progress::{ProgressManager, ProgressTracker};
 use std::sync::Arc;
+use things3_core::models::ThingsId;
 use things3_core::Result;
 use things3_core::{Task, ThingsDatabase};
 
@@ -60,8 +61,10 @@ impl BulkOperationsManager {
             // Broadcast task event
             self.event_broadcaster
                 .broadcast_task_event(
-                    EventType::TaskUpdated { task_id: task.uuid },
-                    task.uuid,
+                    EventType::TaskUpdated {
+                        task_id: task.uuid.clone(),
+                    },
+                    task.uuid.clone(),
                     Some(serde_json::to_value(task)?),
                     "bulk_export",
                 )
@@ -81,7 +84,7 @@ impl BulkOperationsManager {
     pub async fn bulk_update_task_status(
         &self,
         _db: &ThingsDatabase,
-        task_ids: Vec<uuid::Uuid>,
+        task_ids: Vec<ThingsId>,
         new_status: things3_core::TaskStatus,
     ) -> Result<usize> {
         let tracker = self.progress_manager.create_tracker(
@@ -113,8 +116,10 @@ impl BulkOperationsManager {
             // Broadcast task event
             self.event_broadcaster
                 .broadcast_task_event(
-                    EventType::TaskUpdated { task_id: *task_id },
-                    *task_id,
+                    EventType::TaskUpdated {
+                        task_id: task_id.clone(),
+                    },
+                    task_id.clone(),
                     Some(serde_json::json!({ "status": format!("{:?}", new_status) })),
                     "bulk_update",
                 )
@@ -171,8 +176,10 @@ impl BulkOperationsManager {
             // Broadcast task event
             self.event_broadcaster
                 .broadcast_task_event(
-                    EventType::TaskUpdated { task_id: task.uuid },
-                    task.uuid,
+                    EventType::TaskUpdated {
+                        task_id: task.uuid.clone(),
+                    },
+                    task.uuid.clone(),
                     Some(serde_json::to_value(task)?),
                     "search_and_process",
                 )
@@ -327,7 +334,7 @@ mod tests {
         // In real usage, the progress manager would be started separately
 
         // Test with invalid task IDs
-        let task_ids = vec![uuid::Uuid::new_v4(), uuid::Uuid::new_v4()];
+        let task_ids = vec![ThingsId::new_v4(), ThingsId::new_v4()];
         let result = manager
             .bulk_update_task_status(&db, task_ids, things3_core::TaskStatus::Completed)
             .await;
@@ -600,7 +607,7 @@ mod tests {
         // Test broadcasting an event
         let event = crate::events::Event {
             event_type: crate::events::EventType::TaskCreated {
-                task_id: uuid::Uuid::new_v4(),
+                task_id: ThingsId::new_v4(),
             },
             id: uuid::Uuid::new_v4(),
             source: "test".to_string(),
@@ -639,15 +646,15 @@ mod tests {
 
         // Test the core functionality without the progress manager
         let tasks = db.get_inbox(Some(5)).await.unwrap();
-        let task_ids: Vec<uuid::Uuid> = tasks.iter().map(|t| t.uuid).collect();
+        let task_ids: Vec<ThingsId> = tasks.iter().map(|t| t.uuid.clone()).collect();
 
         if !task_ids.is_empty() {
             // Test that we can retrieve the tasks
             assert_eq!(task_ids.len(), tasks.len());
 
-            // Test that the task IDs are valid UUIDs
+            // Test that the task IDs are non-empty
             for task_id in &task_ids {
-                assert!(!task_id.is_nil());
+                assert!(!task_id.as_str().is_empty());
             }
         }
     }

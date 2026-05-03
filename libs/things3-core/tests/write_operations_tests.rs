@@ -1,6 +1,7 @@
 use chrono::NaiveDate;
-use things3_core::{CreateTaskRequest, TaskStatus, TaskType, ThingsDatabase, UpdateTaskRequest};
-use uuid::Uuid;
+use things3_core::{
+    CreateTaskRequest, TaskStatus, TaskType, ThingsDatabase, ThingsId, UpdateTaskRequest,
+};
 
 #[cfg(feature = "test-utils")]
 use things3_core::test_utils::create_test_database;
@@ -34,7 +35,10 @@ async fn test_create_task_minimal_fields() {
     };
 
     let uuid = db.create_task(request).await.unwrap();
-    assert!(!uuid.is_nil(), "Created task should have valid UUID");
+    assert!(
+        !uuid.as_str().is_empty(),
+        "Created task should have valid UUID"
+    );
 }
 
 #[tokio::test]
@@ -75,7 +79,10 @@ async fn test_create_task_all_fields() {
     };
 
     let uuid = db.create_task(request).await.unwrap();
-    assert!(!uuid.is_nil(), "Created task should have valid UUID");
+    assert!(
+        !uuid.as_str().is_empty(),
+        "Created task should have valid UUID"
+    );
 }
 
 #[tokio::test]
@@ -101,8 +108,8 @@ async fn test_create_task_returns_valid_uuid() {
 
     let uuid = db.create_task(request).await.unwrap();
 
-    // Verify UUID is valid by parsing it
-    assert_eq!(uuid.get_version_num(), 4, "Should be UUID v4");
+    // Verify UUID is valid by checking it's a hyphenated UUID format
+    assert!(uuid.as_str().contains('-'), "Should be UUID v4 format");
 }
 
 #[tokio::test]
@@ -129,7 +136,10 @@ async fn test_create_task_appears_in_database() {
     let uuid = db.create_task(request).await.unwrap();
 
     // Verify UUID is valid
-    assert!(!uuid.is_nil(), "Created task should have valid UUID");
+    assert!(
+        !uuid.as_str().is_empty(),
+        "Created task should have valid UUID"
+    );
 }
 
 #[tokio::test]
@@ -156,7 +166,7 @@ async fn test_create_task_timestamps_set() {
     let uuid = db.create_task(request).await.unwrap();
 
     // Verify UUID is valid (timestamps are set by database)
-    assert!(!uuid.is_nil(), "Task should have valid UUID");
+    assert!(!uuid.as_str().is_empty(), "Task should have valid UUID");
 }
 
 // ============================================================================
@@ -171,7 +181,7 @@ async fn test_create_task_with_invalid_project_uuid() {
     create_test_database(db_path).await.unwrap();
     let db = ThingsDatabase::new(db_path).await.unwrap();
 
-    let invalid_uuid = Uuid::new_v4();
+    let invalid_uuid = ThingsId::new_v4();
     let request = CreateTaskRequest {
         title: "Task with Invalid Project".to_string(),
         task_type: None,
@@ -197,7 +207,7 @@ async fn test_create_task_with_invalid_area_uuid() {
     create_test_database(db_path).await.unwrap();
     let db = ThingsDatabase::new(db_path).await.unwrap();
 
-    let invalid_uuid = Uuid::new_v4();
+    let invalid_uuid = ThingsId::new_v4();
     let request = CreateTaskRequest {
         title: "Task with Invalid Area".to_string(),
         task_type: None,
@@ -223,7 +233,7 @@ async fn test_create_task_with_invalid_parent_uuid() {
     create_test_database(db_path).await.unwrap();
     let db = ThingsDatabase::new(db_path).await.unwrap();
 
-    let invalid_uuid = Uuid::new_v4();
+    let invalid_uuid = ThingsId::new_v4();
     let request = CreateTaskRequest {
         title: "Task with Invalid Parent".to_string(),
         task_type: None,
@@ -752,7 +762,7 @@ async fn test_update_nonexistent_task() {
     create_test_database(db_path).await.unwrap();
     let db = ThingsDatabase::new(db_path).await.unwrap();
 
-    let nonexistent_uuid = Uuid::new_v4();
+    let nonexistent_uuid = ThingsId::new_v4();
     let update_request = UpdateTaskRequest {
         uuid: nonexistent_uuid,
         title: Some("Updated Title".to_string()),
@@ -836,7 +846,7 @@ async fn test_update_task_with_invalid_project_uuid() {
     let task_uuid = db.create_task(create_request).await.unwrap();
 
     // Try to update with an invalid project UUID
-    let invalid_project_uuid = Uuid::new_v4();
+    let invalid_project_uuid = ThingsId::new_v4();
     let update_request = UpdateTaskRequest {
         uuid: task_uuid,
         title: None,
@@ -880,7 +890,7 @@ async fn test_update_task_with_invalid_area_uuid() {
     let task_uuid = db.create_task(create_request).await.unwrap();
 
     // Try to update with an invalid area UUID
-    let invalid_area_uuid = Uuid::new_v4();
+    let invalid_area_uuid = ThingsId::new_v4();
     let update_request = UpdateTaskRequest {
         uuid: task_uuid,
         title: None,

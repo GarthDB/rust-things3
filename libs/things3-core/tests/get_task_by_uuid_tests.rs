@@ -2,9 +2,8 @@
 
 use things3_core::{
     test_utils::create_test_database_and_connect, CreateTaskRequest, DeleteChildHandling,
-    TaskStatus, TaskType,
+    TaskStatus, TaskType, ThingsId,
 };
-use uuid::Uuid;
 
 // ============================================================================
 // get_task_by_uuid Tests
@@ -43,7 +42,7 @@ async fn test_get_task_by_uuid_existing_task() {
 async fn test_get_task_by_uuid_nonexistent() {
     let (db, _temp_file) = create_test_database_and_connect().await.unwrap();
 
-    let nonexistent_uuid = Uuid::new_v4();
+    let nonexistent_uuid = ThingsId::new_v4();
     let result = db.get_task_by_uuid(&nonexistent_uuid).await.unwrap();
     assert!(result.is_none(), "Should return None for nonexistent task");
 }
@@ -108,7 +107,7 @@ async fn test_get_task_by_uuid_with_project() {
         notes: None,
         start_date: None,
         deadline: None,
-        project_uuid: Some(project_uuid),
+        project_uuid: Some(project_uuid.clone()),
         area_uuid: None,
         parent_uuid: None,
         tags: None,
@@ -150,7 +149,7 @@ async fn test_get_task_by_uuid_with_parent() {
         deadline: None,
         project_uuid: None,
         area_uuid: None,
-        parent_uuid: Some(parent_uuid),
+        parent_uuid: Some(parent_uuid.clone()),
         tags: None,
         status: None,
     };

@@ -1,36 +1,30 @@
-//! Row mapping utilities for converting database rows to domain models
+//! Row mapping utilities for converting database rows to domain models.
 //!
-//! This module provides reusable mapping functions to eliminate duplication
-//! in Task construction from SQL query results.
+//! `uuid` columns in the Things 3 SQLite database hold strings the database
+//! itself produced — either Things-native 21–22-char base62 IDs or hyphenated
+//! UUIDs that `SqlxBackend` generated for new entities. Both are valid
+//! [`ThingsId`] values; we wrap them via [`ThingsId::from_trusted`] without
+//! re-validating, since the DB is the source of truth.
 
 use crate::{
-    database::{safe_timestamp_convert, things_date_to_naive_date, things_uuid_to_uuid},
+    database::{safe_timestamp_convert, things_date_to_naive_date},
     error::Result as ThingsResult,
-    models::{Project, Task, TaskStatus, TaskType},
+    models::{Project, Task, TaskStatus, TaskType, ThingsId},
 };
 use chrono::{DateTime, Utc};
 use sqlx::sqlite::SqliteRow;
 use sqlx::Row;
-use uuid::Uuid;
 
-/// Parse a UUID string with fallback to Things UUID conversion
+/// Wrap a `uuid`-column string from the database as a [`ThingsId`].
 ///
-/// First attempts to parse as a standard UUID format, then falls back
-/// to the Things 3 UUID conversion if that fails.
-pub fn parse_uuid_with_fallback(uuid_str: &str) -> Uuid {
-    Uuid::parse_str(uuid_str).unwrap_or_else(|_| things_uuid_to_uuid(uuid_str))
+/// No validation happens; the DB is authoritative.
+fn id_from_row(s: String) -> ThingsId {
+    ThingsId::from_trusted(s)
 }
 
-/// Parse an optional UUID string with fallback
-///
-/// Handles `Option<String>` from database columns, returning None if the
-/// input is None, otherwise using the fallback UUID parsing logic.
-pub fn parse_optional_uuid(opt_str: Option<String>) -> Option<Uuid> {
-    opt_str.map(|s| {
-        Uuid::parse_str(&s)
-            .ok()
-            .unwrap_or_else(|| things_uuid_to_uuid(&s))
-    })
+/// Wrap an optional `uuid`-column string as `Option<ThingsId>`.
+fn optional_id_from_row(opt: Option<String>) -> Option<ThingsId> {
+    opt.map(ThingsId::from_trusted)
 }
 
 /// Map a database row to a Task struct
@@ -42,8 +36,7 @@ pub fn parse_optional_uuid(opt_str: Option<String>) -> Option<Uuid> {
 ///
 /// Returns an error if required fields are missing or cannot be converted
 pub fn map_task_row(row: &SqliteRow) -> ThingsResult<Task> {
-    let uuid_str: String = row.get("uuid");
-    let uuid = parse_uuid_with_fallback(&uuid_str);
+    let uuid = id_from_row(row.get("uuid"));
 
     let title: String = row.get("title");
 
@@ -89,17 +82,9 @@ pub fn map_task_row(row: &SqliteRow) -> ThingsResult<Task> {
         DateTime::from_timestamp(ts_i64, 0)
     });
 
-    let project_uuid = row
-        .get::<Option<String>, _>("project")
-        .map(|s| parse_uuid_with_fallback(&s));
-
-    let area_uuid = row
-        .get::<Option<String>, _>("area")
-        .map(|s| parse_uuid_with_fallback(&s));
-
-    let parent_uuid = row
-        .get::<Option<String>, _>("heading")
-        .map(|s| parse_uuid_with_fallback(&s));
+    let project_uuid = optional_id_from_row(row.get::<Option<String>, _>("project"));
+    let area_uuid = optional_id_from_row(row.get::<Option<String>, _>("area"));
+    let parent_uuid = optional_id_from_row(row.get::<Option<String>, _>("heading"));
 
     // Try to get cachedTags as binary data and parse it
     let tags = row
@@ -132,7 +117,7 @@ pub fn map_task_row(row: &SqliteRow) -> ThingsResult<Task> {
 /// Map a `TMTask` row (where `type = 1`) into a [`Project`].
 pub fn map_project_row(row: &SqliteRow) -> Project {
     Project {
-        uuid: parse_uuid_with_fallback(&row.get::<String, _>("uuid")),
+        uuid: id_from_row(row.get("uuid")),
         title: row.get("title"),
         status: match row.get::<i32, _>("status") {
             1 => TaskStatus::Completed,
@@ -140,7 +125,7 @@ pub fn map_project_row(row: &SqliteRow) -> Project {
             3 => TaskStatus::Trashed,
             _ => TaskStatus::Incomplete,
         },
-        area_uuid: parse_optional_uuid(row.get::<Option<String>, _>("area")),
+        area_uuid: optional_id_from_row(row.get::<Option<String>, _>("area")),
         notes: row.get("notes"),
         deadline: row
             .get::<Option<i64>, _>("deadline")
@@ -168,33 +153,25 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_parse_uuid_with_fallback_standard() {
-        let uuid_str = "550e8400-e29b-41d4-a716-446655440000";
-        let uuid = parse_uuid_with_fallback(uuid_str);
-        assert_eq!(uuid.to_string(), uuid_str);
+    fn id_from_row_preserves_native_things_id() {
+        let id = id_from_row("R4t2G8Q63aGZq4epMHNeCr".to_string());
+        assert_eq!(id.as_str(), "R4t2G8Q63aGZq4epMHNeCr");
     }
 
     #[test]
-    fn test_parse_uuid_with_fallback_things_format() {
-        // Things 3 uses a different format - should fall back to things_uuid_to_uuid
-        let things_id = "ABC123XYZ";
-        let uuid1 = parse_uuid_with_fallback(things_id);
-        let uuid2 = parse_uuid_with_fallback(things_id);
-        // Should be consistent
-        assert_eq!(uuid1, uuid2);
+    fn id_from_row_preserves_hyphenated_uuid() {
+        let id = id_from_row("550e8400-e29b-41d4-a716-446655440000".to_string());
+        assert_eq!(id.as_str(), "550e8400-e29b-41d4-a716-446655440000");
     }
 
     #[test]
-    fn test_parse_optional_uuid_some() {
-        let uuid_str = "550e8400-e29b-41d4-a716-446655440000";
-        let result = parse_optional_uuid(Some(uuid_str.to_string()));
-        assert!(result.is_some());
-        assert_eq!(result.unwrap().to_string(), uuid_str);
+    fn optional_id_from_row_passes_through_none() {
+        assert!(optional_id_from_row(None).is_none());
     }
 
     #[test]
-    fn test_parse_optional_uuid_none() {
-        let result = parse_optional_uuid(None);
-        assert!(result.is_none());
+    fn optional_id_from_row_wraps_some() {
+        let opt = optional_id_from_row(Some("ABC123XYZ456789012345".to_string()));
+        assert_eq!(opt.unwrap().as_str(), "ABC123XYZ456789012345");
     }
 }

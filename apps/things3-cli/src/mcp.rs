@@ -2,14 +2,15 @@
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::str::FromStr;
 use std::sync::Arc;
 use things3_core::{
-    BackupManager, DataExporter, DeleteChildHandling, McpServerConfig, MutationBackend,
-    PerformanceMonitor, SqlxBackend, ThingsCache, ThingsConfig, ThingsDatabase, ThingsError,
+    models::ThingsId, BackupManager, DataExporter, DeleteChildHandling, McpServerConfig,
+    MutationBackend, PerformanceMonitor, SqlxBackend, ThingsCache, ThingsConfig, ThingsDatabase,
+    ThingsError,
 };
 use thiserror::Error;
 use tokio::sync::Mutex;
-use uuid::Uuid;
 
 pub mod io_wrapper;
 pub mod middleware;
@@ -2101,7 +2102,7 @@ impl ThingsMcpServer {
         let _area_uuid = args
             .get("area_uuid")
             .and_then(|v| v.as_str())
-            .and_then(|s| uuid::Uuid::parse_str(s).ok());
+            .and_then(|s| ThingsId::from_str(s).ok());
 
         let projects = self
             .db
@@ -2177,15 +2178,15 @@ impl ThingsMcpServer {
             .and_then(|v| v.as_str())
             .and_then(|s| chrono::NaiveDate::parse_from_str(s, "%Y-%m-%d").ok());
 
-        let project_uuid = args
+        let project_uuid: Option<ThingsId> = args
             .get("project_uuid")
             .and_then(|v| v.as_str())
-            .and_then(|s| Uuid::parse_str(s).ok());
+            .and_then(|s| ThingsId::from_str(s).ok());
 
-        let area_uuid = args
+        let area_uuid: Option<ThingsId> = args
             .get("area_uuid")
             .and_then(|v| v.as_str())
-            .and_then(|s| Uuid::parse_str(s).ok());
+            .and_then(|s| ThingsId::from_str(s).ok());
 
         let tags = args.get("tags").and_then(|v| v.as_array()).map(|arr| {
             arr.iter()
@@ -2288,11 +2289,11 @@ impl ThingsMcpServer {
             .and_then(|v| v.as_str())
             .ok_or_else(|| McpError::invalid_parameter("uuid", "UUID is required"))?;
 
-        let uuid = uuid::Uuid::parse_str(uuid_str)
-            .map_err(|e| McpError::invalid_parameter("uuid", format!("Invalid UUID: {e}")))?;
+        let id = ThingsId::from_str(uuid_str)
+            .map_err(|e| McpError::invalid_parameter("uuid", format!("Invalid ID: {e}")))?;
 
         self.mutations
-            .complete_task(&uuid)
+            .complete_task(&id)
             .await
             .map_err(|e| McpError::database_operation_failed("complete_task", e))?;
 
@@ -2316,11 +2317,11 @@ impl ThingsMcpServer {
             .and_then(|v| v.as_str())
             .ok_or_else(|| McpError::invalid_parameter("uuid", "UUID is required"))?;
 
-        let uuid = uuid::Uuid::parse_str(uuid_str)
-            .map_err(|e| McpError::invalid_parameter("uuid", format!("Invalid UUID: {e}")))?;
+        let id = ThingsId::from_str(uuid_str)
+            .map_err(|e| McpError::invalid_parameter("uuid", format!("Invalid ID: {e}")))?;
 
         self.mutations
-            .uncomplete_task(&uuid)
+            .uncomplete_task(&id)
             .await
             .map_err(|e| McpError::database_operation_failed("uncomplete_task", e))?;
 
@@ -2344,8 +2345,8 @@ impl ThingsMcpServer {
             .and_then(|v| v.as_str())
             .ok_or_else(|| McpError::invalid_parameter("uuid", "UUID is required"))?;
 
-        let uuid = uuid::Uuid::parse_str(uuid_str)
-            .map_err(|e| McpError::invalid_parameter("uuid", format!("Invalid UUID: {e}")))?;
+        let id = ThingsId::from_str(uuid_str)
+            .map_err(|e| McpError::invalid_parameter("uuid", format!("Invalid ID: {e}")))?;
 
         let child_handling_str = args
             .get("child_handling")
@@ -2359,7 +2360,7 @@ impl ThingsMcpServer {
         };
 
         self.mutations
-            .delete_task(&uuid, child_handling)
+            .delete_task(&id, child_handling)
             .await
             .map_err(|e| McpError::database_operation_failed("delete_task", e))?;
 
@@ -2391,33 +2392,33 @@ impl ThingsMcpServer {
             .filter_map(|v| v.as_str().map(String::from))
             .collect();
 
-        let task_uuids: Vec<uuid::Uuid> = task_uuid_strs
+        let task_uuids: Vec<ThingsId> = task_uuid_strs
             .iter()
             .map(|s| {
-                uuid::Uuid::parse_str(s).map_err(|e| {
-                    McpError::invalid_parameter("task_uuids", format!("Invalid UUID: {e}"))
+                ThingsId::from_str(s).map_err(|e| {
+                    McpError::invalid_parameter("task_uuids", format!("Invalid ID: {e}"))
                 })
             })
             .collect::<McpResult<Vec<_>>>()?;
 
         // Parse optional project_uuid
-        let project_uuid = args
+        let project_uuid: Option<ThingsId> = args
             .get("project_uuid")
             .and_then(|v| v.as_str())
             .map(|s| {
-                uuid::Uuid::parse_str(s).map_err(|e| {
-                    McpError::invalid_parameter("project_uuid", format!("Invalid UUID: {e}"))
+                ThingsId::from_str(s).map_err(|e| {
+                    McpError::invalid_parameter("project_uuid", format!("Invalid ID: {e}"))
                 })
             })
             .transpose()?;
 
         // Parse optional area_uuid
-        let area_uuid = args
+        let area_uuid: Option<ThingsId> = args
             .get("area_uuid")
             .and_then(|v| v.as_str())
             .map(|s| {
-                uuid::Uuid::parse_str(s).map_err(|e| {
-                    McpError::invalid_parameter("area_uuid", format!("Invalid UUID: {e}"))
+                ThingsId::from_str(s).map_err(|e| {
+                    McpError::invalid_parameter("area_uuid", format!("Invalid ID: {e}"))
                 })
             })
             .transpose()?;
@@ -2461,11 +2462,11 @@ impl ThingsMcpServer {
             .filter_map(|v| v.as_str().map(String::from))
             .collect();
 
-        let task_uuids: Vec<uuid::Uuid> = task_uuid_strs
+        let task_uuids: Vec<ThingsId> = task_uuid_strs
             .iter()
             .map(|s| {
-                uuid::Uuid::parse_str(s).map_err(|e| {
-                    McpError::invalid_parameter("task_uuids", format!("Invalid UUID: {e}"))
+                ThingsId::from_str(s).map_err(|e| {
+                    McpError::invalid_parameter("task_uuids", format!("Invalid ID: {e}"))
                 })
             })
             .collect::<McpResult<Vec<_>>>()?;
@@ -2540,11 +2541,11 @@ impl ThingsMcpServer {
             .filter_map(|v| v.as_str().map(String::from))
             .collect();
 
-        let task_uuids: Vec<uuid::Uuid> = task_uuid_strs
+        let task_uuids: Vec<ThingsId> = task_uuid_strs
             .iter()
             .map(|s| {
-                uuid::Uuid::parse_str(s).map_err(|e| {
-                    McpError::invalid_parameter("task_uuids", format!("Invalid UUID: {e}"))
+                ThingsId::from_str(s).map_err(|e| {
+                    McpError::invalid_parameter("task_uuids", format!("Invalid ID: {e}"))
                 })
             })
             .collect::<McpResult<Vec<_>>>()?;
@@ -2582,11 +2583,11 @@ impl ThingsMcpServer {
             .filter_map(|v| v.as_str().map(String::from))
             .collect();
 
-        let task_uuids: Vec<uuid::Uuid> = task_uuid_strs
+        let task_uuids: Vec<ThingsId> = task_uuid_strs
             .iter()
             .map(|s| {
-                uuid::Uuid::parse_str(s).map_err(|e| {
-                    McpError::invalid_parameter("task_uuids", format!("Invalid UUID: {e}"))
+                ThingsId::from_str(s).map_err(|e| {
+                    McpError::invalid_parameter("task_uuids", format!("Invalid ID: {e}"))
                 })
             })
             .collect::<McpResult<Vec<_>>>()?;
@@ -2623,12 +2624,12 @@ impl ThingsMcpServer {
 
         let notes = args.get("notes").and_then(|v| v.as_str()).map(String::from);
 
-        let area_uuid = args
+        let area_uuid: Option<ThingsId> = args
             .get("area_uuid")
             .and_then(|v| v.as_str())
             .map(|s| {
-                uuid::Uuid::parse_str(s).map_err(|e| {
-                    McpError::invalid_parameter("area_uuid", format!("Invalid UUID: {e}"))
+                ThingsId::from_str(s).map_err(|e| {
+                    McpError::invalid_parameter("area_uuid", format!("Invalid ID: {e}"))
                 })
             })
             .transpose()?;
@@ -2668,7 +2669,7 @@ impl ThingsMcpServer {
             tags,
         };
 
-        let uuid = self
+        let id = self
             .mutations
             .create_project(request)
             .await
@@ -2676,7 +2677,7 @@ impl ThingsMcpServer {
 
         let response = serde_json::json!({
             "message": "Project created successfully",
-            "uuid": uuid.to_string()
+            "uuid": id.to_string()
         });
 
         Ok(CallToolResult {
@@ -2694,18 +2695,18 @@ impl ThingsMcpServer {
             .and_then(|v| v.as_str())
             .ok_or_else(|| McpError::invalid_parameter("uuid", "UUID is required"))?;
 
-        let uuid = uuid::Uuid::parse_str(uuid_str)
-            .map_err(|e| McpError::invalid_parameter("uuid", format!("Invalid UUID: {e}")))?;
+        let id = ThingsId::from_str(uuid_str)
+            .map_err(|e| McpError::invalid_parameter("uuid", format!("Invalid ID: {e}")))?;
 
         let title = args.get("title").and_then(|v| v.as_str()).map(String::from);
         let notes = args.get("notes").and_then(|v| v.as_str()).map(String::from);
 
-        let area_uuid = args
+        let area_uuid: Option<ThingsId> = args
             .get("area_uuid")
             .and_then(|v| v.as_str())
             .map(|s| {
-                uuid::Uuid::parse_str(s).map_err(|e| {
-                    McpError::invalid_parameter("area_uuid", format!("Invalid UUID: {e}"))
+                ThingsId::from_str(s).map_err(|e| {
+                    McpError::invalid_parameter("area_uuid", format!("Invalid ID: {e}"))
                 })
             })
             .transpose()?;
@@ -2737,7 +2738,7 @@ impl ThingsMcpServer {
         });
 
         let request = things3_core::models::UpdateProjectRequest {
-            uuid,
+            uuid: id,
             title,
             notes,
             area_uuid,
@@ -2771,8 +2772,8 @@ impl ThingsMcpServer {
             .and_then(|v| v.as_str())
             .ok_or_else(|| McpError::invalid_parameter("uuid", "UUID is required"))?;
 
-        let uuid = uuid::Uuid::parse_str(uuid_str)
-            .map_err(|e| McpError::invalid_parameter("uuid", format!("Invalid UUID: {e}")))?;
+        let id = ThingsId::from_str(uuid_str)
+            .map_err(|e| McpError::invalid_parameter("uuid", format!("Invalid ID: {e}")))?;
 
         let child_handling_str = args
             .get("child_handling")
@@ -2786,7 +2787,7 @@ impl ThingsMcpServer {
         };
 
         self.mutations
-            .complete_project(&uuid, child_handling)
+            .complete_project(&id, child_handling)
             .await
             .map_err(|e| McpError::database_operation_failed("complete_project", e))?;
 
@@ -2810,8 +2811,8 @@ impl ThingsMcpServer {
             .and_then(|v| v.as_str())
             .ok_or_else(|| McpError::invalid_parameter("uuid", "UUID is required"))?;
 
-        let uuid = uuid::Uuid::parse_str(uuid_str)
-            .map_err(|e| McpError::invalid_parameter("uuid", format!("Invalid UUID: {e}")))?;
+        let id = ThingsId::from_str(uuid_str)
+            .map_err(|e| McpError::invalid_parameter("uuid", format!("Invalid ID: {e}")))?;
 
         let child_handling_str = args
             .get("child_handling")
@@ -2825,7 +2826,7 @@ impl ThingsMcpServer {
         };
 
         self.mutations
-            .delete_project(&uuid, child_handling)
+            .delete_project(&id, child_handling)
             .await
             .map_err(|e| McpError::database_operation_failed("delete_project", e))?;
 
@@ -2878,8 +2879,8 @@ impl ThingsMcpServer {
             .and_then(|v| v.as_str())
             .ok_or_else(|| McpError::invalid_parameter("uuid", "UUID is required"))?;
 
-        let uuid = uuid::Uuid::parse_str(uuid_str)
-            .map_err(|e| McpError::invalid_parameter("uuid", format!("Invalid UUID: {e}")))?;
+        let id = ThingsId::from_str(uuid_str)
+            .map_err(|e| McpError::invalid_parameter("uuid", format!("Invalid ID: {e}")))?;
 
         let title = args
             .get("title")
@@ -2887,7 +2888,7 @@ impl ThingsMcpServer {
             .ok_or_else(|| McpError::invalid_parameter("title", "Title is required"))?
             .to_string();
 
-        let request = things3_core::models::UpdateAreaRequest { uuid, title };
+        let request = things3_core::models::UpdateAreaRequest { uuid: id, title };
 
         self.mutations
             .update_area(request)
@@ -2914,11 +2915,11 @@ impl ThingsMcpServer {
             .and_then(|v| v.as_str())
             .ok_or_else(|| McpError::invalid_parameter("uuid", "UUID is required"))?;
 
-        let uuid = uuid::Uuid::parse_str(uuid_str)
-            .map_err(|e| McpError::invalid_parameter("uuid", format!("Invalid UUID: {e}")))?;
+        let id = ThingsId::from_str(uuid_str)
+            .map_err(|e| McpError::invalid_parameter("uuid", format!("Invalid ID: {e}")))?;
 
         self.mutations
-            .delete_area(&uuid)
+            .delete_area(&id)
             .await
             .map_err(|e| McpError::database_operation_failed("delete_area", e))?;
 
@@ -3432,10 +3433,10 @@ impl ThingsMcpServer {
             .and_then(|v| v.as_str())
             .map(|s| s.to_string());
 
-        let parent_uuid: Option<Uuid> = args
+        let parent_uuid: Option<ThingsId> = args
             .get("parent_uuid")
             .and_then(|v| v.as_str())
-            .and_then(|s| Uuid::parse_str(s).ok());
+            .and_then(|s| ThingsId::from_str(s).ok());
 
         let force = args.get("force").and_then(|v| v.as_bool()).unwrap_or(false);
 
@@ -3494,10 +3495,10 @@ impl ThingsMcpServer {
     }
 
     async fn handle_update_tag(&self, args: Value) -> McpResult<CallToolResult> {
-        let uuid: Uuid = args
+        let uuid: ThingsId = args
             .get("uuid")
             .and_then(|v| v.as_str())
-            .and_then(|s| Uuid::parse_str(s).ok())
+            .and_then(|s| ThingsId::from_str(s).ok())
             .ok_or_else(|| {
                 McpError::invalid_parameter("uuid", "Missing or invalid 'uuid' parameter")
             })?;
@@ -3512,11 +3513,12 @@ impl ThingsMcpServer {
             .and_then(|v| v.as_str())
             .map(|s| s.to_string());
 
-        let parent_uuid: Option<Uuid> = args
+        let parent_uuid: Option<ThingsId> = args
             .get("parent_uuid")
             .and_then(|v| v.as_str())
-            .and_then(|s| Uuid::parse_str(s).ok());
+            .and_then(|s| ThingsId::from_str(s).ok());
 
+        let uuid_str = uuid.to_string();
         let request = things3_core::models::UpdateTagRequest {
             uuid,
             title,
@@ -3531,7 +3533,7 @@ impl ThingsMcpServer {
 
         let response = serde_json::json!({
             "message": "Tag updated successfully",
-            "uuid": uuid
+            "uuid": uuid_str
         });
 
         Ok(CallToolResult {
@@ -3544,10 +3546,10 @@ impl ThingsMcpServer {
     }
 
     async fn handle_delete_tag(&self, args: Value) -> McpResult<CallToolResult> {
-        let uuid: Uuid = args
+        let uuid: ThingsId = args
             .get("uuid")
             .and_then(|v| v.as_str())
-            .and_then(|s| Uuid::parse_str(s).ok())
+            .and_then(|s| ThingsId::from_str(s).ok())
             .ok_or_else(|| {
                 McpError::invalid_parameter("uuid", "Missing or invalid 'uuid' parameter")
             })?;
@@ -3577,10 +3579,10 @@ impl ThingsMcpServer {
     }
 
     async fn handle_merge_tags(&self, args: Value) -> McpResult<CallToolResult> {
-        let source_uuid: Uuid = args
+        let source_uuid: ThingsId = args
             .get("source_uuid")
             .and_then(|v| v.as_str())
-            .and_then(|s| Uuid::parse_str(s).ok())
+            .and_then(|s| ThingsId::from_str(s).ok())
             .ok_or_else(|| {
                 McpError::invalid_parameter(
                     "source_uuid",
@@ -3588,10 +3590,10 @@ impl ThingsMcpServer {
                 )
             })?;
 
-        let target_uuid: Uuid = args
+        let target_uuid: ThingsId = args
             .get("target_uuid")
             .and_then(|v| v.as_str())
-            .and_then(|s| Uuid::parse_str(s).ok())
+            .and_then(|s| ThingsId::from_str(s).ok())
             .ok_or_else(|| {
                 McpError::invalid_parameter(
                     "target_uuid",
@@ -3620,10 +3622,10 @@ impl ThingsMcpServer {
     }
 
     async fn handle_add_tag_to_task(&self, args: Value) -> McpResult<CallToolResult> {
-        let task_uuid: Uuid = args
+        let task_uuid: ThingsId = args
             .get("task_uuid")
             .and_then(|v| v.as_str())
-            .and_then(|s| Uuid::parse_str(s).ok())
+            .and_then(|s| ThingsId::from_str(s).ok())
             .ok_or_else(|| {
                 McpError::invalid_parameter("task_uuid", "Missing or invalid 'task_uuid' parameter")
             })?;
@@ -3669,10 +3671,10 @@ impl ThingsMcpServer {
     }
 
     async fn handle_remove_tag_from_task(&self, args: Value) -> McpResult<CallToolResult> {
-        let task_uuid: Uuid = args
+        let task_uuid: ThingsId = args
             .get("task_uuid")
             .and_then(|v| v.as_str())
-            .and_then(|s| Uuid::parse_str(s).ok())
+            .and_then(|s| ThingsId::from_str(s).ok())
             .ok_or_else(|| {
                 McpError::invalid_parameter("task_uuid", "Missing or invalid 'task_uuid' parameter")
             })?;
@@ -3707,10 +3709,10 @@ impl ThingsMcpServer {
     }
 
     async fn handle_set_task_tags(&self, args: Value) -> McpResult<CallToolResult> {
-        let task_uuid: Uuid = args
+        let task_uuid: ThingsId = args
             .get("task_uuid")
             .and_then(|v| v.as_str())
-            .and_then(|s| Uuid::parse_str(s).ok())
+            .and_then(|s| ThingsId::from_str(s).ok())
             .ok_or_else(|| {
                 McpError::invalid_parameter("task_uuid", "Missing or invalid 'task_uuid' parameter")
             })?;
@@ -3748,10 +3750,10 @@ impl ThingsMcpServer {
     }
 
     async fn handle_get_tag_statistics(&self, args: Value) -> McpResult<CallToolResult> {
-        let uuid: Uuid = args
+        let uuid: ThingsId = args
             .get("uuid")
             .and_then(|v| v.as_str())
-            .and_then(|s| Uuid::parse_str(s).ok())
+            .and_then(|s| ThingsId::from_str(s).ok())
             .ok_or_else(|| {
                 McpError::invalid_parameter("uuid", "Missing or invalid 'uuid' parameter")
             })?;

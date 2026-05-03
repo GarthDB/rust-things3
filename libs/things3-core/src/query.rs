@@ -1,8 +1,7 @@
 //! Query builder for filtering and searching tasks
 
-use crate::models::{TaskFilters, TaskStatus, TaskType};
+use crate::models::{TaskFilters, TaskStatus, TaskType, ThingsId};
 use chrono::{Datelike, Duration, NaiveDate, Utc};
-use uuid::Uuid;
 
 /// Builder for constructing task queries with filters
 #[derive(Debug, Clone)]
@@ -68,14 +67,14 @@ impl TaskQueryBuilder {
 
     /// Filter by project UUID
     #[must_use]
-    pub const fn project_uuid(mut self, project_uuid: Uuid) -> Self {
+    pub fn project_uuid(mut self, project_uuid: ThingsId) -> Self {
         self.filters.project_uuid = Some(project_uuid);
         self
     }
 
     /// Filter by area UUID
     #[must_use]
-    pub const fn area_uuid(mut self, area_uuid: Uuid) -> Self {
+    pub fn area_uuid(mut self, area_uuid: ThingsId) -> Self {
         self.filters.area_uuid = Some(area_uuid);
         self
     }
@@ -462,10 +461,12 @@ impl TaskQueryBuilder {
             tasks
                 .last()
                 .map(|last| {
-                    let payload = crate::cursor::CursorPayload {
-                        c: last.created,
-                        u: last.uuid,
-                    };
+                    let u = uuid::Uuid::parse_str(last.uuid.as_str()).map_err(|e| {
+                        crate::error::ThingsError::InvalidCursor(format!(
+                            "task uuid is not RFC-4122: {e}"
+                        ))
+                    })?;
+                    let payload = crate::cursor::CursorPayload { c: last.created, u };
                     crate::cursor::Cursor::encode(&payload)
                 })
                 .transpose()?
@@ -604,7 +605,7 @@ impl TaskQueryBuilder {
             b.score
                 .partial_cmp(&a.score)
                 .unwrap_or(std::cmp::Ordering::Equal)
-                .then_with(|| a.task.uuid.cmp(&b.task.uuid))
+                .then_with(|| a.task.uuid.as_str().cmp(b.task.uuid.as_str()))
         });
 
         let offset = offset.unwrap_or(0);
@@ -734,7 +735,6 @@ fn end_of_week(d: NaiveDate) -> NaiveDate {
 mod tests {
     use super::*;
     use chrono::NaiveDate;
-    use uuid::Uuid;
 
     #[test]
     fn test_task_query_builder_new() {
@@ -782,8 +782,8 @@ mod tests {
 
     #[test]
     fn test_task_query_builder_project_uuid() {
-        let uuid = Uuid::new_v4();
-        let builder = TaskQueryBuilder::new().project_uuid(uuid);
+        let uuid = ThingsId::new_v4();
+        let builder = TaskQueryBuilder::new().project_uuid(uuid.clone());
         let filters = builder.build();
 
         assert_eq!(filters.project_uuid, Some(uuid));
@@ -791,8 +791,8 @@ mod tests {
 
     #[test]
     fn test_task_query_builder_area_uuid() {
-        let uuid = Uuid::new_v4();
-        let builder = TaskQueryBuilder::new().area_uuid(uuid);
+        let uuid = ThingsId::new_v4();
+        let builder = TaskQueryBuilder::new().area_uuid(uuid.clone());
         let filters = builder.build();
 
         assert_eq!(filters.area_uuid, Some(uuid));
@@ -991,9 +991,8 @@ mod tests {
         #[test]
         fn test_task_fuzzy_score_uses_max_of_title_notes() {
             use chrono::Utc;
-            use uuid::Uuid;
             let task = crate::models::Task {
-                uuid: Uuid::new_v4(),
+                uuid: ThingsId::new_v4(),
                 title: "unrelated title xyz".to_string(),
                 notes: Some("meeting agenda important".to_string()),
                 task_type: crate::models::TaskType::Todo,
@@ -1022,12 +1021,12 @@ mod tests {
         fn test_to_saved_query_captures_all_state() {
             let from = NaiveDate::from_ymd_opt(2026, 1, 1).unwrap();
             let to = NaiveDate::from_ymd_opt(2026, 12, 31).unwrap();
-            let project = Uuid::new_v4();
+            let project = ThingsId::new_v4();
 
             let builder = TaskQueryBuilder::new()
                 .status(TaskStatus::Incomplete)
                 .task_type(TaskType::Todo)
-                .project_uuid(project)
+                .project_uuid(project.clone())
                 .tags(vec!["work".to_string()])
                 .any_tags(vec!["urgent".to_string(), "p0".to_string()])
                 .exclude_tags(vec!["archived".to_string()])
@@ -1213,7 +1212,7 @@ mod tests {
 
     #[test]
     fn test_task_query_builder_chaining() {
-        let uuid = Uuid::new_v4();
+        let uuid = ThingsId::new_v4();
         let tags = vec!["urgent".to_string()];
         let from = NaiveDate::from_ymd_opt(2024, 1, 1).unwrap();
         let to = NaiveDate::from_ymd_opt(2024, 12, 31).unwrap();
@@ -1221,7 +1220,7 @@ mod tests {
         let builder = TaskQueryBuilder::new()
             .status(TaskStatus::Incomplete)
             .task_type(TaskType::Todo)
-            .project_uuid(uuid)
+            .project_uuid(uuid.clone())
             .tags(tags.clone())
             .start_date_range(Some(from), Some(to))
             .search("test")

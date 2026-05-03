@@ -8,7 +8,6 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use uuid::Uuid;
 
 use super::MutationBackend;
 use crate::database::ThingsDatabase;
@@ -17,8 +16,8 @@ use crate::models::{
     BulkCompleteRequest, BulkCreateTasksRequest, BulkDeleteRequest, BulkMoveRequest,
     BulkOperationResult, BulkUpdateDatesRequest, CreateAreaRequest, CreateProjectRequest,
     CreateTagRequest, CreateTaskRequest, DeleteChildHandling, ProjectChildHandling,
-    TagAssignmentResult, TagCreationResult, TagMatch, UpdateAreaRequest, UpdateProjectRequest,
-    UpdateTagRequest, UpdateTaskRequest,
+    TagAssignmentResult, TagCreationResult, TagMatch, ThingsId, UpdateAreaRequest,
+    UpdateProjectRequest, UpdateTagRequest, UpdateTaskRequest,
 };
 
 pub struct SqlxBackend {
@@ -36,7 +35,7 @@ impl SqlxBackend {
 impl MutationBackend for SqlxBackend {
     // ---- Tasks ----
 
-    async fn create_task(&self, request: CreateTaskRequest) -> ThingsResult<Uuid> {
+    async fn create_task(&self, request: CreateTaskRequest) -> ThingsResult<ThingsId> {
         self.db.create_task(request).await
     }
 
@@ -83,20 +82,20 @@ impl MutationBackend for SqlxBackend {
         self.db.update_task(request).await
     }
 
-    async fn complete_task(&self, uuid: &Uuid) -> ThingsResult<()> {
-        self.db.complete_task(uuid).await
+    async fn complete_task(&self, id: &ThingsId) -> ThingsResult<()> {
+        self.db.complete_task(id).await
     }
 
-    async fn uncomplete_task(&self, uuid: &Uuid) -> ThingsResult<()> {
-        self.db.uncomplete_task(uuid).await
+    async fn uncomplete_task(&self, id: &ThingsId) -> ThingsResult<()> {
+        self.db.uncomplete_task(id).await
     }
 
     async fn delete_task(
         &self,
-        uuid: &Uuid,
+        id: &ThingsId,
         child_handling: DeleteChildHandling,
     ) -> ThingsResult<()> {
-        self.db.delete_task(uuid, child_handling).await
+        self.db.delete_task(id, child_handling).await
     }
 
     async fn bulk_delete(&self, request: BulkDeleteRequest) -> ThingsResult<BulkOperationResult> {
@@ -123,7 +122,7 @@ impl MutationBackend for SqlxBackend {
 
     // ---- Projects ----
 
-    async fn create_project(&self, request: CreateProjectRequest) -> ThingsResult<Uuid> {
+    async fn create_project(&self, request: CreateProjectRequest) -> ThingsResult<ThingsId> {
         self.db.create_project(request).await
     }
 
@@ -133,23 +132,23 @@ impl MutationBackend for SqlxBackend {
 
     async fn complete_project(
         &self,
-        uuid: &Uuid,
+        id: &ThingsId,
         child_handling: ProjectChildHandling,
     ) -> ThingsResult<()> {
-        self.db.complete_project(uuid, child_handling).await
+        self.db.complete_project(id, child_handling).await
     }
 
     async fn delete_project(
         &self,
-        uuid: &Uuid,
+        id: &ThingsId,
         child_handling: ProjectChildHandling,
     ) -> ThingsResult<()> {
-        self.db.delete_project(uuid, child_handling).await
+        self.db.delete_project(id, child_handling).await
     }
 
     // ---- Areas ----
 
-    async fn create_area(&self, request: CreateAreaRequest) -> ThingsResult<Uuid> {
+    async fn create_area(&self, request: CreateAreaRequest) -> ThingsResult<ThingsId> {
         self.db.create_area(request).await
     }
 
@@ -157,8 +156,8 @@ impl MutationBackend for SqlxBackend {
         self.db.update_area(request).await
     }
 
-    async fn delete_area(&self, uuid: &Uuid) -> ThingsResult<()> {
-        self.db.delete_area(uuid).await
+    async fn delete_area(&self, id: &ThingsId) -> ThingsResult<()> {
+        self.db.delete_area(id).await
     }
 
     // ---- Tags ----
@@ -169,8 +168,11 @@ impl MutationBackend for SqlxBackend {
         force: bool,
     ) -> ThingsResult<TagCreationResult> {
         if force {
-            let uuid = self.db.create_tag_force(request).await?;
-            Ok(TagCreationResult::Created { uuid, is_new: true })
+            let id = self.db.create_tag_force(request).await?;
+            Ok(TagCreationResult::Created {
+                uuid: id,
+                is_new: true,
+            })
         } else {
             self.db.create_tag_smart(request).await
         }
@@ -180,31 +182,31 @@ impl MutationBackend for SqlxBackend {
         self.db.update_tag(request).await
     }
 
-    async fn delete_tag(&self, uuid: &Uuid, remove_from_tasks: bool) -> ThingsResult<()> {
-        self.db.delete_tag(uuid, remove_from_tasks).await
+    async fn delete_tag(&self, id: &ThingsId, remove_from_tasks: bool) -> ThingsResult<()> {
+        self.db.delete_tag(id, remove_from_tasks).await
     }
 
-    async fn merge_tags(&self, source_uuid: &Uuid, target_uuid: &Uuid) -> ThingsResult<()> {
-        self.db.merge_tags(source_uuid, target_uuid).await
+    async fn merge_tags(&self, source_id: &ThingsId, target_id: &ThingsId) -> ThingsResult<()> {
+        self.db.merge_tags(source_id, target_id).await
     }
 
     async fn add_tag_to_task(
         &self,
-        task_uuid: &Uuid,
+        task_id: &ThingsId,
         tag_title: &str,
     ) -> ThingsResult<TagAssignmentResult> {
-        self.db.add_tag_to_task(task_uuid, tag_title).await
+        self.db.add_tag_to_task(task_id, tag_title).await
     }
 
-    async fn remove_tag_from_task(&self, task_uuid: &Uuid, tag_title: &str) -> ThingsResult<()> {
-        self.db.remove_tag_from_task(task_uuid, tag_title).await
+    async fn remove_tag_from_task(&self, task_id: &ThingsId, tag_title: &str) -> ThingsResult<()> {
+        self.db.remove_tag_from_task(task_id, tag_title).await
     }
 
     async fn set_task_tags(
         &self,
-        task_uuid: &Uuid,
+        task_id: &ThingsId,
         tag_titles: Vec<String>,
     ) -> ThingsResult<Vec<TagMatch>> {
-        self.db.set_task_tags(task_uuid, tag_titles).await
+        self.db.set_task_tags(task_id, tag_titles).await
     }
 }

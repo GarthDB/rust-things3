@@ -236,10 +236,9 @@ impl SavedQueryStore {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::models::{TaskStatus, TaskType};
+    use crate::models::{TaskStatus, TaskType, ThingsId};
     use chrono::NaiveDate;
     use tempfile::TempDir;
-    use uuid::Uuid;
 
     fn fully_populated_query(name: &str) -> SavedQuery {
         SavedQuery {
@@ -248,7 +247,9 @@ mod tests {
             filters: TaskFilters {
                 status: Some(TaskStatus::Incomplete),
                 task_type: Some(TaskType::Todo),
-                project_uuid: Some(Uuid::nil()),
+                project_uuid: Some(ThingsId::from_trusted(
+                    "00000000-0000-0000-0000-000000000000".to_string(),
+                )),
                 area_uuid: None,
                 tags: Some(vec!["work".to_string()]),
                 start_date_from: Some(NaiveDate::from_ymd_opt(2026, 1, 1).unwrap()),

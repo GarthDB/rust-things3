@@ -21,10 +21,9 @@
 //!   `date "…"` literal.
 
 use chrono::{Datelike, NaiveDate};
-use uuid::Uuid;
 
 use super::escape::as_applescript_string;
-use crate::models::{CreateTaskRequest, TaskStatus, UpdateTaskRequest};
+use crate::models::{CreateTaskRequest, TaskStatus, ThingsId, UpdateTaskRequest};
 
 /// Wrap a script body in the standard `tell application` + `with timeout`
 /// envelope. `body` is appended verbatim — caller controls indentation.
@@ -103,11 +102,11 @@ pub(crate) fn create_task_script(req: &CreateTaskRequest) -> String {
     }
 
     // Container precedence matches the sqlx backend: project > area > parent.
-    if let Some(uuid) = req.project_uuid {
+    if let Some(uuid) = &req.project_uuid {
         body.push_str(&format!("\t\tmove newTask to project id \"{uuid}\"\n"));
-    } else if let Some(uuid) = req.area_uuid {
+    } else if let Some(uuid) = &req.area_uuid {
         body.push_str(&format!("\t\tmove newTask to area id \"{uuid}\"\n"));
-    } else if let Some(uuid) = req.parent_uuid {
+    } else if let Some(uuid) = &req.parent_uuid {
         body.push_str(&format!("\t\tmove newTask to to do id \"{uuid}\"\n"));
     }
 
@@ -156,9 +155,9 @@ pub(crate) fn update_task_script(req: &UpdateTaskRequest) -> String {
             status_as_applescript(status),
         ));
     }
-    if let Some(uuid) = req.project_uuid {
+    if let Some(uuid) = &req.project_uuid {
         body.push_str(&format!("\t\tmove t to project id \"{uuid}\"\n"));
-    } else if let Some(uuid) = req.area_uuid {
+    } else if let Some(uuid) = &req.area_uuid {
         body.push_str(&format!("\t\tmove t to area id \"{uuid}\"\n"));
     }
     if let Some(tags) = &req.tags {
@@ -173,32 +172,32 @@ pub(crate) fn update_task_script(req: &UpdateTaskRequest) -> String {
 }
 
 #[allow(dead_code)] // Used by AppleScriptBackend, added in #134.
-pub(crate) fn complete_task_script(uuid: &Uuid) -> String {
+pub(crate) fn complete_task_script(id: &ThingsId) -> String {
     wrap(&format!(
-        "\t\tset status of to do id \"{uuid}\" to completed\n"
+        "\t\tset status of to do id \"{id}\" to completed\n"
     ))
 }
 
 #[allow(dead_code)] // Used by AppleScriptBackend, added in #134.
-pub(crate) fn uncomplete_task_script(uuid: &Uuid) -> String {
-    wrap(&format!("\t\tset status of to do id \"{uuid}\" to open\n"))
+pub(crate) fn uncomplete_task_script(id: &ThingsId) -> String {
+    wrap(&format!("\t\tset status of to do id \"{id}\" to open\n"))
 }
 
 #[allow(dead_code)] // Used by AppleScriptBackend, added in #134.
-pub(crate) fn delete_task_script(uuid: &Uuid) -> String {
-    wrap(&format!("\t\tdelete to do id \"{uuid}\"\n"))
+pub(crate) fn delete_task_script(id: &ThingsId) -> String {
+    wrap(&format!("\t\tdelete to do id \"{id}\"\n"))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    fn sample_uuid() -> Uuid {
-        Uuid::parse_str("9d3f1e44-5c2a-4b8e-9c1f-7e2d8a4b3c5e").unwrap()
+    fn sample_uuid() -> ThingsId {
+        ThingsId::from_trusted("9d3f1e44-5c2a-4b8e-9c1f-7e2d8a4b3c5e".to_string())
     }
 
-    fn project_uuid() -> Uuid {
-        Uuid::parse_str("11111111-2222-3333-4444-555555555555").unwrap()
+    fn project_uuid() -> ThingsId {
+        ThingsId::from_trusted("11111111-2222-3333-4444-555555555555".to_string())
     }
 
     fn date(y: i32, m: u32, d: u32) -> NaiveDate {

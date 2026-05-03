@@ -152,7 +152,7 @@ async fn test_create_tag_force_skips_check() {
         parent_uuid: None,
     };
     let uuid2 = db.create_tag_force(request2).await.unwrap();
-    assert!(!uuid2.is_nil());
+    assert!(!uuid2.as_str().is_empty());
 
     // Both should exist
     let all_tags = db.get_all_tags().await.unwrap();

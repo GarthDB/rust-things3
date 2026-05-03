@@ -7,8 +7,7 @@ use things3_core::models::{
     BulkCompleteRequest, BulkDeleteRequest, BulkMoveRequest, BulkUpdateDatesRequest,
 };
 use things3_core::test_utils::{create_test_database_and_connect, TaskRequestBuilder};
-use things3_core::ThingsError;
-use uuid::Uuid;
+use things3_core::{ThingsError, ThingsId};
 
 // ============================================================================
 // Bulk Move Tests
@@ -42,7 +41,7 @@ async fn test_bulk_move_to_project() {
     // Bulk move to project
     let bulk_request = BulkMoveRequest {
         task_uuids: task_uuids.clone(),
-        project_uuid: Some(project_uuid),
+        project_uuid: Some(project_uuid.clone()),
         area_uuid: None,
     };
 
@@ -53,7 +52,7 @@ async fn test_bulk_move_to_project() {
     // Verify all tasks now have the project
     for uuid in &task_uuids {
         let task = db.get_task_by_uuid(uuid).await.unwrap().unwrap();
-        assert_eq!(task.project_uuid, Some(project_uuid));
+        assert_eq!(task.project_uuid, Some(project_uuid.clone()));
     }
 }
 
@@ -81,7 +80,7 @@ async fn test_bulk_move_to_area() {
     let bulk_request = BulkMoveRequest {
         task_uuids: task_uuids.clone(),
         project_uuid: None,
-        area_uuid: Some(area_uuid),
+        area_uuid: Some(area_uuid.clone()),
     };
 
     let result = db.bulk_move(bulk_request).await.unwrap();
@@ -91,7 +90,7 @@ async fn test_bulk_move_to_area() {
     // Verify all tasks now have the area
     for uuid in &task_uuids {
         let task = db.get_task_by_uuid(uuid).await.unwrap().unwrap();
-        assert_eq!(task.area_uuid, Some(area_uuid));
+        assert_eq!(task.area_uuid, Some(area_uuid.clone()));
     }
 }
 
@@ -101,7 +100,7 @@ async fn test_bulk_move_empty_uuids() {
 
     let bulk_request = BulkMoveRequest {
         task_uuids: vec![],
-        project_uuid: Some(Uuid::new_v4()),
+        project_uuid: Some(ThingsId::new_v4()),
         area_uuid: None,
     };
 
@@ -130,9 +129,9 @@ async fn test_bulk_move_invalid_uuid() {
     let valid_uuid = db.create_task(request).await.unwrap();
 
     // Try to bulk move with one valid and one invalid UUID
-    let invalid_uuid = Uuid::new_v4(); // Doesn't exist in database
+    let invalid_uuid = ThingsId::new_v4(); // Doesn't exist in database
     let bulk_request = BulkMoveRequest {
-        task_uuids: vec![valid_uuid, invalid_uuid],
+        task_uuids: vec![valid_uuid.clone(), invalid_uuid],
         project_uuid: Some(project_uuid),
         area_uuid: None,
     };
@@ -158,7 +157,7 @@ async fn test_bulk_move_nonexistent_project() {
     let task_uuid = db.create_task(request).await.unwrap();
 
     // Try to move to non-existent project
-    let fake_project_uuid = Uuid::new_v4();
+    let fake_project_uuid = ThingsId::new_v4();
     let bulk_request = BulkMoveRequest {
         task_uuids: vec![task_uuid],
         project_uuid: Some(fake_project_uuid),
@@ -411,9 +410,9 @@ async fn test_transaction_rollback_on_error() {
     let uuid2 = db.create_task(request2).await.unwrap();
 
     // Try to complete with one valid and one invalid UUID
-    let invalid_uuid = Uuid::new_v4();
+    let invalid_uuid = ThingsId::new_v4();
     let bulk_request = BulkCompleteRequest {
-        task_uuids: vec![uuid1, uuid2, invalid_uuid],
+        task_uuids: vec![uuid1.clone(), uuid2.clone(), invalid_uuid],
     };
 
     let result = db.bulk_complete(bulk_request).await;
@@ -455,12 +454,12 @@ async fn test_bulk_move_exceeds_max_batch_size() {
     // Try to move more than MAX_BULK_BATCH_SIZE (1000) tasks
     let mut task_uuids = Vec::new();
     for _ in 0..1001 {
-        task_uuids.push(Uuid::new_v4());
+        task_uuids.push(ThingsId::new_v4());
     }
 
     let bulk_request = BulkMoveRequest {
         task_uuids,
-        project_uuid: Some(Uuid::new_v4()),
+        project_uuid: Some(ThingsId::new_v4()),
         area_uuid: None,
     };
 

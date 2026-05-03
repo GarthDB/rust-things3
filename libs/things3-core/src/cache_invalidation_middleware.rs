@@ -10,13 +10,15 @@ use std::time::Duration;
 use tracing::{debug, warn};
 use uuid::Uuid;
 
+use crate::models::ThingsId;
+
 /// Cache invalidation event
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct InvalidationEvent {
     pub event_id: Uuid,
     pub event_type: InvalidationEventType,
     pub entity_type: String,
-    pub entity_id: Option<Uuid>,
+    pub entity_id: Option<ThingsId>,
     pub operation: String,
     pub timestamp: DateTime<Utc>,
     pub affected_caches: Vec<String>,
@@ -254,7 +256,7 @@ impl CacheInvalidationMiddleware {
     pub async fn manual_invalidate(
         &self,
         entity_type: &str,
-        entity_id: Option<Uuid>,
+        entity_id: Option<ThingsId>,
         cache_types: Option<Vec<String>>,
     ) -> Result<()> {
         let event = InvalidationEvent {
@@ -353,7 +355,7 @@ impl CacheInvalidationMiddleware {
             }
             InvalidationStrategy::InvalidateByEntity => {
                 // Invalidate by entity ID
-                if let Some(_entity_id) = event.entity_id {
+                if let Some(_entity_id) = &event.entity_id {
                     let handlers_guard = self.handlers.read();
                     for handler in handlers_guard.values() {
                         if handler.can_handle(event) {
@@ -464,14 +466,15 @@ impl CacheInvalidationMiddleware {
         dependent_entities
     }
 
-    /// Extract a UUID from `event.metadata[key]`, returning `None` if missing
-    /// or unparseable.
-    fn metadata_uuid(event: &InvalidationEvent, key: &str) -> Option<Uuid> {
+    /// Extract an ID from `event.metadata[key]`, returning `None` if missing
+    /// or empty.
+    fn metadata_uuid(event: &InvalidationEvent, key: &str) -> Option<ThingsId> {
         event
             .metadata
             .get(key)
             .and_then(serde_json::Value::as_str)
-            .and_then(|s| Uuid::parse_str(s).ok())
+            .filter(|s| !s.is_empty())
+            .map(|s| ThingsId::from_trusted(s.to_string()))
     }
 
     /// Check if event matches a pattern
@@ -522,7 +525,7 @@ impl CacheInvalidationMiddleware {
 #[derive(Debug, Clone)]
 struct DependentEntity {
     entity_type: String,
-    entity_id: Option<Uuid>,
+    entity_id: Option<ThingsId>,
     affected_caches: Vec<String>,
 }
 
@@ -572,7 +575,7 @@ impl CacheInvalidationHandler for ThingsCacheInvalidationHandler {
         // it for callers that explicitly want coarse invalidation.
         let cache = Arc::clone(&self.cache);
         let entity_type = event.entity_type.clone();
-        let entity_id = event.entity_id;
+        let entity_id = event.entity_id.clone();
         tokio::spawn(async move {
             cache
                 .invalidate_by_entity(&entity_type, entity_id.as_ref())
@@ -700,7 +703,7 @@ mod tests {
             event_id: Uuid::new_v4(),
             event_type: InvalidationEventType::Updated,
             entity_type: "task".to_string(),
-            entity_id: Some(Uuid::new_v4()),
+            entity_id: Some(ThingsId::new_v4()),
             operation: "updated".to_string(),
             timestamp: Utc::now(),
             affected_caches: vec!["l1".to_string(), "l2".to_string()],
@@ -724,7 +727,7 @@ mod tests {
 
         // Manual invalidation
         middleware
-            .manual_invalidate("task", Some(Uuid::new_v4()), None)
+            .manual_invalidate("task", Some(ThingsId::new_v4()), None)
             .await
             .unwrap();
 
@@ -740,7 +743,7 @@ mod tests {
             event_id: Uuid::new_v4(),
             event_type: InvalidationEventType::Created,
             entity_type: "task".to_string(),
-            entity_id: Some(Uuid::new_v4()),
+            entity_id: Some(ThingsId::new_v4()),
             operation: "created".to_string(),
             timestamp: Utc::now(),
             affected_caches: vec![],
@@ -876,7 +879,7 @@ mod tests {
             event_id: Uuid::new_v4(),
             event_type: InvalidationEventType::Created,
             entity_type: "task".to_string(),
-            entity_id: Some(Uuid::new_v4()),
+            entity_id: Some(ThingsId::new_v4()),
             operation: "created".to_string(),
             timestamp: Utc::now(),
             affected_caches: vec!["test_cache".to_string()],
@@ -900,7 +903,7 @@ mod tests {
                 event_id: Uuid::new_v4(),
                 event_type: InvalidationEventType::Created,
                 entity_type: format!("task_{i}"),
-                entity_id: Some(Uuid::new_v4()),
+                entity_id: Some(ThingsId::new_v4()),
                 operation: "created".to_string(),
                 timestamp: Utc::now(),
                 affected_caches: vec![],
@@ -919,7 +922,7 @@ mod tests {
     }
 
     fn task_event_with_metadata(
-        entity_id: Uuid,
+        entity_id: ThingsId,
         metadata: HashMap<String, serde_json::Value>,
     ) -> InvalidationEvent {
         InvalidationEvent {
@@ -936,12 +939,12 @@ mod tests {
 
     #[test]
     fn test_cascade_uses_project_uuid_metadata() {
-        let task_id = Uuid::new_v4();
-        let project_id = Uuid::new_v4();
+        let task_id = ThingsId::new_v4();
+        let project_id = ThingsId::new_v4();
         let mut metadata = HashMap::new();
         metadata.insert(
             "project_uuid".to_string(),
-            serde_json::Value::String(project_id.to_string()),
+            serde_json::Value::String(project_id.as_str().to_string()),
         );
         let event = task_event_with_metadata(task_id, metadata);
 
@@ -960,7 +963,7 @@ mod tests {
 
     #[test]
     fn test_cascade_falls_back_when_metadata_missing() {
-        let event = task_event_with_metadata(Uuid::new_v4(), HashMap::new());
+        let event = task_event_with_metadata(ThingsId::new_v4(), HashMap::new());
         let dependents = CacheInvalidationMiddleware::find_dependent_entities(&event);
         assert!(dependents.iter().all(|d| d.entity_id.is_none()));
     }
@@ -971,15 +974,15 @@ mod tests {
         use crate::test_utils::create_mock_tasks;
 
         let cache = Arc::new(ThingsCache::new_default());
-        let target_id = Uuid::new_v4();
-        let other_id = Uuid::new_v4();
+        let target_id = ThingsId::new_v4();
+        let other_id = ThingsId::new_v4();
 
         let mut target_task = create_mock_tasks().into_iter().next().unwrap();
-        target_task.uuid = target_id;
+        target_task.uuid = target_id.clone();
         target_task.project_uuid = None;
         target_task.area_uuid = None;
         let mut other_task = target_task.clone();
-        other_task.uuid = other_id;
+        other_task.uuid = other_id.clone();
 
         cache
             .get_tasks("target_key", || async { Ok(vec![target_task]) })

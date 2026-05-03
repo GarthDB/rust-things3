@@ -3,11 +3,11 @@
 #![cfg(feature = "test-utils")]
 
 use chrono::Utc;
+use std::str::FromStr;
 use things3_core::{
     test_utils::create_test_database_and_connect, CreateTaskRequest, DeleteChildHandling,
-    TaskStatus, TaskType,
+    TaskStatus, TaskType, ThingsId,
 };
-use uuid::Uuid;
 
 // ============================================================================
 // Complete Task Tests (8 tests)
@@ -82,7 +82,7 @@ async fn test_complete_task_sets_stop_date() {
 async fn test_complete_task_nonexistent() {
     let (db, _temp_file) = create_test_database_and_connect().await.unwrap();
 
-    let nonexistent_uuid = Uuid::new_v4();
+    let nonexistent_uuid = ThingsId::new_v4();
     let result = db.complete_task(&nonexistent_uuid).await;
     assert!(result.is_err(), "Should fail for nonexistent task");
 }
@@ -218,7 +218,7 @@ async fn test_complete_task_with_children() {
         deadline: None,
         project_uuid: None,
         area_uuid: None,
-        parent_uuid: Some(parent_uuid),
+        parent_uuid: Some(parent_uuid.clone()),
         tags: None,
         status: None,
     };
@@ -365,7 +365,7 @@ async fn test_uncomplete_incomplete_task() {
 async fn test_uncomplete_nonexistent() {
     let (db, _temp_file) = create_test_database_and_connect().await.unwrap();
 
-    let nonexistent_uuid = Uuid::new_v4();
+    let nonexistent_uuid = ThingsId::new_v4();
     let result = db.uncomplete_task(&nonexistent_uuid).await;
     assert!(result.is_err(), "Should fail for nonexistent task");
 }
@@ -516,7 +516,7 @@ async fn test_delete_task_sets_trashed_flag() {
 async fn test_delete_task_nonexistent() {
     let (db, _temp_file) = create_test_database_and_connect().await.unwrap();
 
-    let nonexistent_uuid = Uuid::new_v4();
+    let nonexistent_uuid = ThingsId::new_v4();
     let result = db
         .delete_task(&nonexistent_uuid, DeleteChildHandling::Error)
         .await;
@@ -552,7 +552,7 @@ async fn test_delete_task_with_children_error_mode() {
         deadline: None,
         project_uuid: None,
         area_uuid: None,
-        parent_uuid: Some(parent_uuid),
+        parent_uuid: Some(parent_uuid.clone()),
         tags: None,
         status: None,
     };
@@ -597,7 +597,7 @@ async fn test_delete_task_with_children_cascade() {
         deadline: None,
         project_uuid: None,
         area_uuid: None,
-        parent_uuid: Some(parent_uuid),
+        parent_uuid: Some(parent_uuid.clone()),
         tags: None,
         status: None,
     };
@@ -646,7 +646,7 @@ async fn test_delete_task_with_children_orphan() {
         deadline: None,
         project_uuid: None,
         area_uuid: None,
-        parent_uuid: Some(parent_uuid),
+        parent_uuid: Some(parent_uuid.clone()),
         tags: None,
         status: None,
     };
@@ -704,7 +704,7 @@ async fn test_delete_multiple_children_cascade() {
             deadline: None,
             project_uuid: None,
             area_uuid: None,
-            parent_uuid: Some(parent_uuid),
+            parent_uuid: Some(parent_uuid.clone()),
             tags: None,
             status: None,
         };
@@ -753,7 +753,7 @@ async fn test_delete_nested_children_cascade() {
         deadline: None,
         project_uuid: None,
         area_uuid: None,
-        parent_uuid: Some(grandparent_uuid),
+        parent_uuid: Some(grandparent_uuid.clone()),
         tags: None,
         status: None,
     };
@@ -768,7 +768,7 @@ async fn test_delete_nested_children_cascade() {
         deadline: None,
         project_uuid: None,
         area_uuid: None,
-        parent_uuid: Some(parent_uuid),
+        parent_uuid: Some(parent_uuid.clone()),
         tags: None,
         status: None,
     };
@@ -850,7 +850,7 @@ async fn test_delete_project_with_tasks() {
         notes: None,
         start_date: None,
         deadline: None,
-        project_uuid: Some(project_uuid),
+        project_uuid: Some(project_uuid.clone()),
         area_uuid: None,
         parent_uuid: None,
         tags: None,
@@ -1019,7 +1019,7 @@ async fn test_invalid_uuid_format() {
 
     // UUIDs are validated at parse time, so this test verifies
     // that operations with invalid UUIDs fail gracefully
-    let invalid_uuid = Uuid::nil(); // All zeros UUID
+    let invalid_uuid = ThingsId::from_str("00000000-0000-0000-0000-000000000000").unwrap(); // All zeros UUID
     let result = db.complete_task(&invalid_uuid).await;
     assert!(result.is_err(), "Should fail for invalid/nil UUID");
 }
@@ -1047,7 +1047,7 @@ async fn test_concurrent_operations() {
     // Spawn concurrent operations
     let db_clone1 = db.clone();
     let db_clone2 = db.clone();
-    let uuid1 = task_uuid;
+    let uuid1 = task_uuid.clone();
     let uuid2 = task_uuid;
 
     let handle1 = tokio::spawn(async move { db_clone1.complete_task(&uuid1).await });

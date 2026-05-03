@@ -22,12 +22,11 @@
 use std::collections::HashSet;
 
 use sqlx::{sqlite::SqliteRow, Row, SqlitePool};
-use uuid::Uuid;
 
 use crate::database::mappers::{map_project_row, map_task_row};
 use crate::database::ThingsDatabase;
 use crate::error::{Result as ThingsResult, ThingsError};
-use crate::models::{Project, Task};
+use crate::models::{Project, Task, ThingsId};
 
 /// Conservative chunk size — keeps each round-trip well below SQLite's
 /// `SQLITE_LIMIT_VARIABLE_NUMBER` floor (999) so callers can pass arbitrarily
@@ -49,7 +48,7 @@ impl ThingsDatabase {
     /// # Errors
     ///
     /// Returns an error if the underlying database query fails.
-    pub async fn get_tasks_batch(&self, uuids: &[Uuid]) -> ThingsResult<Vec<Task>> {
+    pub async fn get_tasks_batch(&self, uuids: &[ThingsId]) -> ThingsResult<Vec<Task>> {
         let mut tasks = fetch_in_chunks(
             &self.pool,
             uuids,
@@ -82,7 +81,7 @@ impl ThingsDatabase {
     /// # Errors
     ///
     /// Returns an error if the underlying database query fails.
-    pub async fn get_projects_batch(&self, uuids: &[Uuid]) -> ThingsResult<Vec<Project>> {
+    pub async fn get_projects_batch(&self, uuids: &[ThingsId]) -> ThingsResult<Vec<Project>> {
         let mut projects = fetch_in_chunks(
             &self.pool,
             uuids,
@@ -112,7 +111,7 @@ impl ThingsDatabase {
 /// trashed) — their `Some(T)` siblings are kept.
 async fn fetch_in_chunks<T, F>(
     pool: &SqlitePool,
-    uuids: &[Uuid],
+    uuids: &[ThingsId],
     sql_template: &str,
     map_row: F,
 ) -> ThingsResult<Vec<T>>
@@ -124,7 +123,7 @@ where
     }
 
     let mut seen = HashSet::with_capacity(uuids.len());
-    let unique: Vec<Uuid> = uuids.iter().copied().filter(|u| seen.insert(*u)).collect();
+    let unique: Vec<&ThingsId> = uuids.iter().filter(|u| seen.insert(u.as_str())).collect();
 
     let mut out = Vec::with_capacity(unique.len());
     for chunk in unique.chunks(BATCH_CHUNK_SIZE) {
@@ -133,7 +132,7 @@ where
 
         let mut q = sqlx::query(&sql);
         for u in chunk {
-            q = q.bind(u.to_string());
+            q = q.bind(u.as_str());
         }
         let rows = q
             .fetch_all(pool)
@@ -163,39 +162,39 @@ mod tests {
         (db, f)
     }
 
-    async fn insert_task(db: &ThingsDatabase, title: &str) -> Uuid {
-        let uuid = Uuid::new_v4();
+    async fn insert_task(db: &ThingsDatabase, title: &str) -> ThingsId {
+        let raw = uuid::Uuid::new_v4();
         sqlx::query(
             "INSERT INTO TMTask \
              (uuid, title, type, status, trashed, creationDate, userModificationDate) \
              VALUES (?, ?, 0, 0, 0, 0, 0)",
         )
-        .bind(uuid.to_string())
+        .bind(raw.to_string())
         .bind(title)
         .execute(&db.pool)
         .await
         .unwrap();
-        uuid
+        ThingsId::from_trusted(raw.to_string())
     }
 
-    async fn insert_project(db: &ThingsDatabase, title: &str) -> Uuid {
-        let uuid = Uuid::new_v4();
+    async fn insert_project(db: &ThingsDatabase, title: &str) -> ThingsId {
+        let raw = uuid::Uuid::new_v4();
         sqlx::query(
             "INSERT INTO TMTask \
              (uuid, title, type, status, trashed, creationDate, userModificationDate) \
              VALUES (?, ?, 1, 0, 0, 0, 0)",
         )
-        .bind(uuid.to_string())
+        .bind(raw.to_string())
         .bind(title)
         .execute(&db.pool)
         .await
         .unwrap();
-        uuid
+        ThingsId::from_trusted(raw.to_string())
     }
 
-    async fn mark_trashed(db: &ThingsDatabase, uuid: Uuid) {
+    async fn mark_trashed(db: &ThingsDatabase, id: &ThingsId) {
         sqlx::query("UPDATE TMTask SET trashed = 1 WHERE uuid = ?")
-            .bind(uuid.to_string())
+            .bind(id.as_str())
             .execute(&db.pool)
             .await
             .unwrap();
@@ -215,8 +214,11 @@ mod tests {
         let b = insert_task(&db, "beta").await;
         let c = insert_task(&db, "gamma").await;
 
-        let result = db.get_tasks_batch(&[a, b, c]).await.unwrap();
-        let uuids: HashSet<_> = result.iter().map(|t| t.uuid).collect();
+        let result = db
+            .get_tasks_batch(&[a.clone(), b.clone(), c.clone()])
+            .await
+            .unwrap();
+        let uuids: HashSet<_> = result.iter().map(|t| t.uuid.clone()).collect();
         assert_eq!(uuids.len(), 3);
         assert!(uuids.contains(&a) && uuids.contains(&b) && uuids.contains(&c));
     }
@@ -225,14 +227,14 @@ mod tests {
     async fn test_get_tasks_batch_filters_unknown_uuids() {
         let (db, _f) = open_test_db().await;
         let real = insert_task(&db, "real").await;
-        let phantom1 = Uuid::new_v4();
-        let phantom2 = Uuid::new_v4();
+        let phantom1 = ThingsId::new_v4();
+        let phantom2 = ThingsId::new_v4();
 
         let result = db
-            .get_tasks_batch(&[real, phantom1, phantom2])
+            .get_tasks_batch(&[real.clone(), phantom1, phantom2])
             .await
             .unwrap();
-        let uuids: HashSet<_> = result.iter().map(|t| t.uuid).collect();
+        let uuids: HashSet<_> = result.iter().map(|t| t.uuid.clone()).collect();
         assert_eq!(uuids.len(), 1);
         assert!(uuids.contains(&real));
     }
@@ -241,14 +243,17 @@ mod tests {
     async fn test_get_tasks_batch_excludes_trashed() {
         let (db, _f) = open_test_db().await;
         let kept = insert_task(&db, "kept").await;
-        let trashed = insert_task(&db, "trashed").await;
-        mark_trashed(&db, trashed).await;
+        let trashed_id = insert_task(&db, "trashed").await;
+        mark_trashed(&db, &trashed_id).await;
 
-        let result = db.get_tasks_batch(&[kept, trashed]).await.unwrap();
-        let uuids: HashSet<_> = result.iter().map(|t| t.uuid).collect();
+        let result = db
+            .get_tasks_batch(&[kept.clone(), trashed_id.clone()])
+            .await
+            .unwrap();
+        let uuids: HashSet<_> = result.iter().map(|t| t.uuid.clone()).collect();
         assert_eq!(uuids.len(), 1);
         assert!(uuids.contains(&kept));
-        assert!(!uuids.contains(&trashed));
+        assert!(!uuids.contains(&trashed_id));
     }
 
     #[tokio::test]
@@ -257,9 +262,12 @@ mod tests {
         let a = insert_task(&db, "alpha").await;
         let b = insert_task(&db, "beta").await;
 
-        let result = db.get_tasks_batch(&[a, a, b, a]).await.unwrap();
+        let result = db
+            .get_tasks_batch(&[a.clone(), a.clone(), b.clone(), a.clone()])
+            .await
+            .unwrap();
         assert_eq!(result.len(), 2, "duplicate inputs must collapse to one row");
-        let uuids: HashSet<_> = result.iter().map(|t| t.uuid).collect();
+        let uuids: HashSet<_> = result.iter().map(|t| t.uuid.clone()).collect();
         assert!(uuids.contains(&a) && uuids.contains(&b));
     }
 
@@ -275,8 +283,8 @@ mod tests {
 
         let first = db.get_tasks_batch(&inserted).await.unwrap();
         let second = db.get_tasks_batch(&inserted).await.unwrap();
-        let first_uuids: Vec<_> = first.iter().map(|t| t.uuid).collect();
-        let second_uuids: Vec<_> = second.iter().map(|t| t.uuid).collect();
+        let first_uuids: Vec<_> = first.iter().map(|t| t.uuid.clone()).collect();
+        let second_uuids: Vec<_> = second.iter().map(|t| t.uuid.clone()).collect();
         assert_eq!(first_uuids, second_uuids);
     }
 
@@ -289,14 +297,14 @@ mod tests {
         // 600 UUIDs forces chunking past BATCH_CHUNK_SIZE (500). Most are
         // phantom; only the two real ones should come back.
         let mut all = Vec::with_capacity(600);
-        all.push(real_a);
+        all.push(real_a.clone());
         for _ in 0..598 {
-            all.push(Uuid::new_v4());
+            all.push(ThingsId::new_v4());
         }
-        all.push(real_b);
+        all.push(real_b.clone());
 
         let result = db.get_tasks_batch(&all).await.unwrap();
-        let uuids: HashSet<_> = result.iter().map(|t| t.uuid).collect();
+        let uuids: HashSet<_> = result.iter().map(|t| t.uuid.clone()).collect();
         assert_eq!(uuids.len(), 2);
         assert!(uuids.contains(&real_a) && uuids.contains(&real_b));
     }
@@ -310,8 +318,11 @@ mod tests {
         // its UUID is in the input — type filter excludes it.
         let task = insert_task(&db, "not-a-project").await;
 
-        let result = db.get_projects_batch(&[p1, p2, task]).await.unwrap();
-        let uuids: HashSet<_> = result.iter().map(|p| p.uuid).collect();
+        let result = db
+            .get_projects_batch(&[p1.clone(), p2.clone(), task.clone()])
+            .await
+            .unwrap();
+        let uuids: HashSet<_> = result.iter().map(|p| p.uuid.clone()).collect();
         assert_eq!(uuids.len(), 2);
         assert!(uuids.contains(&p1) && uuids.contains(&p2));
         assert!(!uuids.contains(&task));

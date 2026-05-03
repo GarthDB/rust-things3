@@ -1,13 +1,12 @@
 //! Test utilities and mock data for Things 3 integration
 
 use crate::{
-    models::{Area, CreateTaskRequest, Project, Task, TaskStatus, TaskType},
+    models::{Area, CreateTaskRequest, Project, Task, TaskStatus, TaskType, ThingsId},
     ThingsDatabase,
 };
 use chrono::{NaiveDate, Utc};
 use std::path::Path;
 use tempfile::NamedTempFile;
-use uuid::Uuid;
 
 /// Create a test database with mock data
 ///
@@ -106,9 +105,9 @@ async fn insert_test_data(pool: &sqlx::SqlitePool) -> crate::Result<()> {
     };
 
     // Generate valid UUIDs for test data
-    let area_uuid = Uuid::new_v4().to_string();
-    let project_uuid = Uuid::new_v4().to_string();
-    let task_uuid = Uuid::new_v4().to_string();
+    let area_uuid = ThingsId::new_v4().into_string();
+    let project_uuid = ThingsId::new_v4().into_string();
+    let task_uuid = ThingsId::new_v4().into_string();
 
     // Insert test areas
     let now = chrono::Utc::now().timestamp() as f64;
@@ -139,7 +138,7 @@ async fn insert_test_data(pool: &sqlx::SqlitePool) -> crate::Result<()> {
     .map_err(|e| crate::ThingsError::Database(format!("Failed to insert test project: {e}")))?;
 
     // Insert test tasks - one in inbox (no project), one in project
-    let inbox_task_uuid = Uuid::new_v4().to_string();
+    let inbox_task_uuid = ThingsId::new_v4().into_string();
     sqlx::query(
         "INSERT INTO TMTask (uuid, title, type, status, project, creationDate, userModificationDate, trashed) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
     )
@@ -180,7 +179,7 @@ async fn insert_test_data(pool: &sqlx::SqlitePool) -> crate::Result<()> {
 pub fn create_mock_areas() -> Vec<Area> {
     vec![
         Area {
-            uuid: Uuid::parse_str("550e8400-e29b-41d4-a716-446655440001").unwrap(),
+            uuid: ThingsId::from_trusted("550e8400-e29b-41d4-a716-446655440001".to_string()),
             title: "Work".to_string(),
             notes: Some("Work-related tasks".to_string()),
             created: Utc::now(),
@@ -189,7 +188,7 @@ pub fn create_mock_areas() -> Vec<Area> {
             projects: Vec::new(),
         },
         Area {
-            uuid: Uuid::parse_str("550e8400-e29b-41d4-a716-446655440002").unwrap(),
+            uuid: ThingsId::from_trusted("550e8400-e29b-41d4-a716-446655440002".to_string()),
             title: "Personal".to_string(),
             notes: Some("Personal tasks".to_string()),
             created: Utc::now(),
@@ -209,7 +208,7 @@ pub fn create_mock_areas() -> Vec<Area> {
 pub fn create_mock_projects() -> Vec<Project> {
     vec![
         Project {
-            uuid: Uuid::parse_str("550e8400-e29b-41d4-a716-446655440010").unwrap(),
+            uuid: ThingsId::from_trusted("550e8400-e29b-41d4-a716-446655440010".to_string()),
             title: "Website Redesign".to_string(),
             status: TaskStatus::Incomplete,
             notes: Some("Complete redesign of company website".to_string()),
@@ -217,12 +216,14 @@ pub fn create_mock_projects() -> Vec<Project> {
             deadline: None,
             created: Utc::now(),
             modified: Utc::now(),
-            area_uuid: Some(Uuid::parse_str("550e8400-e29b-41d4-a716-446655440001").unwrap()),
+            area_uuid: Some(ThingsId::from_trusted(
+                "550e8400-e29b-41d4-a716-446655440001".to_string(),
+            )),
             tags: vec!["work".to_string(), "web".to_string()],
             tasks: Vec::new(),
         },
         Project {
-            uuid: Uuid::parse_str("550e8400-e29b-41d4-a716-446655440011").unwrap(),
+            uuid: ThingsId::from_trusted("550e8400-e29b-41d4-a716-446655440011".to_string()),
             title: "Learn Rust".to_string(),
             status: TaskStatus::Incomplete,
             notes: Some("Learn the Rust programming language".to_string()),
@@ -230,7 +231,9 @@ pub fn create_mock_projects() -> Vec<Project> {
             deadline: None,
             created: Utc::now(),
             modified: Utc::now(),
-            area_uuid: Some(Uuid::parse_str("550e8400-e29b-41d4-a716-446655440002").unwrap()),
+            area_uuid: Some(ThingsId::from_trusted(
+                "550e8400-e29b-41d4-a716-446655440002".to_string(),
+            )),
             tags: vec!["personal".to_string(), "learning".to_string()],
             tasks: Vec::new(),
         },
@@ -246,7 +249,7 @@ pub fn create_mock_projects() -> Vec<Project> {
 pub fn create_mock_tasks() -> Vec<Task> {
     vec![
         Task {
-            uuid: Uuid::parse_str("550e8400-e29b-41d4-a716-446655440100").unwrap(),
+            uuid: ThingsId::from_trusted("550e8400-e29b-41d4-a716-446655440100".to_string()),
             title: "Research competitors".to_string(),
             task_type: TaskType::Todo,
             status: TaskStatus::Incomplete,
@@ -256,14 +259,18 @@ pub fn create_mock_tasks() -> Vec<Task> {
             created: Utc::now(),
             modified: Utc::now(),
             stop_date: None,
-            project_uuid: Some(Uuid::parse_str("550e8400-e29b-41d4-a716-446655440010").unwrap()),
-            area_uuid: Some(Uuid::parse_str("550e8400-e29b-41d4-a716-446655440001").unwrap()),
+            project_uuid: Some(ThingsId::from_trusted(
+                "550e8400-e29b-41d4-a716-446655440010".to_string(),
+            )),
+            area_uuid: Some(ThingsId::from_trusted(
+                "550e8400-e29b-41d4-a716-446655440001".to_string(),
+            )),
             parent_uuid: None,
             tags: vec!["research".to_string()],
             children: Vec::new(),
         },
         Task {
-            uuid: Uuid::parse_str("550e8400-e29b-41d4-a716-446655440101").unwrap(),
+            uuid: ThingsId::from_trusted("550e8400-e29b-41d4-a716-446655440101".to_string()),
             title: "Read Rust book".to_string(),
             task_type: TaskType::Todo,
             status: TaskStatus::Incomplete,
@@ -273,8 +280,12 @@ pub fn create_mock_tasks() -> Vec<Task> {
             created: Utc::now(),
             modified: Utc::now(),
             stop_date: None,
-            project_uuid: Some(Uuid::parse_str("550e8400-e29b-41d4-a716-446655440011").unwrap()),
-            area_uuid: Some(Uuid::parse_str("550e8400-e29b-41d4-a716-446655440002").unwrap()),
+            project_uuid: Some(ThingsId::from_trusted(
+                "550e8400-e29b-41d4-a716-446655440011".to_string(),
+            )),
+            area_uuid: Some(ThingsId::from_trusted(
+                "550e8400-e29b-41d4-a716-446655440002".to_string(),
+            )),
             parent_uuid: None,
             tags: vec!["reading".to_string()],
             children: Vec::new(),
@@ -395,18 +406,18 @@ mod tests {
         let tasks = create_mock_tasks();
 
         // Verify that project area UUIDs match area UUIDs
-        let work_area_uuid = areas[0].uuid;
-        let personal_area_uuid = areas[1].uuid;
+        let work_area_uuid = areas[0].uuid.clone();
+        let personal_area_uuid = areas[1].uuid.clone();
 
         let website_project = &projects[0];
         let rust_project = &projects[1];
 
-        assert_eq!(website_project.area_uuid, Some(work_area_uuid));
-        assert_eq!(rust_project.area_uuid, Some(personal_area_uuid));
+        assert_eq!(website_project.area_uuid, Some(work_area_uuid.clone()));
+        assert_eq!(rust_project.area_uuid, Some(personal_area_uuid.clone()));
 
         // Verify that task project and area UUIDs match
-        let website_project_uuid = projects[0].uuid;
-        let rust_project_uuid = projects[1].uuid;
+        let website_project_uuid = projects[0].uuid.clone();
+        let rust_project_uuid = projects[1].uuid.clone();
 
         let research_task = &tasks[0];
         let rust_task = &tasks[1];
@@ -437,7 +448,7 @@ mod tests {
                 !project.uuid.to_string().is_empty(),
                 "Project UUID should be valid"
             );
-            if let Some(area_uuid) = project.area_uuid {
+            if let Some(area_uuid) = &project.area_uuid {
                 assert!(
                     !area_uuid.to_string().is_empty(),
                     "Project area UUID should be valid"
@@ -450,13 +461,13 @@ mod tests {
                 !task.uuid.to_string().is_empty(),
                 "Task UUID should be valid"
             );
-            if let Some(project_uuid) = task.project_uuid {
+            if let Some(project_uuid) = &task.project_uuid {
                 assert!(
                     !project_uuid.to_string().is_empty(),
                     "Task project UUID should be valid"
                 );
             }
-            if let Some(area_uuid) = task.area_uuid {
+            if let Some(area_uuid) = &task.area_uuid {
                 assert!(
                     !area_uuid.to_string().is_empty(),
                     "Task area UUID should be valid"
@@ -794,9 +805,9 @@ pub struct TaskRequestBuilder {
     task_type: Option<TaskType>,
     start_date: Option<NaiveDate>,
     deadline: Option<NaiveDate>,
-    project_uuid: Option<Uuid>,
-    area_uuid: Option<Uuid>,
-    parent_uuid: Option<Uuid>,
+    project_uuid: Option<ThingsId>,
+    area_uuid: Option<ThingsId>,
+    parent_uuid: Option<ThingsId>,
     tags: Option<Vec<String>>,
 }
 
@@ -865,21 +876,21 @@ impl TaskRequestBuilder {
 
     /// Set the project UUID
     #[must_use]
-    pub fn project(mut self, uuid: Uuid) -> Self {
+    pub fn project(mut self, uuid: ThingsId) -> Self {
         self.project_uuid = Some(uuid);
         self
     }
 
     /// Set the area UUID
     #[must_use]
-    pub fn area(mut self, uuid: Uuid) -> Self {
+    pub fn area(mut self, uuid: ThingsId) -> Self {
         self.area_uuid = Some(uuid);
         self
     }
 
     /// Set the parent task UUID
     #[must_use]
-    pub fn parent(mut self, uuid: Uuid) -> Self {
+    pub fn parent(mut self, uuid: ThingsId) -> Self {
         self.parent_uuid = Some(uuid);
         self
     }
@@ -934,16 +945,16 @@ mod builder_tests {
 
     #[test]
     fn test_task_request_builder_full() {
-        let project_uuid = Uuid::new_v4();
-        let area_uuid = Uuid::new_v4();
+        let project_uuid = ThingsId::new_v4();
+        let area_uuid = ThingsId::new_v4();
 
         let request = TaskRequestBuilder::new()
             .title("Custom Title")
             .notes("Custom Notes")
             .status(TaskStatus::Completed)
             .task_type(TaskType::Project)
-            .project(project_uuid)
-            .area(area_uuid)
+            .project(project_uuid.clone())
+            .area(area_uuid.clone())
             .tags(vec!["tag1".to_string(), "tag2".to_string()])
             .build();
 

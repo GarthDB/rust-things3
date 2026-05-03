@@ -9,7 +9,7 @@ use crate::{
     error::{Result as ThingsResult, ThingsError},
     models::{
         Area, CreateTaskRequest, DeleteChildHandling, Project, Task, TaskStatus, TaskType,
-        UpdateTaskRequest,
+        ThingsId, UpdateTaskRequest,
     },
 };
 use chrono::{DateTime, NaiveDate, Utc};
@@ -18,6 +18,7 @@ use sqlx::{pool::PoolOptions, Row, SqlitePool};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 use tracing::{debug, error, info, instrument};
+#[cfg(any(feature = "advanced-queries", feature = "batch-operations"))]
 use uuid::Uuid;
 
 /// Convert f64 timestamp to i64 safely
@@ -85,43 +86,6 @@ pub fn serialize_tags_to_blob(tags: &[String]) -> ThingsResult<Vec<u8>> {
 pub fn deserialize_tags_from_blob(blob: &[u8]) -> ThingsResult<Vec<String>> {
     serde_json::from_slice(blob)
         .map_err(|e| ThingsError::unknown(format!("Failed to deserialize tags: {e}")))
-}
-
-/// Convert Things 3 UUID format to standard UUID
-/// Things 3 uses base64-like strings, we'll generate a UUID from the hash
-pub(crate) fn things_uuid_to_uuid(things_uuid: &str) -> Uuid {
-    // For now, create a deterministic UUID from the Things 3 ID
-    // This ensures consistent mapping between Things 3 IDs and UUIDs
-    use std::collections::hash_map::DefaultHasher;
-    use std::hash::{Hash, Hasher};
-
-    let mut hasher = DefaultHasher::new();
-    things_uuid.hash(&mut hasher);
-    let hash = hasher.finish();
-
-    // Create a UUID from the hash (not cryptographically secure, but consistent)
-    // Use proper byte extraction without truncation warnings
-    let bytes = [
-        ((hash >> 56) & 0xFF) as u8,
-        ((hash >> 48) & 0xFF) as u8,
-        ((hash >> 40) & 0xFF) as u8,
-        ((hash >> 32) & 0xFF) as u8,
-        ((hash >> 24) & 0xFF) as u8,
-        ((hash >> 16) & 0xFF) as u8,
-        ((hash >> 8) & 0xFF) as u8,
-        (hash & 0xFF) as u8,
-        // Fill remaining bytes with a pattern based on the string
-        u8::try_from(things_uuid.len().min(255)).unwrap_or(255),
-        things_uuid.chars().next().unwrap_or('0') as u8,
-        things_uuid.chars().nth(1).unwrap_or('0') as u8,
-        things_uuid.chars().nth(2).unwrap_or('0') as u8,
-        things_uuid.chars().nth(3).unwrap_or('0') as u8,
-        things_uuid.chars().nth(4).unwrap_or('0') as u8,
-        things_uuid.chars().nth(5).unwrap_or('0') as u8,
-        things_uuid.chars().nth(6).unwrap_or('0') as u8,
-    ];
-
-    Uuid::from_bytes(bytes)
 }
 
 impl TaskStatus {
@@ -668,8 +632,7 @@ impl ThingsDatabase {
         let mut tasks = Vec::new();
         for row in rows {
             let task = Task {
-                uuid: Uuid::parse_str(&row.get::<String, _>("uuid"))
-                    .map_err(|e| ThingsError::unknown(format!("Invalid task UUID: {e}")))?,
+                uuid: ThingsId::from_trusted(row.get::<String, _>("uuid")),
                 title: row.get("title"),
                 status: TaskStatus::from_i32(row.get("status")).unwrap_or(TaskStatus::Incomplete),
                 task_type: TaskType::from_i32(row.get("type")).unwrap_or(TaskType::Todo),
@@ -681,10 +644,10 @@ impl ThingsDatabase {
                     .and_then(|s| NaiveDate::parse_from_str(&s, "%Y-%m-%d").ok()),
                 project_uuid: row
                     .get::<Option<String>, _>("project_uuid")
-                    .and_then(|s| Uuid::parse_str(&s).ok()),
+                    .map(ThingsId::from_trusted),
                 area_uuid: row
                     .get::<Option<String>, _>("area_uuid")
-                    .and_then(|s| Uuid::parse_str(&s).ok()),
+                    .map(ThingsId::from_trusted),
                 parent_uuid: None, // Not available in this query
                 notes: row.get("notes"),
                 tags: row
@@ -733,12 +696,12 @@ impl ThingsDatabase {
         let mut projects = Vec::new();
         for row in rows {
             let project = Project {
-                uuid: things_uuid_to_uuid(&row.get::<String, _>("uuid")),
+                uuid: ThingsId::from_trusted(row.get::<String, _>("uuid")),
                 title: row.get("title"),
                 status: TaskStatus::from_i32(row.get("status")).unwrap_or(TaskStatus::Incomplete),
                 area_uuid: row
                     .get::<Option<String>, _>("area")
-                    .map(|s| things_uuid_to_uuid(&s)),
+                    .map(ThingsId::from_trusted),
                 notes: row.get("notes"),
                 deadline: row
                     .get::<Option<i64>, _>("deadline")
@@ -791,12 +754,8 @@ impl ThingsDatabase {
         let mut areas = Vec::new();
         for row in rows {
             let uuid_str: String = row.get("uuid");
-            // Try standard UUID first, then fall back to Things UUID format
-            let uuid =
-                Uuid::parse_str(&uuid_str).unwrap_or_else(|_| things_uuid_to_uuid(&uuid_str));
-
             let area = Area {
-                uuid,
+                uuid: ThingsId::from_trusted(uuid_str),
                 title: row.get("title"),
                 notes: None,          // Notes not stored in TMArea table
                 projects: Vec::new(), // TODO: Load projects separately
@@ -840,8 +799,7 @@ impl ThingsDatabase {
         let mut tasks = Vec::new();
         for row in rows {
             let task = Task {
-                uuid: Uuid::parse_str(&row.get::<String, _>("uuid"))
-                    .map_err(|e| ThingsError::unknown(format!("Invalid task UUID: {e}")))?,
+                uuid: ThingsId::from_trusted(row.get::<String, _>("uuid")),
                 title: row.get("title"),
                 status: TaskStatus::from_i32(row.get("status")).unwrap_or(TaskStatus::Incomplete),
                 task_type: TaskType::from_i32(row.get("type")).unwrap_or(TaskType::Todo),
@@ -853,10 +811,10 @@ impl ThingsDatabase {
                     .and_then(|s| NaiveDate::parse_from_str(&s, "%Y-%m-%d").ok()),
                 project_uuid: row
                     .get::<Option<String>, _>("project_uuid")
-                    .and_then(|s| Uuid::parse_str(&s).ok()),
+                    .map(ThingsId::from_trusted),
                 area_uuid: row
                     .get::<Option<String>, _>("area_uuid")
-                    .and_then(|s| Uuid::parse_str(&s).ok()),
+                    .map(ThingsId::from_trusted),
                 parent_uuid: None, // Not available in this query
                 notes: row.get("notes"),
                 tags: row
@@ -1130,8 +1088,8 @@ impl ThingsDatabase {
         search_text: Option<String>,
         from_date: Option<NaiveDate>,
         to_date: Option<NaiveDate>,
-        project_uuid: Option<Uuid>,
-        area_uuid: Option<Uuid>,
+        project_uuid: Option<ThingsId>,
+        area_uuid: Option<ThingsId>,
         tags: Option<Vec<String>>,
         limit: Option<u32>,
     ) -> ThingsResult<Vec<Task>> {
@@ -1161,12 +1119,12 @@ impl ThingsDatabase {
                 q.push_str(&format!(" AND stopDate < {}", timestamp));
             }
 
-            if let Some(uuid) = project_uuid {
-                q.push_str(&format!(" AND project = '{}'", uuid));
+            if let Some(ref id) = project_uuid {
+                q.push_str(&format!(" AND project = '{}'", id));
             }
 
-            if let Some(uuid) = area_uuid {
-                q.push_str(&format!(" AND area = '{}'", uuid));
+            if let Some(ref id) = area_uuid {
+                q.push_str(&format!(" AND area = '{}'", id));
             }
 
             q.push_str(&format!(" ORDER BY stopDate DESC LIMIT {result_limit}"));
@@ -1197,12 +1155,12 @@ impl ThingsDatabase {
                 q.push_str(&format!(" AND stopDate < {}", timestamp));
             }
 
-            if let Some(uuid) = project_uuid {
-                q.push_str(&format!(" AND project = '{}'", uuid));
+            if let Some(ref id) = project_uuid {
+                q.push_str(&format!(" AND project = '{}'", id));
             }
 
-            if let Some(uuid) = area_uuid {
-                q.push_str(&format!(" AND area = '{}'", uuid));
+            if let Some(ref id) = area_uuid {
+                q.push_str(&format!(" AND area = '{}'", id));
             }
 
             q.push_str(&format!(" ORDER BY stopDate DESC LIMIT {result_limit}"));
@@ -1360,13 +1318,12 @@ impl ThingsDatabase {
     ///
     /// Returns an error if validation fails or if the database insert fails
     #[instrument(skip(self))]
-    pub async fn create_task(&self, request: CreateTaskRequest) -> ThingsResult<Uuid> {
+    pub async fn create_task(&self, request: CreateTaskRequest) -> ThingsResult<ThingsId> {
         // Validate date range (deadline must be >= start_date)
         crate::database::validate_date_range(request.start_date, request.deadline)?;
 
-        // Generate UUID for new task
-        let uuid = Uuid::new_v4();
-        let uuid_str = uuid.to_string();
+        // Generate ID for new task
+        let id = ThingsId::new_v4();
 
         // Validate referenced entities
         if let Some(project_uuid) = &request.project_uuid {
@@ -1406,16 +1363,16 @@ impl ThingsDatabase {
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ",
         )
-        .bind(&uuid_str)
+        .bind(id.as_str())
         .bind(&request.title)
         .bind(request.task_type.unwrap_or(TaskType::Todo) as i32)
         .bind(request.status.unwrap_or(TaskStatus::Incomplete) as i32)
         .bind(request.notes.as_ref())
         .bind(start_date_ts)
         .bind(deadline_ts)
-        .bind(request.project_uuid.map(|u| u.to_string()))
-        .bind(request.area_uuid.map(|u| u.to_string()))
-        .bind(request.parent_uuid.map(|u| u.to_string()))
+        .bind(request.project_uuid.map(|u| u.into_string()))
+        .bind(request.area_uuid.map(|u| u.into_string()))
+        .bind(request.parent_uuid.map(|u| u.into_string()))
         .bind(cached_tags)
         .bind(now)
         .bind(now)
@@ -1424,8 +1381,8 @@ impl ThingsDatabase {
         .await
         .map_err(|e| ThingsError::unknown(format!("Failed to create task: {e}")))?;
 
-        info!("Created task with UUID: {}", uuid);
-        Ok(uuid)
+        info!("Created task with UUID: {}", id);
+        Ok(id)
     }
 
     /// Create a new project
@@ -1439,13 +1396,12 @@ impl ThingsDatabase {
     pub async fn create_project(
         &self,
         request: crate::models::CreateProjectRequest,
-    ) -> ThingsResult<Uuid> {
+    ) -> ThingsResult<ThingsId> {
         // Validate date range (deadline must be >= start_date)
         crate::database::validate_date_range(request.start_date, request.deadline)?;
 
-        // Generate UUID for new project
-        let uuid = Uuid::new_v4();
-        let uuid_str = uuid.to_string();
+        // Generate ID for new project
+        let id = ThingsId::new_v4();
 
         // Validate area if provided
         if let Some(area_uuid) = &request.area_uuid {
@@ -1477,12 +1433,12 @@ impl ThingsDatabase {
             ) VALUES (?, ?, 1, 0, ?, ?, ?, NULL, ?, NULL, ?, ?, ?, 0)
             ",
         )
-        .bind(&uuid_str)
+        .bind(id.as_str())
         .bind(&request.title)
         .bind(request.notes.as_ref())
         .bind(start_date_ts)
         .bind(deadline_ts)
-        .bind(request.area_uuid.map(|u| u.to_string()))
+        .bind(request.area_uuid.map(|u| u.into_string()))
         .bind(cached_tags)
         .bind(now)
         .bind(now)
@@ -1490,8 +1446,8 @@ impl ThingsDatabase {
         .await
         .map_err(|e| ThingsError::unknown(format!("Failed to create project: {e}")))?;
 
-        info!("Created project with UUID: {}", uuid);
-        Ok(uuid)
+        info!("Created project with UUID: {}", id);
+        Ok(id)
     }
 
     /// Update an existing task
@@ -1559,11 +1515,11 @@ impl ThingsDatabase {
         }
 
         if let Some(project_uuid) = request.project_uuid {
-            q = q.bind(project_uuid.to_string());
+            q = q.bind(project_uuid.into_string());
         }
 
         if let Some(area_uuid) = request.area_uuid {
-            q = q.bind(area_uuid.to_string());
+            q = q.bind(area_uuid.into_string());
         }
 
         if let Some(tags) = &request.tags {
@@ -1573,7 +1529,7 @@ impl ThingsDatabase {
 
         // Bind modification date and UUID (always added by builder)
         let now = Utc::now().timestamp() as f64;
-        q = q.bind(now).bind(request.uuid.to_string());
+        q = q.bind(now).bind(request.uuid.as_str());
 
         q.execute(&self.pool)
             .await
@@ -1591,12 +1547,12 @@ impl ThingsDatabase {
     ///
     /// Returns an error if the database query fails
     #[instrument(skip(self))]
-    pub async fn get_project_by_uuid(&self, uuid: &Uuid) -> ThingsResult<Option<Project>> {
+    pub async fn get_project_by_uuid(&self, id: &ThingsId) -> ThingsResult<Option<Project>> {
         let row = sqlx::query(
             r"
-            SELECT 
-                uuid, title, status, 
-                area, notes, 
+            SELECT
+                uuid, title, status,
+                area, notes,
                 creationDate, userModificationDate,
                 startDate, deadline,
                 trashed, type
@@ -1604,7 +1560,7 @@ impl ThingsDatabase {
             WHERE uuid = ? AND type = 1
             ",
         )
-        .bind(uuid.to_string())
+        .bind(id.as_str())
         .fetch_optional(&self.pool)
         .await
         .map_err(|e| ThingsError::unknown(format!("Failed to fetch project: {e}")))?;
@@ -1697,7 +1653,7 @@ impl ThingsDatabase {
             q = q.bind(naive_date_to_things_timestamp(deadline));
         }
         if let Some(area_uuid) = request.area_uuid {
-            q = q.bind(area_uuid.to_string());
+            q = q.bind(area_uuid.into_string());
         }
         if let Some(tags) = &request.tags {
             let cached_tags = serialize_tags_to_blob(tags)?;
@@ -1706,7 +1662,7 @@ impl ThingsDatabase {
 
         // Bind modification date and UUID (always added by builder)
         let now = Utc::now().timestamp() as f64;
-        q = q.bind(now).bind(request.uuid.to_string());
+        q = q.bind(now).bind(request.uuid.as_str());
 
         q.execute(&self.pool)
             .await
@@ -1722,21 +1678,21 @@ impl ThingsDatabase {
     ///
     /// Returns an error if the task does not exist or if the database query fails
     #[instrument(skip(self))]
-    pub async fn get_task_by_uuid(&self, uuid: &Uuid) -> ThingsResult<Option<Task>> {
+    pub async fn get_task_by_uuid(&self, id: &ThingsId) -> ThingsResult<Option<Task>> {
         let row = sqlx::query(
             r"
-            SELECT 
-                uuid, title, status, type, 
+            SELECT
+                uuid, title, status, type,
                 startDate, deadline, stopDate,
                 project, area, heading,
-                notes, cachedTags, 
+                notes, cachedTags,
                 creationDate, userModificationDate,
                 trashed
             FROM TMTask
             WHERE uuid = ?
             ",
         )
-        .bind(uuid.to_string())
+        .bind(id.as_str())
         .fetch_optional(&self.pool)
         .await
         .map_err(|e| ThingsError::unknown(format!("Failed to fetch task: {e}")))?;
@@ -1762,9 +1718,9 @@ impl ThingsDatabase {
     ///
     /// Returns an error if the task does not exist or if the database update fails
     #[instrument(skip(self))]
-    pub async fn complete_task(&self, uuid: &Uuid) -> ThingsResult<()> {
+    pub async fn complete_task(&self, id: &ThingsId) -> ThingsResult<()> {
         // Verify task exists
-        validators::validate_task_exists(&self.pool, uuid).await?;
+        validators::validate_task_exists(&self.pool, id).await?;
 
         let now = Utc::now().timestamp() as f64;
 
@@ -1773,12 +1729,12 @@ impl ThingsDatabase {
         )
         .bind(now)
         .bind(now)
-        .bind(uuid.to_string())
+        .bind(id.as_str())
         .execute(&self.pool)
         .await
         .map_err(|e| ThingsError::unknown(format!("Failed to complete task: {e}")))?;
 
-        info!("Completed task with UUID: {}", uuid);
+        info!("Completed task with UUID: {}", id);
         Ok(())
     }
 
@@ -1788,9 +1744,9 @@ impl ThingsDatabase {
     ///
     /// Returns an error if the task does not exist or if the database update fails
     #[instrument(skip(self))]
-    pub async fn uncomplete_task(&self, uuid: &Uuid) -> ThingsResult<()> {
+    pub async fn uncomplete_task(&self, id: &ThingsId) -> ThingsResult<()> {
         // Verify task exists
-        validators::validate_task_exists(&self.pool, uuid).await?;
+        validators::validate_task_exists(&self.pool, id).await?;
 
         let now = Utc::now().timestamp() as f64;
 
@@ -1798,12 +1754,12 @@ impl ThingsDatabase {
             "UPDATE TMTask SET status = 0, stopDate = NULL, userModificationDate = ? WHERE uuid = ?",
         )
         .bind(now)
-        .bind(uuid.to_string())
+        .bind(id.as_str())
         .execute(&self.pool)
         .await
         .map_err(|e| ThingsError::unknown(format!("Failed to uncomplete task: {e}")))?;
 
-        info!("Uncompleted task with UUID: {}", uuid);
+        info!("Uncompleted task with UUID: {}", id);
         Ok(())
     }
 
@@ -1815,11 +1771,11 @@ impl ThingsDatabase {
     #[instrument(skip(self))]
     pub async fn complete_project(
         &self,
-        uuid: &Uuid,
+        id: &ThingsId,
         child_handling: crate::models::ProjectChildHandling,
     ) -> ThingsResult<()> {
         // Verify project exists
-        validators::validate_project_exists(&self.pool, uuid).await?;
+        validators::validate_project_exists(&self.pool, id).await?;
 
         let now = Utc::now().timestamp() as f64;
 
@@ -1830,7 +1786,7 @@ impl ThingsDatabase {
                 let child_count: i64 = sqlx::query_scalar(
                     "SELECT COUNT(*) FROM TMTask WHERE project = ? AND trashed = 0",
                 )
-                .bind(uuid.to_string())
+                .bind(id.as_str())
                 .fetch_one(&self.pool)
                 .await
                 .map_err(|e| {
@@ -1840,7 +1796,7 @@ impl ThingsDatabase {
                 if child_count > 0 {
                     return Err(ThingsError::unknown(format!(
                         "Project {} has {} child task(s). Use cascade or orphan mode to complete.",
-                        uuid, child_count
+                        id, child_count
                     )));
                 }
             }
@@ -1851,7 +1807,7 @@ impl ThingsDatabase {
                 )
                 .bind(now)
                 .bind(now)
-                .bind(uuid.to_string())
+                .bind(id.as_str())
                 .execute(&self.pool)
                 .await
                 .map_err(|e| ThingsError::unknown(format!("Failed to complete child tasks: {e}")))?;
@@ -1862,7 +1818,7 @@ impl ThingsDatabase {
                     "UPDATE TMTask SET project = NULL, userModificationDate = ? WHERE project = ? AND trashed = 0",
                 )
                 .bind(now)
-                .bind(uuid.to_string())
+                .bind(id.as_str())
                 .execute(&self.pool)
                 .await
                 .map_err(|e| ThingsError::unknown(format!("Failed to orphan child tasks: {e}")))?;
@@ -1875,12 +1831,12 @@ impl ThingsDatabase {
         )
         .bind(now)
         .bind(now)
-        .bind(uuid.to_string())
+        .bind(id.as_str())
         .execute(&self.pool)
         .await
         .map_err(|e| ThingsError::unknown(format!("Failed to complete project: {e}")))?;
 
-        info!("Completed project with UUID: {}", uuid);
+        info!("Completed project with UUID: {}", id);
         Ok(())
     }
 
@@ -1892,15 +1848,15 @@ impl ThingsDatabase {
     #[instrument(skip(self))]
     pub async fn delete_task(
         &self,
-        uuid: &Uuid,
+        id: &ThingsId,
         child_handling: DeleteChildHandling,
     ) -> ThingsResult<()> {
         // Verify task exists
-        validators::validate_task_exists(&self.pool, uuid).await?;
+        validators::validate_task_exists(&self.pool, id).await?;
 
         // Check for child tasks
         let children = sqlx::query("SELECT uuid FROM TMTask WHERE heading = ? AND trashed = 0")
-            .bind(uuid.to_string())
+            .bind(id.as_str())
             .fetch_all(&self.pool)
             .await
             .map_err(|e| ThingsError::unknown(format!("Failed to query child tasks: {e}")))?;
@@ -1912,7 +1868,7 @@ impl ThingsDatabase {
                 DeleteChildHandling::Error => {
                     return Err(ThingsError::unknown(format!(
                         "Task {} has {} child task(s). Use cascade or orphan mode to delete.",
-                        uuid,
+                        id,
                         children.len()
                     )));
                 }
@@ -1959,12 +1915,12 @@ impl ThingsDatabase {
         let now = Utc::now().timestamp() as f64;
         sqlx::query("UPDATE TMTask SET trashed = 1, userModificationDate = ? WHERE uuid = ?")
             .bind(now)
-            .bind(uuid.to_string())
+            .bind(id.as_str())
             .execute(&self.pool)
             .await
             .map_err(|e| ThingsError::unknown(format!("Failed to delete task: {e}")))?;
 
-        info!("Deleted task with UUID: {}", uuid);
+        info!("Deleted task with UUID: {}", id);
         Ok(())
     }
 
@@ -1976,11 +1932,11 @@ impl ThingsDatabase {
     #[instrument(skip(self))]
     pub async fn delete_project(
         &self,
-        uuid: &Uuid,
+        id: &ThingsId,
         child_handling: crate::models::ProjectChildHandling,
     ) -> ThingsResult<()> {
         // Verify project exists
-        validators::validate_project_exists(&self.pool, uuid).await?;
+        validators::validate_project_exists(&self.pool, id).await?;
 
         let now = Utc::now().timestamp() as f64;
 
@@ -1991,7 +1947,7 @@ impl ThingsDatabase {
                 let child_count: i64 = sqlx::query_scalar(
                     "SELECT COUNT(*) FROM TMTask WHERE project = ? AND trashed = 0",
                 )
-                .bind(uuid.to_string())
+                .bind(id.as_str())
                 .fetch_one(&self.pool)
                 .await
                 .map_err(|e| {
@@ -2001,7 +1957,7 @@ impl ThingsDatabase {
                 if child_count > 0 {
                     return Err(ThingsError::unknown(format!(
                         "Project {} has {} child task(s). Use cascade or orphan mode to delete.",
-                        uuid, child_count
+                        id, child_count
                     )));
                 }
             }
@@ -2011,7 +1967,7 @@ impl ThingsDatabase {
                     "UPDATE TMTask SET trashed = 1, userModificationDate = ? WHERE project = ? AND trashed = 0",
                 )
                 .bind(now)
-                .bind(uuid.to_string())
+                .bind(id.as_str())
                 .execute(&self.pool)
                 .await
                 .map_err(|e| ThingsError::unknown(format!("Failed to delete child tasks: {e}")))?;
@@ -2022,7 +1978,7 @@ impl ThingsDatabase {
                     "UPDATE TMTask SET project = NULL, userModificationDate = ? WHERE project = ? AND trashed = 0",
                 )
                 .bind(now)
-                .bind(uuid.to_string())
+                .bind(id.as_str())
                 .execute(&self.pool)
                 .await
                 .map_err(|e| ThingsError::unknown(format!("Failed to orphan child tasks: {e}")))?;
@@ -2032,12 +1988,12 @@ impl ThingsDatabase {
         // Delete the project
         sqlx::query("UPDATE TMTask SET trashed = 1, userModificationDate = ? WHERE uuid = ?")
             .bind(now)
-            .bind(uuid.to_string())
+            .bind(id.as_str())
             .execute(&self.pool)
             .await
             .map_err(|e| ThingsError::unknown(format!("Failed to delete project: {e}")))?;
 
-        info!("Deleted project with UUID: {}", uuid);
+        info!("Deleted project with UUID: {}", id);
         Ok(())
     }
 
@@ -2050,10 +2006,9 @@ impl ThingsDatabase {
     pub async fn create_area(
         &self,
         request: crate::models::CreateAreaRequest,
-    ) -> ThingsResult<Uuid> {
-        // Generate UUID for new area
-        let uuid = Uuid::new_v4();
-        let uuid_str = uuid.to_string();
+    ) -> ThingsResult<ThingsId> {
+        // Generate ID for new area
+        let id = ThingsId::new_v4();
 
         // Get current timestamp for creation/modification dates
         let now = Utc::now().timestamp() as f64;
@@ -2075,7 +2030,7 @@ impl ThingsDatabase {
             ) VALUES (?, ?, 1, ?, ?, ?)
             ",
         )
-        .bind(&uuid_str)
+        .bind(id.as_str())
         .bind(&request.title)
         .bind(next_index)
         .bind(now)
@@ -2084,8 +2039,8 @@ impl ThingsDatabase {
         .await
         .map_err(|e| ThingsError::unknown(format!("Failed to create area: {e}")))?;
 
-        info!("Created area with UUID: {}", uuid);
-        Ok(uuid)
+        info!("Created area with UUID: {}", id);
+        Ok(id)
     }
 
     /// Update an existing area
@@ -2103,7 +2058,7 @@ impl ThingsDatabase {
         sqlx::query("UPDATE TMArea SET title = ?, userModificationDate = ? WHERE uuid = ?")
             .bind(&request.title)
             .bind(now)
-            .bind(request.uuid.to_string())
+            .bind(request.uuid.as_str())
             .execute(&self.pool)
             .await
             .map_err(|e| ThingsError::unknown(format!("Failed to update area: {e}")))?;
@@ -2121,9 +2076,9 @@ impl ThingsDatabase {
     ///
     /// Returns an error if the area doesn't exist or if the database delete fails
     #[instrument(skip(self))]
-    pub async fn delete_area(&self, uuid: &Uuid) -> ThingsResult<()> {
+    pub async fn delete_area(&self, id: &ThingsId) -> ThingsResult<()> {
         // Verify area exists
-        validators::validate_area_exists(&self.pool, uuid).await?;
+        validators::validate_area_exists(&self.pool, id).await?;
 
         let now = Utc::now().timestamp() as f64;
 
@@ -2132,19 +2087,19 @@ impl ThingsDatabase {
             "UPDATE TMTask SET area = NULL, userModificationDate = ? WHERE area = ? AND type = 1 AND trashed = 0",
         )
         .bind(now)
-        .bind(uuid.to_string())
+        .bind(id.as_str())
         .execute(&self.pool)
         .await
         .map_err(|e| ThingsError::unknown(format!("Failed to orphan projects in area: {e}")))?;
 
         // Delete the area (hard delete)
         sqlx::query("DELETE FROM TMArea WHERE uuid = ?")
-            .bind(uuid.to_string())
+            .bind(id.as_str())
             .execute(&self.pool)
             .await
             .map_err(|e| ThingsError::unknown(format!("Failed to delete area: {e}")))?;
 
-        info!("Deleted area with UUID: {}", uuid);
+        info!("Deleted area with UUID: {}", id);
         Ok(())
     }
 
@@ -2174,13 +2129,10 @@ impl ThingsDatabase {
 
         if let Some(row) = row {
             let uuid_str: String = row.get("uuid");
-            let uuid =
-                Uuid::parse_str(&uuid_str).unwrap_or_else(|_| things_uuid_to_uuid(&uuid_str));
             let title: String = row.get("title");
             let shortcut: Option<String> = row.get("shortcut");
             let parent_str: Option<String> = row.get("parent");
-            let parent_uuid =
-                parent_str.map(|s| Uuid::parse_str(&s).unwrap_or_else(|_| things_uuid_to_uuid(&s)));
+            let parent_uuid = parent_str.map(ThingsId::from_trusted);
 
             let creation_ts: f64 = row.get("creationDate");
             let created = {
@@ -2202,8 +2154,8 @@ impl ThingsDatabase {
 
             // Count usage by querying tasks with this tag
             let usage_count: i64 = sqlx::query_scalar(
-                "SELECT COUNT(*) FROM TMTask 
-                 WHERE cachedTags IS NOT NULL 
+                "SELECT COUNT(*) FROM TMTask
+                 WHERE cachedTags IS NOT NULL
                  AND json_extract(cachedTags, '$') LIKE ?
                  AND trashed = 0",
             )
@@ -2213,7 +2165,7 @@ impl ThingsDatabase {
             .unwrap_or(0);
 
             Ok(Some(crate::models::Tag {
-                uuid,
+                uuid: ThingsId::from_trusted(uuid_str),
                 title,
                 shortcut,
                 parent_uuid,
@@ -2294,13 +2246,10 @@ impl ThingsDatabase {
         let mut tags = Vec::new();
         for row in rows {
             let uuid_str: String = row.get("uuid");
-            let uuid =
-                Uuid::parse_str(&uuid_str).unwrap_or_else(|_| things_uuid_to_uuid(&uuid_str));
             let title: String = row.get("title");
             let shortcut: Option<String> = row.get("shortcut");
             let parent_str: Option<String> = row.get("parent");
-            let parent_uuid =
-                parent_str.map(|s| Uuid::parse_str(&s).unwrap_or_else(|_| things_uuid_to_uuid(&s)));
+            let parent_uuid = parent_str.map(ThingsId::from_trusted);
 
             let creation_ts: f64 = row.get("creationDate");
             let created = {
@@ -2322,8 +2271,8 @@ impl ThingsDatabase {
 
             // Count usage
             let usage_count: i64 = sqlx::query_scalar(
-                "SELECT COUNT(*) FROM TMTask 
-                 WHERE cachedTags IS NOT NULL 
+                "SELECT COUNT(*) FROM TMTask
+                 WHERE cachedTags IS NOT NULL
                  AND json_extract(cachedTags, '$') LIKE ?
                  AND trashed = 0",
             )
@@ -2333,7 +2282,7 @@ impl ThingsDatabase {
             .unwrap_or(0);
 
             tags.push(crate::models::Tag {
-                uuid,
+                uuid: ThingsId::from_trusted(uuid_str),
                 title,
                 shortcut,
                 parent_uuid,
@@ -2366,13 +2315,10 @@ impl ThingsDatabase {
         let mut tags = Vec::new();
         for row in rows {
             let uuid_str: String = row.get("uuid");
-            let uuid =
-                Uuid::parse_str(&uuid_str).unwrap_or_else(|_| things_uuid_to_uuid(&uuid_str));
             let title: String = row.get("title");
             let shortcut: Option<String> = row.get("shortcut");
             let parent_str: Option<String> = row.get("parent");
-            let parent_uuid =
-                parent_str.map(|s| Uuid::parse_str(&s).unwrap_or_else(|_| things_uuid_to_uuid(&s)));
+            let parent_uuid = parent_str.map(ThingsId::from_trusted);
 
             let creation_ts: f64 = row.get("creationDate");
             let created = {
@@ -2394,8 +2340,8 @@ impl ThingsDatabase {
 
             // Count usage
             let usage_count: i64 = sqlx::query_scalar(
-                "SELECT COUNT(*) FROM TMTask 
-                 WHERE cachedTags IS NOT NULL 
+                "SELECT COUNT(*) FROM TMTask
+                 WHERE cachedTags IS NOT NULL
                  AND json_extract(cachedTags, '$') LIKE ?
                  AND trashed = 0",
             )
@@ -2405,7 +2351,7 @@ impl ThingsDatabase {
             .unwrap_or(0);
 
             tags.push(crate::models::Tag {
-                uuid,
+                uuid: ThingsId::from_trusted(uuid_str),
                 title,
                 shortcut,
                 parent_uuid,
@@ -2459,13 +2405,10 @@ impl ThingsDatabase {
         let mut tags = Vec::new();
         for row in rows {
             let uuid_str: String = row.get("uuid");
-            let uuid =
-                Uuid::parse_str(&uuid_str).unwrap_or_else(|_| things_uuid_to_uuid(&uuid_str));
             let title: String = row.get("title");
             let shortcut: Option<String> = row.get("shortcut");
             let parent_str: Option<String> = row.get("parent");
-            let parent_uuid =
-                parent_str.map(|s| Uuid::parse_str(&s).unwrap_or_else(|_| things_uuid_to_uuid(&s)));
+            let parent_uuid = parent_str.map(ThingsId::from_trusted);
 
             let creation_ts: f64 = row.get("creationDate");
             let created = {
@@ -2487,8 +2430,8 @@ impl ThingsDatabase {
 
             // Count usage
             let usage_count: i64 = sqlx::query_scalar(
-                "SELECT COUNT(*) FROM TMTask 
-                 WHERE cachedTags IS NOT NULL 
+                "SELECT COUNT(*) FROM TMTask
+                 WHERE cachedTags IS NOT NULL
                  AND json_extract(cachedTags, '$') LIKE ?
                  AND trashed = 0",
             )
@@ -2498,7 +2441,7 @@ impl ThingsDatabase {
             .unwrap_or(0);
 
             tags.push(crate::models::Tag {
-                uuid,
+                uuid: ThingsId::from_trusted(uuid_str),
                 title,
                 shortcut,
                 parent_uuid,
@@ -2553,25 +2496,28 @@ impl ThingsDatabase {
         }
 
         // 5. No duplicates, safe to create
-        let uuid = Uuid::new_v4();
+        let id = ThingsId::new_v4();
         let now = Utc::now().timestamp() as f64;
 
         sqlx::query(
-            "INSERT INTO TMTag (uuid, title, shortcut, parent, creationDate, userModificationDate, usedDate, `index`) 
+            "INSERT INTO TMTag (uuid, title, shortcut, parent, creationDate, userModificationDate, usedDate, `index`) \
              VALUES (?, ?, ?, ?, ?, ?, NULL, 0)"
         )
-        .bind(uuid.to_string())
+        .bind(id.as_str())
         .bind(&request.title)
         .bind(request.shortcut.as_ref())
-        .bind(request.parent_uuid.map(|u| u.to_string()))
+        .bind(request.parent_uuid.map(|u| u.into_string()))
         .bind(now)
         .bind(now)
         .execute(&self.pool)
         .await
         .map_err(|e| ThingsError::unknown(format!("Failed to create tag: {e}")))?;
 
-        info!("Created tag with UUID: {}", uuid);
-        Ok(TagCreationResult::Created { uuid, is_new: true })
+        info!("Created tag with UUID: {}", id);
+        Ok(TagCreationResult::Created {
+            uuid: id,
+            is_new: true,
+        })
     }
 
     /// Create tag forcefully (skip duplicate check)
@@ -2583,26 +2529,26 @@ impl ThingsDatabase {
     pub async fn create_tag_force(
         &self,
         request: crate::models::CreateTagRequest,
-    ) -> ThingsResult<Uuid> {
-        let uuid = Uuid::new_v4();
+    ) -> ThingsResult<ThingsId> {
+        let id = ThingsId::new_v4();
         let now = Utc::now().timestamp() as f64;
 
         sqlx::query(
-            "INSERT INTO TMTag (uuid, title, shortcut, parent, creationDate, userModificationDate, usedDate, `index`) 
+            "INSERT INTO TMTag (uuid, title, shortcut, parent, creationDate, userModificationDate, usedDate, `index`) \
              VALUES (?, ?, ?, ?, ?, ?, NULL, 0)"
         )
-        .bind(uuid.to_string())
+        .bind(id.as_str())
         .bind(&request.title)
         .bind(request.shortcut.as_ref())
-        .bind(request.parent_uuid.map(|u| u.to_string()))
+        .bind(request.parent_uuid.map(|u| u.into_string()))
         .bind(now)
         .bind(now)
         .execute(&self.pool)
         .await
         .map_err(|e| ThingsError::unknown(format!("Failed to create tag: {e}")))?;
 
-        info!("Forcefully created tag with UUID: {}", uuid);
-        Ok(uuid)
+        info!("Forcefully created tag with UUID: {}", id);
+        Ok(id)
     }
 
     /// Update a tag
@@ -2616,12 +2562,12 @@ impl ThingsDatabase {
 
         // Verify tag exists
         let existing = self
-            .find_tag_by_normalized_title(&request.uuid.to_string())
+            .find_tag_by_normalized_title(request.uuid.as_str())
             .await?;
         if existing.is_none() {
             // Try by UUID
             let row = sqlx::query("SELECT 1 FROM TMTag WHERE uuid = ?")
-                .bind(request.uuid.to_string())
+                .bind(request.uuid.as_str())
                 .fetch_optional(&self.pool)
                 .await
                 .map_err(|e| ThingsError::unknown(format!("Failed to validate tag: {e}")))?;
@@ -2663,7 +2609,7 @@ impl ThingsDatabase {
         }
         if let Some(parent_uuid) = request.parent_uuid {
             updates.push("parent = ?");
-            params.push(parent_uuid.to_string());
+            params.push(parent_uuid.into_string());
         }
 
         if updates.is_empty() {
@@ -2674,7 +2620,7 @@ impl ThingsDatabase {
         params.push(now.to_string());
 
         let sql = format!("UPDATE TMTag SET {} WHERE uuid = ?", updates.join(", "));
-        params.push(request.uuid.to_string());
+        params.push(request.uuid.as_str().to_string());
 
         let mut query = sqlx::query(&sql);
         for param in params {
@@ -2701,37 +2647,37 @@ impl ThingsDatabase {
     ///
     /// Returns an error if the database operation fails
     #[instrument(skip(self))]
-    pub async fn delete_tag(&self, uuid: &Uuid, remove_from_tasks: bool) -> ThingsResult<()> {
+    pub async fn delete_tag(&self, id: &ThingsId, remove_from_tasks: bool) -> ThingsResult<()> {
         // Get the tag title before deletion
-        let tag = self.find_tag_by_normalized_title(&uuid.to_string()).await?;
+        let tag = self.find_tag_by_normalized_title(id.as_str()).await?;
 
         if tag.is_none() {
             // Try by UUID directly
             let row = sqlx::query("SELECT title FROM TMTag WHERE uuid = ?")
-                .bind(uuid.to_string())
+                .bind(id.as_str())
                 .fetch_optional(&self.pool)
                 .await
                 .map_err(|e| ThingsError::unknown(format!("Failed to find tag: {e}")))?;
 
             if row.is_none() {
-                return Err(ThingsError::unknown(format!("Tag not found: {}", uuid)));
+                return Err(ThingsError::unknown(format!("Tag not found: {}", id)));
             }
         }
 
         if remove_from_tasks {
             // TODO: Implement updating all tasks' cachedTags to remove this tag
             // This requires parsing and re-serializing the JSON arrays
-            info!("Removing tag {} from all tasks (not yet implemented)", uuid);
+            info!("Removing tag {} from all tasks (not yet implemented)", id);
         }
 
         // Delete the tag
         sqlx::query("DELETE FROM TMTag WHERE uuid = ?")
-            .bind(uuid.to_string())
+            .bind(id.as_str())
             .execute(&self.pool)
             .await
             .map_err(|e| ThingsError::unknown(format!("Failed to delete tag: {e}")))?;
 
-        info!("Deleted tag with UUID: {}", uuid);
+        info!("Deleted tag with UUID: {}", id);
         Ok(())
     }
 
@@ -2746,10 +2692,10 @@ impl ThingsDatabase {
     ///
     /// Returns an error if either tag doesn't exist or database operation fails
     #[instrument(skip(self))]
-    pub async fn merge_tags(&self, source_uuid: &Uuid, target_uuid: &Uuid) -> ThingsResult<()> {
+    pub async fn merge_tags(&self, source_id: &ThingsId, target_id: &ThingsId) -> ThingsResult<()> {
         // Verify both tags exist
         let source_row = sqlx::query("SELECT title FROM TMTag WHERE uuid = ?")
-            .bind(source_uuid.to_string())
+            .bind(source_id.as_str())
             .fetch_optional(&self.pool)
             .await
             .map_err(|e| ThingsError::unknown(format!("Failed to find source tag: {e}")))?;
@@ -2757,12 +2703,12 @@ impl ThingsDatabase {
         if source_row.is_none() {
             return Err(ThingsError::unknown(format!(
                 "Source tag not found: {}",
-                source_uuid
+                source_id
             )));
         }
 
         let target_row = sqlx::query("SELECT title FROM TMTag WHERE uuid = ?")
-            .bind(target_uuid.to_string())
+            .bind(target_id.as_str())
             .fetch_optional(&self.pool)
             .await
             .map_err(|e| ThingsError::unknown(format!("Failed to find target tag: {e}")))?;
@@ -2770,7 +2716,7 @@ impl ThingsDatabase {
         if target_row.is_none() {
             return Err(ThingsError::unknown(format!(
                 "Target tag not found: {}",
-                target_uuid
+                target_id
             )));
         }
 
@@ -2778,7 +2724,7 @@ impl ThingsDatabase {
         // This requires parsing and re-serializing the JSON arrays
         info!(
             "Merging tag {} into {} (tag replacement in tasks not yet fully implemented)",
-            source_uuid, target_uuid
+            source_id, target_id
         );
 
         // Update usedDate on target if source was used more recently
@@ -2786,19 +2732,19 @@ impl ThingsDatabase {
         sqlx::query("UPDATE TMTag SET userModificationDate = ?, usedDate = ? WHERE uuid = ?")
             .bind(now)
             .bind(now)
-            .bind(target_uuid.to_string())
+            .bind(target_id.as_str())
             .execute(&self.pool)
             .await
             .map_err(|e| ThingsError::unknown(format!("Failed to update target tag: {e}")))?;
 
         // Delete source tag
         sqlx::query("DELETE FROM TMTag WHERE uuid = ?")
-            .bind(source_uuid.to_string())
+            .bind(source_id.as_str())
             .execute(&self.pool)
             .await
             .map_err(|e| ThingsError::unknown(format!("Failed to delete source tag: {e}")))?;
 
-        info!("Merged tag {} into {}", source_uuid, target_uuid);
+        info!("Merged tag {} into {}", source_id, target_id);
         Ok(())
     }
 
@@ -2818,14 +2764,14 @@ impl ThingsDatabase {
     #[instrument(skip(self))]
     pub async fn add_tag_to_task(
         &self,
-        task_uuid: &Uuid,
+        task_id: &ThingsId,
         tag_title: &str,
     ) -> ThingsResult<crate::models::TagAssignmentResult> {
         use crate::database::tag_utils::normalize_tag_title;
         use crate::models::TagAssignmentResult;
 
         // 1. Verify task exists
-        validators::validate_task_exists(&self.pool, task_uuid).await?;
+        validators::validate_task_exists(&self.pool, task_id).await?;
 
         // 2. Normalize and find tag
         let normalized = normalize_tag_title(tag_title);
@@ -2858,7 +2804,7 @@ impl ThingsDatabase {
 
         // 6. Get current tags from task
         let row = sqlx::query("SELECT cachedTags FROM TMTask WHERE uuid = ?")
-            .bind(task_uuid.to_string())
+            .bind(task_id.as_str())
             .fetch_one(&self.pool)
             .await
             .map_err(|e| ThingsError::unknown(format!("Failed to fetch task tags: {e}")))?;
@@ -2883,7 +2829,7 @@ impl ThingsDatabase {
             )
             .bind(cached_tags)
             .bind(now)
-            .bind(task_uuid.to_string())
+            .bind(task_id.as_str())
             .execute(&self.pool)
             .await
             .map_err(|e| ThingsError::unknown(format!("Failed to update task tags: {e}")))?;
@@ -2892,12 +2838,12 @@ impl ThingsDatabase {
             sqlx::query("UPDATE TMTag SET usedDate = ?, userModificationDate = ? WHERE uuid = ?")
                 .bind(now)
                 .bind(now)
-                .bind(tag.uuid.to_string())
+                .bind(tag.uuid.as_str())
                 .execute(&self.pool)
                 .await
                 .map_err(|e| ThingsError::unknown(format!("Failed to update tag usedDate: {e}")))?;
 
-            info!("Added tag '{}' to task {}", tag.title, task_uuid);
+            info!("Added tag '{}' to task {}", tag.title, task_id);
         }
 
         Ok(TagAssignmentResult::Assigned { tag_uuid: tag.uuid })
@@ -2911,17 +2857,17 @@ impl ThingsDatabase {
     #[instrument(skip(self))]
     pub async fn remove_tag_from_task(
         &self,
-        task_uuid: &Uuid,
+        task_id: &ThingsId,
         tag_title: &str,
     ) -> ThingsResult<()> {
         use crate::database::tag_utils::normalize_tag_title;
 
         // 1. Verify task exists
-        validators::validate_task_exists(&self.pool, task_uuid).await?;
+        validators::validate_task_exists(&self.pool, task_id).await?;
 
         // 2. Get current tags from task
         let row = sqlx::query("SELECT cachedTags FROM TMTask WHERE uuid = ?")
-            .bind(task_uuid.to_string())
+            .bind(task_id.as_str())
             .fetch_one(&self.pool)
             .await
             .map_err(|e| ThingsError::unknown(format!("Failed to fetch task tags: {e}")))?;
@@ -2954,7 +2900,7 @@ impl ThingsDatabase {
                 )
                 .bind(cached_tags_val)
                 .bind(now)
-                .bind(task_uuid.to_string())
+                .bind(task_id.as_str())
                 .execute(&self.pool)
                 .await
                 .map_err(|e| ThingsError::unknown(format!("Failed to update task tags: {e}")))?;
@@ -2964,13 +2910,13 @@ impl ThingsDatabase {
                     "UPDATE TMTask SET cachedTags = NULL, userModificationDate = ? WHERE uuid = ?",
                 )
                 .bind(now)
-                .bind(task_uuid.to_string())
+                .bind(task_id.as_str())
                 .execute(&self.pool)
                 .await
                 .map_err(|e| ThingsError::unknown(format!("Failed to update task tags: {e}")))?;
             }
 
-            info!("Removed tag '{}' from task {}", tag_title, task_uuid);
+            info!("Removed tag '{}' from task {}", tag_title, task_id);
         }
 
         Ok(())
@@ -2986,13 +2932,13 @@ impl ThingsDatabase {
     #[instrument(skip(self))]
     pub async fn set_task_tags(
         &self,
-        task_uuid: &Uuid,
+        task_id: &ThingsId,
         tag_titles: Vec<String>,
     ) -> ThingsResult<Vec<crate::models::TagMatch>> {
         use crate::database::tag_utils::normalize_tag_title;
 
         // 1. Verify task exists
-        validators::validate_task_exists(&self.pool, task_uuid).await?;
+        validators::validate_task_exists(&self.pool, task_id).await?;
 
         let mut resolved_tags = Vec::new();
         let mut suggestions = Vec::new();
@@ -3049,7 +2995,7 @@ impl ThingsDatabase {
             )
             .bind(cached_tags_val)
             .bind(now)
-            .bind(task_uuid.to_string())
+            .bind(task_id.as_str())
             .execute(&self.pool)
             .await
             .map_err(|e| ThingsError::unknown(format!("Failed to update task tags: {e}")))?;
@@ -3058,7 +3004,7 @@ impl ThingsDatabase {
                 "UPDATE TMTask SET cachedTags = NULL, userModificationDate = ? WHERE uuid = ?",
             )
             .bind(now)
-            .bind(task_uuid.to_string())
+            .bind(task_id.as_str())
             .execute(&self.pool)
             .await
             .map_err(|e| ThingsError::unknown(format!("Failed to update task tags: {e}")))?;
@@ -3073,14 +3019,14 @@ impl ThingsDatabase {
                 )
                 .bind(now)
                 .bind(now)
-                .bind(tag.uuid.to_string())
+                .bind(tag.uuid.as_str())
                 .execute(&self.pool)
                 .await
                 .map_err(|e| ThingsError::unknown(format!("Failed to update tag usedDate: {e}")))?;
             }
         }
 
-        info!("Set tags on task {} to: {:?}", task_uuid, resolved_tags);
+        info!("Set tags on task {} to: {:?}", task_id, resolved_tags);
         Ok(suggestions)
     }
 
@@ -3157,17 +3103,17 @@ impl ThingsDatabase {
     #[instrument(skip(self))]
     pub async fn get_tag_statistics(
         &self,
-        uuid: &Uuid,
+        id: &ThingsId,
     ) -> ThingsResult<crate::models::TagStatistics> {
         // Get the tag
         let tag_row = sqlx::query("SELECT title FROM TMTag WHERE uuid = ?")
-            .bind(uuid.to_string())
+            .bind(id.as_str())
             .fetch_optional(&self.pool)
             .await
             .map_err(|e| ThingsError::unknown(format!("Failed to find tag: {e}")))?;
 
         let title: String = tag_row
-            .ok_or_else(|| ThingsError::unknown(format!("Tag not found: {}", uuid)))?
+            .ok_or_else(|| ThingsError::unknown(format!("Tag not found: {}", id)))?
             .get("title");
 
         // Get all tasks using this tag
@@ -3190,9 +3136,7 @@ impl ThingsDatabase {
             if let Some(blob) = cached_tags_blob {
                 if let Ok(tags) = deserialize_tags_from_blob(&blob) {
                     if tags.iter().any(|t| t.eq_ignore_ascii_case(&title)) {
-                        let task_uuid = Uuid::parse_str(&uuid_str)
-                            .unwrap_or_else(|_| things_uuid_to_uuid(&uuid_str));
-                        task_uuids.push(task_uuid);
+                        task_uuids.push(ThingsId::from_trusted(uuid_str));
                     }
                 }
             }
@@ -3206,7 +3150,7 @@ impl ThingsDatabase {
 
         for task_uuid in &task_uuids {
             let row = sqlx::query("SELECT cachedTags FROM TMTask WHERE uuid = ?")
-                .bind(task_uuid.to_string())
+                .bind(task_uuid.as_str())
                 .fetch_optional(&self.pool)
                 .await
                 .map_err(|e| ThingsError::unknown(format!("Failed to fetch task tags: {e}")))?;
@@ -3229,7 +3173,7 @@ impl ThingsDatabase {
         related_vec.sort_by_key(|r| std::cmp::Reverse(r.1));
 
         Ok(crate::models::TagStatistics {
-            uuid: *uuid,
+            uuid: id.clone(),
             title,
             usage_count,
             task_uuids,
@@ -3352,8 +3296,8 @@ impl ThingsDatabase {
         );
 
         let mut query = sqlx::query(&query_str);
-        for uuid in &request.task_uuids {
-            query = query.bind(uuid.to_string());
+        for id in &request.task_uuids {
+            query = query.bind(id.as_str());
         }
 
         let found_uuids: Vec<String> = query
@@ -3367,11 +3311,11 @@ impl ThingsDatabase {
         // Check if any UUIDs were not found
         if found_uuids.len() != request.task_uuids.len() {
             // Find the first missing UUID for error reporting
-            for uuid in &request.task_uuids {
-                if !found_uuids.contains(&uuid.to_string()) {
+            for id in &request.task_uuids {
+                if !found_uuids.contains(&id.to_string()) {
                     tx.rollback().await.ok();
                     return Err(ThingsError::TaskNotFound {
-                        uuid: uuid.to_string(),
+                        uuid: id.to_string(),
                     });
                 }
             }
@@ -3391,12 +3335,12 @@ impl ThingsDatabase {
         );
 
         let mut query = sqlx::query(&query_str)
-            .bind(request.project_uuid.map(|u| u.to_string()))
-            .bind(request.area_uuid.map(|u| u.to_string()))
+            .bind(request.project_uuid.map(|u| u.into_string()))
+            .bind(request.area_uuid.map(|u| u.into_string()))
             .bind(now);
 
-        for uuid in &request.task_uuids {
-            query = query.bind(uuid.to_string());
+        for id in &request.task_uuids {
+            query = query.bind(id.as_str());
         }
 
         query
@@ -3473,8 +3417,8 @@ impl ThingsDatabase {
         );
 
         let mut query = sqlx::query(&query_str);
-        for uuid in &request.task_uuids {
-            query = query.bind(uuid.to_string());
+        for id in &request.task_uuids {
+            query = query.bind(id.as_str());
         }
 
         let rows = query
@@ -3486,11 +3430,11 @@ impl ThingsDatabase {
         if rows.len() != request.task_uuids.len() {
             // Find the first missing UUID for error reporting
             let found_uuids: Vec<String> = rows.iter().map(|row| row.get("uuid")).collect();
-            for uuid in &request.task_uuids {
-                if !found_uuids.contains(&uuid.to_string()) {
+            for id in &request.task_uuids {
+                if !found_uuids.contains(&id.to_string()) {
                     tx.rollback().await.ok();
                     return Err(ThingsError::TaskNotFound {
-                        uuid: uuid.to_string(),
+                        uuid: id.to_string(),
                     });
                 }
             }
@@ -3551,8 +3495,8 @@ impl ThingsDatabase {
             .bind(deadline_value)
             .bind(now);
 
-        for uuid in &request.task_uuids {
-            query = query.bind(uuid.to_string());
+        for id in &request.task_uuids {
+            query = query.bind(id.as_str());
         }
 
         query
@@ -3625,8 +3569,8 @@ impl ThingsDatabase {
         );
 
         let mut query = sqlx::query(&query_str);
-        for uuid in &request.task_uuids {
-            query = query.bind(uuid.to_string());
+        for id in &request.task_uuids {
+            query = query.bind(id.as_str());
         }
 
         let found_uuids: Vec<String> = query
@@ -3640,11 +3584,11 @@ impl ThingsDatabase {
         // Check if any UUIDs were not found
         if found_uuids.len() != request.task_uuids.len() {
             // Find the first missing UUID for error reporting
-            for uuid in &request.task_uuids {
-                if !found_uuids.contains(&uuid.to_string()) {
+            for id in &request.task_uuids {
+                if !found_uuids.contains(&id.to_string()) {
                     tx.rollback().await.ok();
                     return Err(ThingsError::TaskNotFound {
-                        uuid: uuid.to_string(),
+                        uuid: id.to_string(),
                     });
                 }
             }
@@ -3665,8 +3609,8 @@ impl ThingsDatabase {
 
         let mut query = sqlx::query(&query_str).bind(now).bind(now);
 
-        for uuid in &request.task_uuids {
-            query = query.bind(uuid.to_string());
+        for id in &request.task_uuids {
+            query = query.bind(id.as_str());
         }
 
         query
@@ -3737,8 +3681,8 @@ impl ThingsDatabase {
         );
 
         let mut query = sqlx::query(&query_str);
-        for uuid in &request.task_uuids {
-            query = query.bind(uuid.to_string());
+        for id in &request.task_uuids {
+            query = query.bind(id.as_str());
         }
 
         let found_uuids: Vec<String> = query
@@ -3752,11 +3696,11 @@ impl ThingsDatabase {
         // Check if any UUIDs were not found
         if found_uuids.len() != request.task_uuids.len() {
             // Find the first missing UUID for error reporting
-            for uuid in &request.task_uuids {
-                if !found_uuids.contains(&uuid.to_string()) {
+            for id in &request.task_uuids {
+                if !found_uuids.contains(&id.to_string()) {
                     tx.rollback().await.ok();
                     return Err(ThingsError::TaskNotFound {
-                        uuid: uuid.to_string(),
+                        uuid: id.to_string(),
                     });
                 }
             }
@@ -3777,8 +3721,8 @@ impl ThingsDatabase {
 
         let mut query = sqlx::query(&query_str).bind(now);
 
-        for uuid in &request.task_uuids {
-            query = query.bind(uuid.to_string());
+        for id in &request.task_uuids {
+            query = query.bind(id.as_str());
         }
 
         query
@@ -4028,31 +3972,6 @@ mod tests {
         // Test max valid timestamp
         let max_timestamp = 4_102_444_800_f64; // 2100-01-01
         assert_eq!(safe_timestamp_convert(max_timestamp), 4_102_444_800);
-    }
-
-    #[test]
-    fn test_things_uuid_to_uuid_consistency() {
-        // Test consistent UUID generation
-        let things_id = "test-id-123";
-        let uuid1 = things_uuid_to_uuid(things_id);
-        let uuid2 = things_uuid_to_uuid(things_id);
-        assert_eq!(uuid1, uuid2, "UUIDs should be consistent for same input");
-
-        // Test different inputs produce different UUIDs
-        let uuid3 = things_uuid_to_uuid("different-id");
-        assert_ne!(
-            uuid1, uuid3,
-            "Different inputs should produce different UUIDs"
-        );
-
-        // Test empty string
-        let uuid_empty = things_uuid_to_uuid("");
-        assert!(!uuid_empty.to_string().is_empty());
-
-        // Test very long string
-        let long_string = "a".repeat(1000);
-        let uuid_long = things_uuid_to_uuid(&long_string);
-        assert!(!uuid_long.to_string().is_empty());
     }
 
     #[test]
@@ -4369,52 +4288,6 @@ mod tests {
     }
 
     // ============================================================================
-    // UUID Conversion Tests
-    // ============================================================================
-
-    #[test]
-    fn test_uuid_conversion_consistency() {
-        // Same input should always produce same UUID
-        let input = "ABC123";
-        let uuid1 = things_uuid_to_uuid(input);
-        let uuid2 = things_uuid_to_uuid(input);
-
-        assert_eq!(uuid1, uuid2);
-    }
-
-    #[test]
-    fn test_uuid_conversion_uniqueness() {
-        // Different inputs should produce different UUIDs
-        let uuid1 = things_uuid_to_uuid("ABC123");
-        let uuid2 = things_uuid_to_uuid("ABC124");
-        let uuid3 = things_uuid_to_uuid("XYZ789");
-
-        assert_ne!(uuid1, uuid2);
-        assert_ne!(uuid1, uuid3);
-        assert_ne!(uuid2, uuid3);
-    }
-
-    #[test]
-    fn test_uuid_conversion_empty_string() {
-        // Empty string should still produce a valid UUID
-        let uuid = things_uuid_to_uuid("");
-        assert!(!uuid.to_string().is_empty());
-    }
-
-    #[test]
-    fn test_uuid_conversion_special_characters() {
-        // Special characters should be handled
-        let uuid1 = things_uuid_to_uuid("test-with-dashes");
-        let uuid2 = things_uuid_to_uuid("test_with_underscores");
-        let uuid3 = things_uuid_to_uuid("test.with.dots");
-
-        // All should be valid and different
-        assert_ne!(uuid1, uuid2);
-        assert_ne!(uuid1, uuid3);
-        assert_ne!(uuid2, uuid3);
-    }
-
-    // ============================================================================
     // Timestamp Conversion Tests
     // ============================================================================
 
@@ -4688,8 +4561,8 @@ mod tests {
             title: &str,
             notes: Option<&str>,
             tags: &[&str],
-        ) -> Uuid {
-            let uuid = Uuid::new_v4();
+        ) -> ThingsId {
+            let raw_uuid = uuid::Uuid::new_v4();
             let owned: Vec<String> = tags.iter().map(|s| (*s).to_string()).collect();
             let blob = serialize_tags_to_blob(&owned).unwrap();
             sqlx::query(
@@ -4697,21 +4570,26 @@ mod tests {
                  (uuid, title, notes, type, status, trashed, creationDate, userModificationDate, cachedTags) \
                  VALUES (?, ?, ?, 0, 0, 0, 0, 0, ?)",
             )
-            .bind(uuid.to_string())
+            .bind(raw_uuid.to_string())
             .bind(title)
             .bind(notes)
             .bind(blob)
             .execute(&db.pool)
             .await
             .unwrap();
-            uuid
+            ThingsId::from_trusted(raw_uuid.to_string())
         }
 
-        async fn insert_task_with_tags(db: &ThingsDatabase, title: &str, tags: &[&str]) -> Uuid {
+        async fn insert_task_with_tags(
+            db: &ThingsDatabase,
+            title: &str,
+            tags: &[&str],
+        ) -> ThingsId {
             insert_task(db, title, None, tags).await
         }
 
-        async fn open_db_with_tagged_rows() -> (ThingsDatabase, NamedTempFile, Uuid, Uuid, Uuid) {
+        async fn open_db_with_tagged_rows(
+        ) -> (ThingsDatabase, NamedTempFile, ThingsId, ThingsId, ThingsId) {
             let (db, f) = open_test_db().await;
             let a = insert_task_with_tags(&db, "task-a", &["a"]).await;
             let b = insert_task_with_tags(&db, "task-b", &["b"]).await;
@@ -4727,7 +4605,8 @@ mod tests {
                 .execute(&db)
                 .await
                 .unwrap();
-            let uuids: std::collections::HashSet<_> = tasks.iter().map(|t| t.uuid).collect();
+            let uuids: std::collections::HashSet<_> =
+                tasks.iter().map(|t| t.uuid.clone()).collect();
             assert!(uuids.contains(&a));
             assert!(uuids.contains(&b));
             assert!(!uuids.contains(&c));
@@ -4741,7 +4620,8 @@ mod tests {
                 .execute(&db)
                 .await
                 .unwrap();
-            let uuids: std::collections::HashSet<_> = tasks.iter().map(|t| t.uuid).collect();
+            let uuids: std::collections::HashSet<_> =
+                tasks.iter().map(|t| t.uuid.clone()).collect();
             assert!(uuids.contains(&a));
             assert!(!uuids.contains(&b));
             assert!(uuids.contains(&c));
@@ -4758,7 +4638,7 @@ mod tests {
                 .execute(&db)
                 .await
                 .unwrap();
-            let uuids: Vec<Uuid> = tasks.iter().map(|t| t.uuid).collect();
+            let uuids: Vec<ThingsId> = tasks.iter().map(|t| t.uuid.clone()).collect();
             assert_eq!(uuids, vec![two]);
         }
 
@@ -4777,7 +4657,7 @@ mod tests {
                 .execute(&db)
                 .await
                 .unwrap();
-            let uuids: Vec<Uuid> = tasks.iter().map(|t| t.uuid).collect();
+            let uuids: Vec<ThingsId> = tasks.iter().map(|t| t.uuid.clone()).collect();
             assert_eq!(uuids, vec![target]);
         }
 
@@ -4817,7 +4697,7 @@ mod tests {
                 .execute(&db)
                 .await
                 .unwrap();
-            let uuids: Vec<Uuid> = tasks.iter().map(|t| t.uuid).collect();
+            let uuids: Vec<ThingsId> = tasks.iter().map(|t| t.uuid.clone()).collect();
             assert!(
                 uuids.contains(&groceries),
                 "typo 'grocries' should match 'Buy groceries'"
@@ -4929,7 +4809,7 @@ mod tests {
                 .execute(&db)
                 .await
                 .unwrap();
-            let uuids: Vec<Uuid> = tasks.iter().map(|t| t.uuid).collect();
+            let uuids: Vec<ThingsId> = tasks.iter().map(|t| t.uuid.clone()).collect();
             assert!(uuids.contains(&target), "fuzzy should match text in notes");
         }
 
@@ -4937,8 +4817,8 @@ mod tests {
             db: &ThingsDatabase,
             title: &str,
             status: TaskStatus,
-        ) -> Uuid {
-            let uuid = Uuid::new_v4();
+        ) -> ThingsId {
+            let raw_uuid = uuid::Uuid::new_v4();
             let blob = serialize_tags_to_blob(&Vec::<String>::new()).unwrap();
             let status_n: i64 = match status {
                 TaskStatus::Incomplete => 0,
@@ -4951,22 +4831,22 @@ mod tests {
                  (uuid, title, notes, type, status, trashed, creationDate, userModificationDate, cachedTags) \
                  VALUES (?, ?, NULL, 0, ?, 0, 0, 0, ?)",
             )
-            .bind(uuid.to_string())
+            .bind(raw_uuid.to_string())
             .bind(title)
             .bind(status_n)
             .bind(blob)
             .execute(&db.pool)
             .await
             .unwrap();
-            uuid
+            ThingsId::from_trusted(raw_uuid.to_string())
         }
 
         async fn insert_task_with_type(
             db: &ThingsDatabase,
             title: &str,
             task_type: crate::models::TaskType,
-        ) -> Uuid {
-            let uuid = Uuid::new_v4();
+        ) -> ThingsId {
+            let raw_uuid = uuid::Uuid::new_v4();
             let blob = serialize_tags_to_blob(&Vec::<String>::new()).unwrap();
             let type_n: i64 = match task_type {
                 crate::models::TaskType::Todo => 0,
@@ -4979,14 +4859,14 @@ mod tests {
                  (uuid, title, notes, type, status, trashed, creationDate, userModificationDate, cachedTags) \
                  VALUES (?, ?, NULL, ?, 0, 0, 0, 0, ?)",
             )
-            .bind(uuid.to_string())
+            .bind(raw_uuid.to_string())
             .bind(title)
             .bind(type_n)
             .bind(blob)
             .execute(&db.pool)
             .await
             .unwrap();
-            uuid
+            ThingsId::from_trusted(raw_uuid.to_string())
         }
 
         #[tokio::test]
@@ -5006,7 +4886,8 @@ mod tests {
                 .await
                 .unwrap();
 
-            let uuids: std::collections::HashSet<_> = tasks.iter().map(|t| t.uuid).collect();
+            let uuids: std::collections::HashSet<_> =
+                tasks.iter().map(|t| t.uuid.clone()).collect();
             assert!(uuids.contains(&inc));
             assert!(uuids.contains(&comp));
             assert!(!uuids.contains(&canc));
@@ -5026,7 +4907,8 @@ mod tests {
                 .await
                 .unwrap();
 
-            let uuids: std::collections::HashSet<_> = tasks.iter().map(|t| t.uuid).collect();
+            let uuids: std::collections::HashSet<_> =
+                tasks.iter().map(|t| t.uuid.clone()).collect();
             assert!(uuids.contains(&todo));
             assert!(!uuids.contains(&project));
         }
@@ -5078,7 +4960,8 @@ mod tests {
                 .await
                 .unwrap();
 
-            let uuids: std::collections::HashSet<_> = tasks.iter().map(|t| t.uuid).collect();
+            let uuids: std::collections::HashSet<_> =
+                tasks.iter().map(|t| t.uuid.clone()).collect();
             assert!(uuids.contains(&target));
             assert_eq!(tasks.len(), 1);
         }
@@ -5100,7 +4983,8 @@ mod tests {
                 .await
                 .unwrap();
 
-            let uuids: std::collections::HashSet<_> = tasks.iter().map(|t| t.uuid).collect();
+            let uuids: std::collections::HashSet<_> =
+                tasks.iter().map(|t| t.uuid.clone()).collect();
             assert!(uuids.contains(&target));
             assert_eq!(tasks.len(), 1);
         }
@@ -5117,7 +5001,7 @@ mod tests {
                     inserted.push(insert_task(&db, &format!("task-{i}"), None, &[]).await);
                 }
 
-                let mut all_collected: Vec<Uuid> = vec![];
+                let mut all_collected: Vec<ThingsId> = vec![];
                 let mut cursor = None;
                 let mut page_count = 0;
                 loop {
@@ -5127,7 +5011,7 @@ mod tests {
                     }
                     let page = builder.execute_paged(&db).await.unwrap();
                     page_count += 1;
-                    all_collected.extend(page.items.iter().map(|t| t.uuid));
+                    all_collected.extend(page.items.iter().map(|t| t.uuid.clone()));
                     if let Some(next) = page.next_cursor {
                         cursor = Some(next);
                     } else {
@@ -5136,16 +5020,18 @@ mod tests {
                     assert!(page_count < 10, "runaway pagination loop");
                 }
 
-                let inserted_set: std::collections::HashSet<_> = inserted.iter().copied().collect();
+                let inserted_set: std::collections::HashSet<_> = inserted.iter().cloned().collect();
                 let collected_set: std::collections::HashSet<_> =
-                    all_collected.iter().copied().collect();
+                    all_collected.iter().cloned().collect();
                 for uuid in &inserted_set {
                     assert!(collected_set.contains(uuid), "missing inserted uuid {uuid}");
                 }
-                let mut sorted = all_collected.clone();
-                sorted.sort();
-                sorted.dedup();
-                assert_eq!(sorted.len(), all_collected.len(), "duplicates in pages");
+                // Verify no duplicates: use HashSet size comparison.
+                assert_eq!(
+                    all_collected.len(),
+                    collected_set.len(),
+                    "duplicates in pages"
+                );
             }
 
             #[tokio::test]
@@ -5175,7 +5061,7 @@ mod tests {
                     .await
                     .unwrap();
                 let uuids: std::collections::HashSet<_> =
-                    page.items.iter().map(|t| t.uuid).collect();
+                    page.items.iter().map(|t| t.uuid.clone()).collect();
                 assert!(uuids.contains(&target));
                 for task in &page.items {
                     assert_eq!(task.status, TaskStatus::Incomplete);
@@ -5190,7 +5076,7 @@ mod tests {
                 let a3 = insert_task_with_tags(&db, "a3", &["a"]).await;
                 let _b = insert_task_with_tags(&db, "b1", &["b"]).await;
 
-                let mut all: Vec<Uuid> = vec![];
+                let mut all: Vec<ThingsId> = vec![];
                 let mut cursor = None;
                 loop {
                     let mut builder = TaskQueryBuilder::new()
@@ -5200,7 +5086,7 @@ mod tests {
                         builder = builder.after(c);
                     }
                     let page = builder.execute_paged(&db).await.unwrap();
-                    all.extend(page.items.iter().map(|t| t.uuid));
+                    all.extend(page.items.iter().map(|t| t.uuid.clone()));
                     if let Some(n) = page.next_cursor {
                         cursor = Some(n);
                     } else {
@@ -5208,7 +5094,7 @@ mod tests {
                     }
                 }
 
-                let collected: std::collections::HashSet<_> = all.iter().copied().collect();
+                let collected: std::collections::HashSet<_> = all.iter().cloned().collect();
                 assert!(collected.contains(&a1));
                 assert!(collected.contains(&a2));
                 assert!(collected.contains(&a3));
@@ -5240,8 +5126,8 @@ mod tests {
                 }
                 let first = db.query_tasks(&TaskFilters::default()).await.unwrap();
                 let second = db.query_tasks(&TaskFilters::default()).await.unwrap();
-                let first_uuids: Vec<_> = first.iter().map(|t| t.uuid).collect();
-                let second_uuids: Vec<_> = second.iter().map(|t| t.uuid).collect();
+                let first_uuids: Vec<_> = first.iter().map(|t| t.uuid.clone()).collect();
+                let second_uuids: Vec<_> = second.iter().map(|t| t.uuid.clone()).collect();
                 assert_eq!(
                     first_uuids, second_uuids,
                     "tied-creationDate ordering should be deterministic"
@@ -5269,9 +5155,9 @@ mod tests {
                     .await
                     .unwrap();
 
-                let inserted_set: std::collections::HashSet<_> = inserted.iter().copied().collect();
+                let inserted_set: std::collections::HashSet<_> = inserted.iter().cloned().collect();
                 let collected_set: std::collections::HashSet<_> =
-                    collected.iter().map(|t| t.uuid).collect();
+                    collected.iter().map(|t| t.uuid.clone()).collect();
                 for uuid in &inserted_set {
                     assert!(
                         collected_set.contains(uuid),
@@ -5298,7 +5184,8 @@ mod tests {
                     .await
                     .unwrap();
 
-                let uuids: std::collections::HashSet<_> = tasks.iter().map(|t| t.uuid).collect();
+                let uuids: std::collections::HashSet<_> =
+                    tasks.iter().map(|t| t.uuid.clone()).collect();
                 assert!(uuids.contains(&target));
                 for task in &tasks {
                     assert_eq!(task.status, TaskStatus::Incomplete);
@@ -5321,7 +5208,8 @@ mod tests {
                     .await
                     .unwrap();
 
-                let uuids: std::collections::HashSet<_> = tasks.iter().map(|t| t.uuid).collect();
+                let uuids: std::collections::HashSet<_> =
+                    tasks.iter().map(|t| t.uuid.clone()).collect();
                 assert!(uuids.contains(&a1));
                 assert!(uuids.contains(&a2));
                 assert!(uuids.contains(&a3));
@@ -5333,7 +5221,7 @@ mod tests {
                 let (db, _f) = open_test_db().await;
                 // Filter by a project UUID that doesn't exist → no matches.
                 let tasks = TaskQueryBuilder::new()
-                    .project_uuid(Uuid::new_v4())
+                    .project_uuid(ThingsId::new_v4())
                     .execute_stream(&db)
                     .try_collect::<Vec<_>>()
                     .await
@@ -5368,7 +5256,7 @@ mod tests {
                 }
 
                 // Stream with chunk size 2 — cursor advances across 3 pages.
-                let stream_uuids: Vec<Uuid> = TaskQueryBuilder::new()
+                let stream_uuids: Vec<ThingsId> = TaskQueryBuilder::new()
                     .limit(2)
                     .execute_stream(&db)
                     .try_collect::<Vec<_>>()
@@ -5379,7 +5267,7 @@ mod tests {
                     .collect();
 
                 // Single full query — same ORDER BY, no pagination.
-                let full_uuids: Vec<Uuid> = db
+                let full_uuids: Vec<ThingsId> = db
                     .query_tasks(&TaskFilters::default())
                     .await
                     .unwrap()
@@ -5390,8 +5278,8 @@ mod tests {
                 // Every streamed UUID must appear in the full query result, and
                 // their relative order must be the same.
                 let stream_set: std::collections::HashSet<_> =
-                    stream_uuids.iter().copied().collect();
-                let filtered_full: Vec<Uuid> = full_uuids
+                    stream_uuids.iter().cloned().collect();
+                let filtered_full: Vec<ThingsId> = full_uuids
                     .into_iter()
                     .filter(|u| stream_set.contains(u))
                     .collect();

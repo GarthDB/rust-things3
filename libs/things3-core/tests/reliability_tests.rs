@@ -326,7 +326,7 @@ async fn test_error_recovery() {
     let db = ThingsDatabase::new(&db_path).await.unwrap();
 
     // Try to complete a non-existent task
-    let fake_uuid = uuid::Uuid::new_v4();
+    let fake_uuid = things3_core::ThingsId::new_v4();
     let result = db.complete_task(&fake_uuid).await;
     assert!(result.is_err(), "Expected error for non-existent task");
 

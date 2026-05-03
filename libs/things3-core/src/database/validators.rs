@@ -4,9 +4,9 @@
 //! referenced entities (tasks, projects, areas) exist before performing operations.
 
 use crate::error::{Result as ThingsResult, ThingsError};
+use crate::models::ThingsId;
 use sqlx::SqlitePool;
 use tracing::instrument;
-use uuid::Uuid;
 
 /// Validate that a task exists and is not trashed
 ///
@@ -14,16 +14,16 @@ use uuid::Uuid;
 ///
 /// Returns an error if the task does not exist, is trashed, or if the database query fails
 #[instrument(skip(pool))]
-pub async fn validate_task_exists(pool: &SqlitePool, uuid: &Uuid) -> ThingsResult<()> {
+pub async fn validate_task_exists(pool: &SqlitePool, id: &ThingsId) -> ThingsResult<()> {
     let exists = sqlx::query("SELECT 1 FROM TMTask WHERE uuid = ? AND trashed = 0")
-        .bind(uuid.to_string())
+        .bind(id.as_str())
         .fetch_optional(pool)
         .await
         .map_err(|e| ThingsError::unknown(format!("Failed to validate task: {e}")))?
         .is_some();
 
     if !exists {
-        return Err(ThingsError::unknown(format!("Task not found: {uuid}")));
+        return Err(ThingsError::unknown(format!("Task not found: {id}")));
     }
     Ok(())
 }
@@ -34,9 +34,9 @@ pub async fn validate_task_exists(pool: &SqlitePool, uuid: &Uuid) -> ThingsResul
 ///
 /// Returns an error if the project does not exist, is trashed, or if the database query fails
 #[instrument(skip(pool))]
-pub async fn validate_project_exists(pool: &SqlitePool, uuid: &Uuid) -> ThingsResult<()> {
+pub async fn validate_project_exists(pool: &SqlitePool, id: &ThingsId) -> ThingsResult<()> {
     let exists = sqlx::query("SELECT 1 FROM TMTask WHERE uuid = ? AND type = 1 AND trashed = 0")
-        .bind(uuid.to_string())
+        .bind(id.as_str())
         .fetch_optional(pool)
         .await
         .map_err(|e| ThingsError::unknown(format!("Failed to validate project: {e}")))?
@@ -44,7 +44,7 @@ pub async fn validate_project_exists(pool: &SqlitePool, uuid: &Uuid) -> ThingsRe
 
     if !exists {
         return Err(ThingsError::ProjectNotFound {
-            uuid: uuid.to_string(),
+            uuid: id.to_string(),
         });
     }
     Ok(())
@@ -56,16 +56,16 @@ pub async fn validate_project_exists(pool: &SqlitePool, uuid: &Uuid) -> ThingsRe
 ///
 /// Returns an error if the area does not exist or if the database query fails
 #[instrument(skip(pool))]
-pub async fn validate_area_exists(pool: &SqlitePool, uuid: &Uuid) -> ThingsResult<()> {
+pub async fn validate_area_exists(pool: &SqlitePool, id: &ThingsId) -> ThingsResult<()> {
     let exists = sqlx::query("SELECT 1 FROM TMArea WHERE uuid = ?")
-        .bind(uuid.to_string())
+        .bind(id.as_str())
         .fetch_optional(pool)
         .await
         .map_err(|e| ThingsError::unknown(format!("Failed to validate area: {e}")))?
         .is_some();
 
     if !exists {
-        return Err(ThingsError::unknown(format!("Area not found: {uuid}")));
+        return Err(ThingsError::unknown(format!("Area not found: {id}")));
     }
     Ok(())
 }
@@ -88,8 +88,8 @@ mod tests {
             .await
             .unwrap();
 
-        let nonexistent_uuid = Uuid::new_v4();
-        let result = validate_task_exists(&pool, &nonexistent_uuid).await;
+        let id = ThingsId::new_v4();
+        let result = validate_task_exists(&pool, &id).await;
 
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("Task not found"));
@@ -109,8 +109,8 @@ mod tests {
             .await
             .unwrap();
 
-        let nonexistent_uuid = Uuid::new_v4();
-        let result = validate_project_exists(&pool, &nonexistent_uuid).await;
+        let id = ThingsId::new_v4();
+        let result = validate_project_exists(&pool, &id).await;
 
         assert!(result.is_err());
         assert!(result
@@ -133,8 +133,8 @@ mod tests {
             .await
             .unwrap();
 
-        let nonexistent_uuid = Uuid::new_v4();
-        let result = validate_area_exists(&pool, &nonexistent_uuid).await;
+        let id = ThingsId::new_v4();
+        let result = validate_area_exists(&pool, &id).await;
 
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("Area not found"));

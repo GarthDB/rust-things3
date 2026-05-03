@@ -32,7 +32,7 @@ async fn test_create_project_success() {
     };
 
     let uuid = db.create_project(request).await.unwrap();
-    assert!(!uuid.is_nil());
+    assert!(!uuid.as_str().is_empty());
 
     // Verify it was created as a project (type = 1)
     let task = db.get_task_by_uuid(&uuid).await.unwrap();
@@ -60,7 +60,7 @@ async fn test_create_project_with_area() {
     let request = CreateProjectRequest {
         title: "Work Project".to_string(),
         notes: None,
-        area_uuid: Some(area_uuid),
+        area_uuid: Some(area_uuid.clone()),
         start_date: None,
         deadline: None,
         tags: None,
@@ -92,7 +92,7 @@ async fn test_update_project_success() {
 
     // Update it
     let update_request = UpdateProjectRequest {
-        uuid,
+        uuid: uuid.clone(),
         title: Some("Updated Title".to_string()),
         notes: Some("New notes".to_string()),
         area_uuid: None,
@@ -160,7 +160,7 @@ async fn test_complete_project_with_children_cascade() {
     // Add a child task
     let task_request = TaskRequestBuilder::new()
         .title("Child Task")
-        .project(project_uuid)
+        .project(project_uuid.clone())
         .build();
     let task_uuid = db.create_task(task_request).await.unwrap();
 
@@ -198,7 +198,7 @@ async fn test_delete_project_with_children_error() {
 
     let task_request = TaskRequestBuilder::new()
         .title("Child Task")
-        .project(project_uuid)
+        .project(project_uuid.clone())
         .build();
     db.create_task(task_request).await.unwrap();
 
@@ -230,7 +230,7 @@ async fn test_delete_project_with_children_orphan() {
 
     let task_request = TaskRequestBuilder::new()
         .title("Child Task")
-        .project(project_uuid)
+        .project(project_uuid.clone())
         .build();
     let task_uuid = db.create_task(task_request).await.unwrap();
 
@@ -261,7 +261,7 @@ async fn test_create_area_success() {
     };
 
     let uuid = db.create_area(request).await.unwrap();
-    assert!(!uuid.is_nil());
+    assert!(!uuid.as_str().is_empty());
 
     // Verify it was created
     let areas = db.get_all_areas().await.unwrap();
@@ -286,7 +286,7 @@ async fn test_update_area_success() {
 
     // Update it
     let update_request = UpdateAreaRequest {
-        uuid,
+        uuid: uuid.clone(),
         title: "Updated Area".to_string(),
     };
     db.update_area(update_request).await.unwrap();
@@ -315,7 +315,7 @@ async fn test_delete_area_with_projects() {
     let project_request = CreateProjectRequest {
         title: "Project in Area".to_string(),
         notes: None,
-        area_uuid: Some(area_uuid),
+        area_uuid: Some(area_uuid.clone()),
         start_date: None,
         deadline: None,
         tags: None,
