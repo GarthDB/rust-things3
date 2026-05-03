@@ -15,7 +15,7 @@ jobs:
   # Lint and format check
   lint:
     name: Lint and Format
-    runs-on: macos-latest
+    runs-on: ubuntu-latest
     
     steps:
     - name: Checkout code
@@ -46,7 +46,7 @@ jobs:
   # Security audit
   security:
     name: Security Audit
-    runs-on: macos-latest
+    runs-on: ubuntu-latest
     needs: lint
     
     steps:
@@ -182,7 +182,7 @@ jobs:
   # Build and package
   build:
     name: Build and Package
-    runs-on: macos-latest
+    runs-on: ubuntu-latest
     needs: [test-and-coverage, security]
     
     steps:
@@ -222,7 +222,7 @@ jobs:
   # Summary
   summary:
     name: CI Summary
-    runs-on: macos-latest
+    runs-on: ubuntu-latest
     needs: [lint, test-and-coverage, security, build]
     if: always()
     
