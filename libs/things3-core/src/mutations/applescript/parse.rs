@@ -23,6 +23,11 @@ pub(crate) fn extract_id(stdout: &str) -> Result<ThingsId> {
 
     if !trimmed.is_empty() && !trimmed.contains('"') {
         // Bare ID — trust it (Things 3 controls the output format).
+        // We intentionally do NOT validate the format here: Things 3 native IDs
+        // (21–22-char base62) are not UUIDs, and new ID shapes may appear in future
+        // Things releases. run_script only calls this on a successful osascript exit,
+        // so corrupt/diagnostic output on a failed exit never reaches here. Strict
+        // format validation happens at the MCP boundary via ThingsId::from_str.
         return Ok(ThingsId::from_trusted(trimmed.to_string()));
     }
 
@@ -93,6 +98,16 @@ mod tests {
         );
         let id = extract_id(&stdout).unwrap();
         assert_eq!(id.as_str(), SAMPLE_UUID);
+    }
+
+    /// Bare output with no quotes is trusted verbatim — no format validation.
+    /// This is intentional: Things native IDs (base62, 21–22 chars) are not UUIDs.
+    /// Validation happens at the MCP boundary via `ThingsId::from_str`, not here.
+    #[test]
+    fn accepts_bare_non_uuid_string_intentionally() {
+        // "not a uuid at all" has no quotes and is non-empty, so it parses.
+        let id = extract_id("not a uuid at all").unwrap();
+        assert_eq!(id.as_str(), "not a uuid at all");
     }
 
     #[test]

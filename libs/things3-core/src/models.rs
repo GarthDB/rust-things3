@@ -28,6 +28,16 @@ use crate::error::ThingsError;
 /// `#[serde(transparent)]` means the JSON shape is unchanged from when the
 /// type was `Uuid`: a bare string field, no enum tagging.
 ///
+/// # Validation boundary
+///
+/// `serde` deserialization (via `#[serde(transparent)]`) accepts **any** string
+/// and does **not** call `from_str` — it calls `from_trusted` semantics. This is
+/// intentional: request structs deserialized from the DB or from AppleScript output
+/// already contain trusted values. If you add a new code path that deserializes a
+/// request struct containing `ThingsId` fields directly from untrusted JSON (e.g. a
+/// new HTTP handler), call `ThingsId::from_str` explicitly on each ID field before
+/// acting on it rather than relying on serde to validate.
+///
 /// # Construction
 ///
 /// - [`ThingsId::new_v4`] — fresh hyphenated UUID, used by `SqlxBackend`

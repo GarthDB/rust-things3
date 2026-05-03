@@ -1596,8 +1596,11 @@ mod tests {
             EventType::ProgressFailed { operation_id },
         ];
 
-        for event_type in events {
-            let extracted_id = match event_type {
+        // Mirror the production event_entity_id match in EventFilter::matches.
+        // Entity events yield Some(ThingsId); progress events yield None because
+        // operation_id is an internal Uuid, not a ThingsId entity identifier.
+        for event_type in &events {
+            let extracted_id: Option<&ThingsId> = match event_type {
                 EventType::TaskCreated { task_id }
                 | EventType::TaskUpdated { task_id }
                 | EventType::TaskDeleted { task_id }
@@ -1610,12 +1613,30 @@ mod tests {
                 EventType::AreaCreated { area_id }
                 | EventType::AreaUpdated { area_id }
                 | EventType::AreaDeleted { area_id } => Some(area_id),
-                EventType::ProgressStarted { operation_id }
-                | EventType::ProgressUpdated { operation_id }
-                | EventType::ProgressCompleted { operation_id }
-                | EventType::ProgressFailed { operation_id } => Some(ThingsId::from(operation_id)),
+                EventType::ProgressStarted { .. }
+                | EventType::ProgressUpdated { .. }
+                | EventType::ProgressCompleted { .. }
+                | EventType::ProgressFailed { .. } => None,
             };
-            assert!(extracted_id.is_some());
+
+            let is_progress = matches!(
+                event_type,
+                EventType::ProgressStarted { .. }
+                    | EventType::ProgressUpdated { .. }
+                    | EventType::ProgressCompleted { .. }
+                    | EventType::ProgressFailed { .. }
+            );
+            if is_progress {
+                assert!(
+                    extracted_id.is_none(),
+                    "progress events must not have a ThingsId"
+                );
+            } else {
+                assert!(
+                    extracted_id.is_some(),
+                    "entity events must carry a ThingsId"
+                );
+            }
         }
     }
 
