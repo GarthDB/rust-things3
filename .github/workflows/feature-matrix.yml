@@ -13,7 +13,7 @@ env:
 jobs:
   feature-matrix:
     name: Test Feature Combinations
-    runs-on: ubuntu-latest
+    runs-on: macos-latest
     strategy:
       fail-fast: false
       matrix:
@@ -85,7 +85,7 @@ jobs:
 
   feature-matrix-summary:
     name: Feature Matrix Summary
-    runs-on: ubuntu-latest
+    runs-on: macos-latest
     needs: feature-matrix
     if: always()
     steps:

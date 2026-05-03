@@ -263,6 +263,10 @@ echo "✅ All pre-push checks passed!"
     Ok(())
 }
 
+// Serialize all tests that mutate the process-global cwd.
+#[cfg(test)]
+static CWD_MUTEX: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -411,6 +415,7 @@ mod tests {
 
     #[test]
     fn test_setup_git_hooks_function() {
+        let _cwd_guard = CWD_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
         // Test that the function works with a temporary directory
         let temp_dir = tempfile::tempdir().unwrap();
         let original_dir = match std::env::current_dir() {
@@ -466,6 +471,7 @@ mod tests {
 
     #[test]
     fn test_setup_git_hooks_creates_directory() {
+        let _cwd_guard = CWD_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
         // Test that the function creates the hooks directory if it doesn't exist
         let temp_dir = tempfile::tempdir().unwrap();
         let original_dir = match std::env::current_dir() {
@@ -644,6 +650,7 @@ mod tests {
 
     #[test]
     fn test_git_hooks_content() {
+        let _cwd_guard = CWD_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
         // Test that the git hooks contain expected content
         let temp_dir = tempfile::tempdir().unwrap();
         let original_dir = match std::env::current_dir() {
@@ -756,6 +763,7 @@ mod tests {
 
     #[test]
     fn test_git_hooks_permissions() {
+        let _cwd_guard = CWD_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
         // Test that git hooks are created with correct permissions
         let temp_dir = tempfile::tempdir().unwrap();
         let original_dir = match std::env::current_dir() {
@@ -830,6 +838,7 @@ mod tests {
 
     #[test]
     fn test_setup_git_hooks_creates_directory_when_missing() {
+        let _cwd_guard = CWD_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
         // Test that the function creates the hooks directory when it doesn't exist
         let temp_dir = tempfile::tempdir().unwrap();
         let original_dir = match std::env::current_dir() {
@@ -892,6 +901,7 @@ mod tests {
 
     #[test]
     fn test_git_hooks_content_verification() {
+        let _cwd_guard = CWD_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
         // Test that the git hooks content verification works when files exist
         let temp_dir = tempfile::tempdir().unwrap();
         let original_dir = match std::env::current_dir() {
@@ -964,6 +974,7 @@ mod tests {
 
     #[test]
     fn test_git_hooks_permissions_error_path() {
+        let _cwd_guard = CWD_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
         // Test the error handling path in git hooks permissions test
         let temp_dir = tempfile::tempdir().unwrap();
         let original_dir = match std::env::current_dir() {
@@ -1001,6 +1012,7 @@ mod tests {
 
     #[test]
     fn test_setup_git_hooks_error_handling() {
+        let _cwd_guard = CWD_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
         // Test error handling paths in setup_git_hooks function
         let temp_dir = tempfile::tempdir().unwrap();
         let original_dir = match std::env::current_dir() {
@@ -1402,6 +1414,7 @@ mod tests {
 
     #[test]
     fn test_setup_git_hooks_file_write_errors() {
+        let _cwd_guard = CWD_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
         // Test error handling when file writing fails
         let temp_dir = tempfile::tempdir().unwrap();
         let original_dir = std::env::current_dir().unwrap_or_default();
@@ -1440,6 +1453,7 @@ mod tests {
 
     #[test]
     fn test_setup_git_hooks_permission_errors() {
+        let _cwd_guard = CWD_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
         // Test permission error handling in setup_git_hooks
         let temp_dir = tempfile::tempdir().unwrap();
         let original_dir = std::env::current_dir().unwrap_or_default();
@@ -1728,6 +1742,7 @@ fn test_all_enum_variants_coverage() {
 
 #[test]
 fn test_setup_git_hooks_directory_creation_edge_cases() {
+    let _cwd_guard = CWD_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
     // Test edge cases in directory creation
     let temp_dir = tempfile::tempdir().unwrap();
     let original_dir = std::env::current_dir().unwrap_or_default();
