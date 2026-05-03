@@ -852,41 +852,19 @@ mod tests {
             return;
         }
 
-        // Test the function - this should trigger the directory creation path
+        // Capture absolute path before calling setup_git_hooks — avoids false negatives
+        // if a parallel test changes cwd between the call and the assertion.
+        let hooks_dir_abs = temp_dir.path().join(".git").join("hooks");
+
         let result = setup_git_hooks();
         if result.is_err() {
-            // If it fails due to permission issues, that's okay for testing
-            println!("setup_git_hooks failed (expected in test environment): {result:?}");
-            // In CI environments, the function might fail due to permissions
-            // We'll check if the directory was created before the failure
-            if std::path::Path::new(".git/hooks").exists() {
-                println!("Directory was created before function failure - test passes");
-            } else {
-                println!(
-                    "Directory was not created - this might be due to early permission failure"
-                );
-                // In some environments, the function might fail before creating the directory
-                // This is acceptable for the test as long as the function handles the error gracefully
-            }
+            println!("setup_git_hooks failed (expected in some test environments): {result:?}");
         } else {
-            // Function succeeded, verify the directory was created
-            let hooks_dir_exists = std::path::Path::new(".git/hooks").exists();
-            if hooks_dir_exists {
-                println!("✅ .git/hooks directory created successfully");
-            } else {
-                // In CI environments, there might be timing issues or other factors
-                // Let's check if we're in a CI environment and be more lenient
-                let is_ci = std::env::var("CI").is_ok() || std::env::var("GITHUB_ACTIONS").is_ok();
-                if is_ci {
-                    println!("⚠️  .git/hooks directory not found in CI environment - this might be expected due to timing or permission issues");
-                    // Don't fail the test in CI environments
-                } else {
-                    assert!(
-                        hooks_dir_exists,
-                        "Expected .git/hooks directory to be created, but it doesn't exist"
-                    );
-                }
-            }
+            assert!(
+                hooks_dir_abs.exists(),
+                "Expected .git/hooks directory to be created at {}, but it doesn't exist",
+                hooks_dir_abs.display()
+            );
         }
 
         // Restore original directory - handle potential errors gracefully
