@@ -739,7 +739,11 @@ fn ical_todo_status(status: TaskStatus) -> icalendar::TodoStatus {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(any(feature = "export-taskpaper", feature = "export-ical"))]
+    use crate::models::ThingsId;
     use crate::test_utils::{create_mock_areas, create_mock_projects, create_mock_tasks};
+    #[cfg(any(feature = "export-taskpaper", feature = "export-ical"))]
+    use std::str::FromStr;
 
     #[test]
     fn test_export_format_from_str() {
