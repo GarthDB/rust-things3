@@ -1,6 +1,6 @@
 //! L3 Database query result cache with smart invalidation
 
-use crate::models::{Area, Project, Task};
+use crate::models::{Area, Project, Task, ThingsId};
 use anyhow::Result;
 use chrono::{DateTime, Utc};
 use moka::future::Cache;
@@ -9,7 +9,6 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use std::time::Duration;
 use tracing::{debug, warn};
-use uuid::Uuid;
 
 /// Query cache configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -65,7 +64,7 @@ pub struct QueryDependency {
     /// Table name
     pub table: String,
     /// Specific entity ID (if applicable)
-    pub entity_id: Option<Uuid>,
+    pub entity_id: Option<ThingsId>,
     /// Operations that would invalidate this query
     pub invalidating_operations: Vec<String>,
 }
@@ -450,7 +449,7 @@ impl QueryCache {
     }
 
     /// Invalidate queries by entity changes
-    pub fn invalidate_by_entity(&self, entity_type: &str, entity_id: Option<&Uuid>) {
+    pub fn invalidate_by_entity(&self, entity_type: &str, entity_id: Option<&ThingsId>) {
         // Invalidate all caches for now - in a more sophisticated implementation,
         // we would check dependencies and only invalidate relevant queries
         self.tasks_cache.invalidate_all();
@@ -534,7 +533,7 @@ impl QueryCache {
         for task in tasks {
             dependencies.push(QueryDependency {
                 table: "TMTask".to_string(),
-                entity_id: Some(task.uuid),
+                entity_id: Some(task.uuid.clone()),
                 invalidating_operations: vec![
                     "task_updated".to_string(),
                     "task_deleted".to_string(),
@@ -543,10 +542,10 @@ impl QueryCache {
             });
 
             // Add project dependency if task belongs to a project
-            if let Some(project_uuid) = task.project_uuid {
+            if let Some(project_uuid) = &task.project_uuid {
                 dependencies.push(QueryDependency {
                     table: "TMProject".to_string(),
-                    entity_id: Some(project_uuid),
+                    entity_id: Some(project_uuid.clone()),
                     invalidating_operations: vec![
                         "project_updated".to_string(),
                         "project_deleted".to_string(),
@@ -555,10 +554,10 @@ impl QueryCache {
             }
 
             // Add area dependency if task belongs to an area
-            if let Some(area_uuid) = task.area_uuid {
+            if let Some(area_uuid) = &task.area_uuid {
                 dependencies.push(QueryDependency {
                     table: "TMArea".to_string(),
-                    entity_id: Some(area_uuid),
+                    entity_id: Some(area_uuid.clone()),
                     invalidating_operations: vec![
                         "area_updated".to_string(),
                         "area_deleted".to_string(),
@@ -589,7 +588,7 @@ impl QueryCache {
         for project in projects {
             dependencies.push(QueryDependency {
                 table: "TMProject".to_string(),
-                entity_id: Some(project.uuid),
+                entity_id: Some(project.uuid.clone()),
                 invalidating_operations: vec![
                     "project_updated".to_string(),
                     "project_deleted".to_string(),
@@ -597,10 +596,10 @@ impl QueryCache {
             });
 
             // Add area dependency if project belongs to an area
-            if let Some(area_uuid) = project.area_uuid {
+            if let Some(area_uuid) = &project.area_uuid {
                 dependencies.push(QueryDependency {
                     table: "TMArea".to_string(),
-                    entity_id: Some(area_uuid),
+                    entity_id: Some(area_uuid.clone()),
                     invalidating_operations: vec![
                         "area_updated".to_string(),
                         "area_deleted".to_string(),
@@ -631,7 +630,7 @@ impl QueryCache {
         for area in areas {
             dependencies.push(QueryDependency {
                 table: "TMArea".to_string(),
-                entity_id: Some(area.uuid),
+                entity_id: Some(area.uuid.clone()),
                 invalidating_operations: vec![
                     "area_updated".to_string(),
                     "area_deleted".to_string(),
@@ -768,9 +767,9 @@ mod tests {
         let cache = QueryCache::new_default();
 
         let projects = vec![Project {
-            uuid: Uuid::new_v4(),
+            uuid: ThingsId::new_v4(),
             title: "Project 1".to_string(),
-            area_uuid: Some(Uuid::new_v4()),
+            area_uuid: Some(ThingsId::new_v4()),
             created: Utc::now(),
             modified: Utc::now(),
             status: TaskStatus::Incomplete,
@@ -853,7 +852,7 @@ mod tests {
         let cache = QueryCache::new_default();
 
         let areas = vec![Area {
-            uuid: Uuid::new_v4(),
+            uuid: ThingsId::new_v4(),
             title: "Area 1".to_string(),
             created: Utc::now(),
             modified: Utc::now(),

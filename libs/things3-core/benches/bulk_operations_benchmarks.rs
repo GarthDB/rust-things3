@@ -2,13 +2,13 @@ use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criteri
 use things3_core::test_utils::create_test_database;
 use things3_core::{
     BulkCompleteRequest, BulkDeleteRequest, BulkMoveRequest, CreateTaskRequest, ThingsDatabase,
+    ThingsId,
 };
 use tokio::runtime::Runtime;
-use uuid::Uuid;
 
 fn create_test_db_with_tasks(
     task_count: usize,
-) -> (tempfile::NamedTempFile, ThingsDatabase, Vec<Uuid>) {
+) -> (tempfile::NamedTempFile, ThingsDatabase, Vec<ThingsId>) {
     let rt = Runtime::new().unwrap();
     let temp_file = tempfile::NamedTempFile::new().unwrap();
     let db_path = temp_file.path().to_path_buf();

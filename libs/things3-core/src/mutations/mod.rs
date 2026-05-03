@@ -20,15 +20,14 @@
 //! boxes the future, which is exactly what `dyn` needs.
 
 use async_trait::async_trait;
-use uuid::Uuid;
 
 use crate::error::Result as ThingsResult;
 use crate::models::{
     BulkCompleteRequest, BulkCreateTasksRequest, BulkDeleteRequest, BulkMoveRequest,
     BulkOperationResult, BulkUpdateDatesRequest, CreateAreaRequest, CreateProjectRequest,
     CreateTagRequest, CreateTaskRequest, DeleteChildHandling, ProjectChildHandling,
-    TagAssignmentResult, TagCreationResult, TagMatch, UpdateAreaRequest, UpdateProjectRequest,
-    UpdateTagRequest, UpdateTaskRequest,
+    TagAssignmentResult, TagCreationResult, TagMatch, ThingsId, UpdateAreaRequest,
+    UpdateProjectRequest, UpdateTagRequest, UpdateTaskRequest,
 };
 
 mod sqlx;
@@ -47,7 +46,7 @@ pub use applescript::AppleScriptBackend;
 pub trait MutationBackend: Send + Sync {
     // ---- Tasks ----
 
-    async fn create_task(&self, request: CreateTaskRequest) -> ThingsResult<Uuid>;
+    async fn create_task(&self, request: CreateTaskRequest) -> ThingsResult<ThingsId>;
     /// Create multiple tasks in one call. Best-effort and non-atomic — per-item
     /// failures are reported via `BulkOperationResult`.
     async fn bulk_create_tasks(
@@ -55,11 +54,11 @@ pub trait MutationBackend: Send + Sync {
         request: BulkCreateTasksRequest,
     ) -> ThingsResult<BulkOperationResult>;
     async fn update_task(&self, request: UpdateTaskRequest) -> ThingsResult<()>;
-    async fn complete_task(&self, uuid: &Uuid) -> ThingsResult<()>;
-    async fn uncomplete_task(&self, uuid: &Uuid) -> ThingsResult<()>;
+    async fn complete_task(&self, id: &ThingsId) -> ThingsResult<()>;
+    async fn uncomplete_task(&self, id: &ThingsId) -> ThingsResult<()>;
     async fn delete_task(
         &self,
-        uuid: &Uuid,
+        id: &ThingsId,
         child_handling: DeleteChildHandling,
     ) -> ThingsResult<()>;
     async fn bulk_delete(&self, request: BulkDeleteRequest) -> ThingsResult<BulkOperationResult>;
@@ -75,24 +74,24 @@ pub trait MutationBackend: Send + Sync {
 
     // ---- Projects ----
 
-    async fn create_project(&self, request: CreateProjectRequest) -> ThingsResult<Uuid>;
+    async fn create_project(&self, request: CreateProjectRequest) -> ThingsResult<ThingsId>;
     async fn update_project(&self, request: UpdateProjectRequest) -> ThingsResult<()>;
     async fn complete_project(
         &self,
-        uuid: &Uuid,
+        id: &ThingsId,
         child_handling: ProjectChildHandling,
     ) -> ThingsResult<()>;
     async fn delete_project(
         &self,
-        uuid: &Uuid,
+        id: &ThingsId,
         child_handling: ProjectChildHandling,
     ) -> ThingsResult<()>;
 
     // ---- Areas ----
 
-    async fn create_area(&self, request: CreateAreaRequest) -> ThingsResult<Uuid>;
+    async fn create_area(&self, request: CreateAreaRequest) -> ThingsResult<ThingsId>;
     async fn update_area(&self, request: UpdateAreaRequest) -> ThingsResult<()>;
-    async fn delete_area(&self, uuid: &Uuid) -> ThingsResult<()>;
+    async fn delete_area(&self, id: &ThingsId) -> ThingsResult<()>;
 
     // ---- Tags ----
 
@@ -105,17 +104,17 @@ pub trait MutationBackend: Send + Sync {
         force: bool,
     ) -> ThingsResult<TagCreationResult>;
     async fn update_tag(&self, request: UpdateTagRequest) -> ThingsResult<()>;
-    async fn delete_tag(&self, uuid: &Uuid, remove_from_tasks: bool) -> ThingsResult<()>;
-    async fn merge_tags(&self, source_uuid: &Uuid, target_uuid: &Uuid) -> ThingsResult<()>;
+    async fn delete_tag(&self, id: &ThingsId, remove_from_tasks: bool) -> ThingsResult<()>;
+    async fn merge_tags(&self, source_id: &ThingsId, target_id: &ThingsId) -> ThingsResult<()>;
     async fn add_tag_to_task(
         &self,
-        task_uuid: &Uuid,
+        task_id: &ThingsId,
         tag_title: &str,
     ) -> ThingsResult<TagAssignmentResult>;
-    async fn remove_tag_from_task(&self, task_uuid: &Uuid, tag_title: &str) -> ThingsResult<()>;
+    async fn remove_tag_from_task(&self, task_id: &ThingsId, tag_title: &str) -> ThingsResult<()>;
     async fn set_task_tags(
         &self,
-        task_uuid: &Uuid,
+        task_id: &ThingsId,
         tag_titles: Vec<String>,
     ) -> ThingsResult<Vec<TagMatch>>;
 }

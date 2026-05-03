@@ -9,9 +9,8 @@
 use chrono::NaiveDate;
 use things3_core::{
     BulkCompleteRequest, BulkDeleteRequest, BulkMoveRequest, BulkUpdateDatesRequest,
-    ThingsDatabase, ThingsError,
+    ThingsDatabase, ThingsError, ThingsId,
 };
-use uuid::Uuid;
 
 #[tokio::main]
 async fn main() -> Result<(), ThingsError> {
@@ -25,7 +24,7 @@ async fn main() -> Result<(), ThingsError> {
         return Ok(());
     }
 
-    let task_uuids: Vec<Uuid> = tasks.iter().take(3).map(|t| t.uuid).collect();
+    let task_uuids: Vec<ThingsId> = tasks.iter().take(3).map(|t| t.uuid.clone()).collect();
 
     println!("=== Bulk Operations Example ===");
     println!("Using {} tasks for demonstration", task_uuids.len());
@@ -38,7 +37,7 @@ async fn main() -> Result<(), ThingsError> {
     if let Some(project) = projects.first() {
         let move_request = BulkMoveRequest {
             task_uuids: task_uuids.clone(),
-            project_uuid: Some(project.uuid),
+            project_uuid: Some(project.uuid.clone()),
             area_uuid: None,
         };
 
@@ -79,7 +78,8 @@ async fn main() -> Result<(), ThingsError> {
     // tasks we just completed
     let more_tasks = db.get_inbox(Some(3)).await?;
     if !more_tasks.is_empty() {
-        let delete_uuids: Vec<Uuid> = more_tasks.iter().take(2).map(|t| t.uuid).collect();
+        let delete_uuids: Vec<ThingsId> =
+            more_tasks.iter().take(2).map(|t| t.uuid.clone()).collect();
         let delete_request = BulkDeleteRequest {
             task_uuids: delete_uuids,
         };

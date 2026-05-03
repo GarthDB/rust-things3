@@ -161,9 +161,18 @@ impl DataExporter {
                     format_date_csv(task.deadline),
                     format_datetime_csv(task.created),
                     format_datetime_csv(task.modified),
-                    task.project_uuid.map(|u| u.to_string()).unwrap_or_default(),
-                    task.area_uuid.map(|u| u.to_string()).unwrap_or_default(),
-                    task.parent_uuid.map(|u| u.to_string()).unwrap_or_default(),
+                    task.project_uuid
+                        .as_ref()
+                        .map(|u| u.to_string())
+                        .unwrap_or_default(),
+                    task.area_uuid
+                        .as_ref()
+                        .map(|u| u.to_string())
+                        .unwrap_or_default(),
+                    task.parent_uuid
+                        .as_ref()
+                        .map(|u| u.to_string())
+                        .unwrap_or_default(),
                 )
                 .unwrap();
             }
@@ -184,7 +193,11 @@ impl DataExporter {
                     format_date_csv(project.deadline),
                     format_datetime_csv(project.created),
                     format_datetime_csv(project.modified),
-                    project.area_uuid.map(|u| u.to_string()).unwrap_or_default(),
+                    project
+                        .area_uuid
+                        .as_ref()
+                        .map(|u| u.to_string())
+                        .unwrap_or_default(),
                 )
                 .unwrap();
             }
@@ -227,15 +240,18 @@ impl DataExporter {
         opml.push_str("  <body>\n");
 
         // Group by areas
-        let mut area_map: HashMap<Option<uuid::Uuid>, Vec<&Project>> = HashMap::new();
+        let mut area_map: HashMap<Option<String>, Vec<&Project>> = HashMap::new();
         for project in &data.projects {
-            area_map.entry(project.area_uuid).or_default().push(project);
+            area_map
+                .entry(project.area_uuid.as_ref().map(|u| u.to_string()))
+                .or_default()
+                .push(project);
         }
 
         for area in &data.areas {
             writeln!(opml, "    <outline text=\"{}\">", escape_xml(&area.title)).unwrap();
 
-            if let Some(projects) = area_map.get(&Some(area.uuid)) {
+            if let Some(projects) = area_map.get(&Some(area.uuid.to_string())) {
                 for project in projects {
                     writeln!(
                         opml,
@@ -246,7 +262,7 @@ impl DataExporter {
 
                     // Add tasks for this project
                     for task in &data.tasks {
-                        if task.project_uuid == Some(project.uuid) {
+                        if task.project_uuid.as_ref() == Some(&project.uuid) {
                             writeln!(
                                 opml,
                                 "        <outline text=\"{}\" type=\"task\"/>",
@@ -282,7 +298,7 @@ impl DataExporter {
             let area_projects: Vec<&Project> = data
                 .projects
                 .iter()
-                .filter(|p| p.area_uuid == Some(area.uuid))
+                .filter(|p| p.area_uuid.as_ref() == Some(&area.uuid))
                 .collect();
 
             for project in &area_projects {
@@ -297,11 +313,9 @@ impl DataExporter {
                 if let Some(notes) = &project.notes {
                     write_taskpaper_notes(&mut out, notes, 2);
                 }
-                for task in data
-                    .tasks
-                    .iter()
-                    .filter(|t| t.project_uuid == Some(project.uuid) && t.parent_uuid.is_none())
-                {
+                for task in data.tasks.iter().filter(|t| {
+                    t.project_uuid.as_ref() == Some(&project.uuid) && t.parent_uuid.is_none()
+                }) {
                     write_taskpaper_task(&mut out, task, 2, &data.tasks);
                 }
             }
@@ -321,11 +335,9 @@ impl DataExporter {
             if let Some(notes) = &project.notes {
                 write_taskpaper_notes(&mut out, notes, 1);
             }
-            for task in data
-                .tasks
-                .iter()
-                .filter(|t| t.project_uuid == Some(project.uuid) && t.parent_uuid.is_none())
-            {
+            for task in data.tasks.iter().filter(|t| {
+                t.project_uuid.as_ref() == Some(&project.uuid) && t.parent_uuid.is_none()
+            }) {
                 write_taskpaper_task(&mut out, task, 1, &data.tasks);
             }
             writeln!(out).unwrap();
@@ -423,7 +435,7 @@ impl DataExporter {
 
         for project in &data.projects {
             let mut todo = Todo::new();
-            todo.uid(&project.uuid.to_string());
+            todo.uid(project.uuid.as_ref());
             todo.summary(&project.title);
 
             if let Some(notes) = &project.notes {
@@ -442,7 +454,7 @@ impl DataExporter {
             let area_cat = data
                 .areas
                 .iter()
-                .find(|a| Some(a.uuid) == project.area_uuid);
+                .find(|a| Some(&a.uuid) == project.area_uuid.as_ref());
             for cat in project
                 .tags
                 .iter()
@@ -460,7 +472,7 @@ impl DataExporter {
 
         for task in &data.tasks {
             let mut todo = Todo::new();
-            todo.uid(&task.uuid.to_string());
+            todo.uid(task.uuid.as_ref());
             todo.summary(&task.title);
 
             if let Some(notes) = &task.notes {
@@ -482,7 +494,10 @@ impl DataExporter {
                 todo.starts(DatePerhapsTime::Date(d));
             }
 
-            let area_cat = data.areas.iter().find(|a| Some(a.uuid) == task.area_uuid);
+            let area_cat = data
+                .areas
+                .iter()
+                .find(|a| Some(&a.uuid) == task.area_uuid.as_ref());
             for cat in task
                 .tags
                 .iter()
@@ -493,11 +508,11 @@ impl DataExporter {
             }
 
             // RELATED-TO links project and parent task (RELTYPE defaults to PARENT per RFC 5545)
-            if let Some(proj_uuid) = task.project_uuid {
-                todo.add_multi_property("RELATED-TO", &proj_uuid.to_string());
+            if let Some(proj_uuid) = &task.project_uuid {
+                todo.add_multi_property("RELATED-TO", proj_uuid.as_str());
             }
-            if let Some(parent_uuid) = task.parent_uuid {
-                todo.add_multi_property("RELATED-TO", &parent_uuid.to_string());
+            if let Some(parent_uuid) = &task.parent_uuid {
+                todo.add_multi_property("RELATED-TO", parent_uuid.as_str());
             }
 
             todo.created(task.created);
@@ -696,7 +711,7 @@ fn write_taskpaper_task(out: &mut String, task: &Task, indent: usize, all_tasks:
     } else {
         for child in all_tasks
             .iter()
-            .filter(|t| t.parent_uuid == Some(task.uuid))
+            .filter(|t| t.parent_uuid.as_ref() == Some(&task.uuid))
         {
             write_taskpaper_task(out, child, indent + 1, all_tasks);
         }
@@ -724,7 +739,11 @@ fn ical_todo_status(status: TaskStatus) -> icalendar::TodoStatus {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(any(feature = "export-taskpaper", feature = "export-ical"))]
+    use crate::models::ThingsId;
     use crate::test_utils::{create_mock_areas, create_mock_projects, create_mock_tasks};
+    #[cfg(any(feature = "export-taskpaper", feature = "export-ical"))]
+    use std::str::FromStr;
 
     #[test]
     fn test_export_format_from_str() {
@@ -1167,10 +1186,10 @@ mod tests {
     fn test_export_taskpaper_status_tags() {
         use chrono::TimeZone;
 
-        let base_uuid = uuid::Uuid::parse_str("aaaaaaaa-0000-0000-0000-000000000000").unwrap();
+        let base_uuid = ThingsId::from_str("aaaaaaaa-0000-0000-0000-000000000000").unwrap();
         let make_task =
             |n: u8, status: TaskStatus, stop_date: Option<chrono::DateTime<Utc>>| Task {
-                uuid: uuid::Uuid::parse_str(&format!("aaaaaaaa-0000-0000-0000-{n:012}")).unwrap(),
+                uuid: ThingsId::from_str(&format!("aaaaaaaa-0000-0000-0000-{n:012}")).unwrap(),
                 title: format!("Task {n}"),
                 task_type: TaskType::Todo,
                 status,
@@ -1227,7 +1246,7 @@ mod tests {
         use chrono::NaiveDate;
 
         let task = Task {
-            uuid: uuid::Uuid::parse_str("bbbbbbbb-0000-0000-0000-000000000001").unwrap(),
+            uuid: ThingsId::from_str("bbbbbbbb-0000-0000-0000-000000000001").unwrap(),
             title: "Task with dates".to_string(),
             task_type: TaskType::Todo,
             status: TaskStatus::Incomplete,
@@ -1258,7 +1277,7 @@ mod tests {
     #[cfg(feature = "export-taskpaper")]
     fn test_export_taskpaper_tags() {
         let task = Task {
-            uuid: uuid::Uuid::parse_str("cccccccc-0000-0000-0000-000000000001").unwrap(),
+            uuid: ThingsId::from_str("cccccccc-0000-0000-0000-000000000001").unwrap(),
             title: "Tagged task".to_string(),
             task_type: TaskType::Todo,
             status: TaskStatus::Incomplete,
@@ -1295,7 +1314,7 @@ mod tests {
     #[cfg(feature = "export-taskpaper")]
     fn test_export_taskpaper_notes_multiline() {
         let task = Task {
-            uuid: uuid::Uuid::parse_str("dddddddd-0000-0000-0000-000000000001").unwrap(),
+            uuid: ThingsId::from_str("dddddddd-0000-0000-0000-000000000001").unwrap(),
             title: "Task with notes".to_string(),
             task_type: TaskType::Todo,
             status: TaskStatus::Incomplete,
@@ -1452,7 +1471,7 @@ mod tests {
     #[cfg(feature = "export-ical")]
     fn test_export_icalendar_uid_stable() {
         use crate::models::TaskType;
-        let task_uuid = uuid::Uuid::parse_str("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee").unwrap();
+        let task_uuid = ThingsId::from_str("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee").unwrap();
         let task = Task {
             uuid: task_uuid,
             title: "UID test".to_string(),
@@ -1488,7 +1507,7 @@ mod tests {
         use chrono::TimeZone;
 
         let make_task = |n: u8, status: TaskStatus, stop: Option<DateTime<Utc>>| Task {
-            uuid: uuid::Uuid::parse_str(&format!("00000000-0000-0000-0000-{n:012}")).unwrap(),
+            uuid: ThingsId::from_str(&format!("00000000-0000-0000-0000-{n:012}")).unwrap(),
             title: format!("Task {n}"),
             task_type: TaskType::Todo,
             status,
@@ -1544,7 +1563,7 @@ mod tests {
         use chrono::NaiveDate;
 
         let task = Task {
-            uuid: uuid::Uuid::parse_str("11111111-0000-0000-0000-000000000001").unwrap(),
+            uuid: ThingsId::from_str("11111111-0000-0000-0000-000000000001").unwrap(),
             title: "Task with deadline".to_string(),
             task_type: TaskType::Todo,
             status: TaskStatus::Incomplete,
@@ -1580,9 +1599,9 @@ mod tests {
     fn test_export_icalendar_categories() {
         use crate::models::{Area, TaskType};
 
-        let area_uuid = uuid::Uuid::parse_str("aaaaaaaa-0000-0000-0000-000000000000").unwrap();
+        let area_uuid = ThingsId::from_str("aaaaaaaa-0000-0000-0000-000000000000").unwrap();
         let area = Area {
-            uuid: area_uuid,
+            uuid: area_uuid.clone(),
             title: "Work".to_string(),
             notes: None,
             created: Utc::now(),
@@ -1591,7 +1610,7 @@ mod tests {
             projects: vec![],
         };
         let task = Task {
-            uuid: uuid::Uuid::parse_str("bbbbbbbb-0000-0000-0000-000000000001").unwrap(),
+            uuid: ThingsId::from_str("bbbbbbbb-0000-0000-0000-000000000001").unwrap(),
             title: "Tagged task".to_string(),
             task_type: TaskType::Todo,
             status: TaskStatus::Incomplete,
@@ -1634,9 +1653,9 @@ mod tests {
     #[cfg(feature = "export-ical")]
     fn test_export_icalendar_related_to() {
         use crate::models::TaskType;
-        let proj_uuid = uuid::Uuid::parse_str("12345678-0000-0000-0000-000000000000").unwrap();
+        let proj_uuid = ThingsId::from_str("12345678-0000-0000-0000-000000000000").unwrap();
         let project = crate::models::Project {
-            uuid: proj_uuid,
+            uuid: proj_uuid.clone(),
             title: "My Project".to_string(),
             notes: None,
             start_date: None,
@@ -1649,7 +1668,7 @@ mod tests {
             tasks: vec![],
         };
         let task = Task {
-            uuid: uuid::Uuid::parse_str("87654321-0000-0000-0000-000000000001").unwrap(),
+            uuid: ThingsId::from_str("87654321-0000-0000-0000-000000000001").unwrap(),
             title: "Child task".to_string(),
             task_type: TaskType::Todo,
             status: TaskStatus::Incomplete,
@@ -1681,10 +1700,10 @@ mod tests {
     fn test_export_icalendar_subtask_related_to() {
         use crate::models::TaskType;
 
-        let parent_uuid = uuid::Uuid::parse_str("aaaaaaaa-0000-0000-0000-000000000001").unwrap();
-        let child_uuid = uuid::Uuid::parse_str("bbbbbbbb-0000-0000-0000-000000000002").unwrap();
+        let parent_uuid = ThingsId::from_str("aaaaaaaa-0000-0000-0000-000000000001").unwrap();
+        let child_uuid = ThingsId::from_str("bbbbbbbb-0000-0000-0000-000000000002").unwrap();
 
-        let make_task = |uuid: uuid::Uuid, parent: Option<uuid::Uuid>| Task {
+        let make_task = |uuid: ThingsId, parent: Option<ThingsId>| Task {
             uuid,
             title: "Task".to_string(),
             task_type: TaskType::Todo,
@@ -1702,7 +1721,7 @@ mod tests {
             children: vec![],
         };
         let tasks = vec![
-            make_task(parent_uuid, None),
+            make_task(parent_uuid.clone(), None),
             make_task(child_uuid, Some(parent_uuid)),
         ];
         let data = ExportData::new(tasks, vec![], vec![]);
@@ -1722,7 +1741,7 @@ mod tests {
         use crate::models::TaskType;
 
         let task = Task {
-            uuid: uuid::Uuid::parse_str("dddddddd-0000-0000-0000-000000000001").unwrap(),
+            uuid: ThingsId::from_str("dddddddd-0000-0000-0000-000000000001").unwrap(),
             title: "Task".to_string(),
             task_type: TaskType::Todo,
             status: TaskStatus::Incomplete,
@@ -1758,7 +1777,7 @@ mod tests {
     fn test_export_icalendar_notes_multiline() {
         use crate::models::TaskType;
         let task = Task {
-            uuid: uuid::Uuid::parse_str("cccccccc-0000-0000-0000-000000000001").unwrap(),
+            uuid: ThingsId::from_str("cccccccc-0000-0000-0000-000000000001").unwrap(),
             title: "Task with notes".to_string(),
             task_type: TaskType::Todo,
             status: TaskStatus::Incomplete,

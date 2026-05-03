@@ -122,8 +122,8 @@ impl Default for TaskUpdateBuilder {
 mod tests {
     use super::*;
     use crate::models::TaskStatus;
+    use crate::models::ThingsId;
     use chrono::NaiveDate;
-    use uuid::Uuid;
 
     #[test]
     fn test_task_update_builder_empty() {
@@ -161,14 +161,14 @@ mod tests {
     #[test]
     fn test_task_update_builder_from_request() {
         let request = UpdateTaskRequest {
-            uuid: Uuid::new_v4(),
+            uuid: ThingsId::new_v4(),
             title: Some("Updated Title".to_string()),
             notes: Some("Updated Notes".to_string()),
             start_date: Some(NaiveDate::from_ymd_opt(2025, 1, 15).unwrap()),
             deadline: Some(NaiveDate::from_ymd_opt(2025, 2, 1).unwrap()),
             status: Some(TaskStatus::Incomplete),
-            project_uuid: Some(Uuid::new_v4()),
-            area_uuid: Some(Uuid::new_v4()),
+            project_uuid: Some(ThingsId::new_v4()),
+            area_uuid: Some(ThingsId::new_v4()),
             tags: Some(vec!["tag1".to_string(), "tag2".to_string()]),
         };
 
@@ -189,7 +189,7 @@ mod tests {
     #[test]
     fn test_task_update_builder_from_partial_request() {
         let request = UpdateTaskRequest {
-            uuid: Uuid::new_v4(),
+            uuid: ThingsId::new_v4(),
             title: Some("Updated Title".to_string()),
             notes: None,
             start_date: None,

@@ -11,7 +11,7 @@ pub mod validators;
 pub use core::*;
 
 // Re-export mapper functions for easy access
-pub use mappers::{map_project_row, map_task_row, parse_optional_uuid, parse_uuid_with_fallback};
+pub use mappers::{map_project_row, map_task_row};
 
 // Re-export query builders
 pub use query_builders::TaskUpdateBuilder;

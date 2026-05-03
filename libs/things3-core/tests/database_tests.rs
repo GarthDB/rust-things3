@@ -509,7 +509,7 @@ async fn test_database_helper_functions_indirectly() {
     // Test convert_uuid indirectly
     for task in &tasks {
         // Verify UUIDs are valid
-        assert!(!task.uuid.is_nil());
+        assert!(!task.uuid.as_str().is_empty());
     }
 }
 

@@ -69,7 +69,7 @@ jobs:
   # Combined test and coverage job - runs tests once and generates coverage
   test-and-coverage:
     name: Test and Coverage
-    runs-on: ubuntu-latest
+    runs-on: macos-latest
     needs: lint
     
     steps:

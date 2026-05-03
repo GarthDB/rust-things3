@@ -388,7 +388,7 @@ async fn test_add_tag_to_task_tool() {
     // Get a task UUID from the test database
     let tasks = server.db.get_inbox(None).await.unwrap();
     assert!(!tasks.is_empty(), "Test should have tasks in inbox");
-    let task_uuid = tasks[0].uuid;
+    let task_uuid = tasks[0].uuid.clone();
 
     // Add a tag to the task
     let request = CallToolRequest {
@@ -416,7 +416,7 @@ async fn test_remove_tag_from_task_tool() {
     // Get a task
     let tasks = server.db.get_inbox(None).await.unwrap();
     assert!(!tasks.is_empty());
-    let task_uuid = tasks[0].uuid;
+    let task_uuid = tasks[0].uuid.clone();
 
     // Add a tag first
     server
@@ -450,7 +450,7 @@ async fn test_set_task_tags_tool() {
     // Get a task
     let tasks = server.db.get_inbox(None).await.unwrap();
     assert!(!tasks.is_empty());
-    let task_uuid = tasks[0].uuid;
+    let task_uuid = tasks[0].uuid.clone();
 
     // Set tags on the task
     let request = CallToolRequest {
@@ -615,7 +615,7 @@ async fn test_tag_lifecycle_integration() {
     // 3. Add tag to a task
     let tasks = server.db.get_inbox(None).await.unwrap();
     assert!(!tasks.is_empty());
-    let task_uuid = tasks[0].uuid;
+    let task_uuid = tasks[0].uuid.clone();
 
     let add_tag_request = CallToolRequest {
         name: "add_tag_to_task".to_string(),

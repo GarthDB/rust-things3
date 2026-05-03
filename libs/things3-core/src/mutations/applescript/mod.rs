@@ -34,7 +34,6 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use sqlx::Row;
-use uuid::Uuid;
 
 use super::MutationBackend;
 use crate::database::ThingsDatabase;
@@ -43,8 +42,8 @@ use crate::models::{
     BulkCompleteRequest, BulkCreateTasksRequest, BulkDeleteRequest, BulkMoveRequest,
     BulkOperationResult, BulkUpdateDatesRequest, CreateAreaRequest, CreateProjectRequest,
     CreateTagRequest, CreateTaskRequest, DeleteChildHandling, ProjectChildHandling,
-    TagAssignmentResult, TagCreationResult, TagMatch, UpdateAreaRequest, UpdateProjectRequest,
-    UpdateTagRequest, UpdateTaskRequest,
+    TagAssignmentResult, TagCreationResult, TagMatch, ThingsId, UpdateAreaRequest,
+    UpdateProjectRequest, UpdateTagRequest, UpdateTaskRequest,
 };
 
 /// AppleScript-driven mutation backend.
@@ -63,24 +62,23 @@ impl AppleScriptBackend {
         Self { db }
     }
 
-    /// Read the UUIDs of every non-trashed direct subtask of `parent` via
+    /// Read the IDs of every non-trashed direct subtask of `parent` via
     /// sqlx. Read-only, CulturedCode-safe.
-    async fn list_subtask_uuids(&self, parent: &Uuid) -> ThingsResult<Vec<Uuid>> {
+    async fn list_subtask_uuids(&self, parent: &ThingsId) -> ThingsResult<Vec<ThingsId>> {
         let rows = sqlx::query("SELECT uuid FROM TMTask WHERE heading = ? AND trashed = 0")
-            .bind(parent.to_string())
+            .bind(parent.as_str())
             .fetch_all(&self.db.pool)
             .await
             .map_err(|e| {
                 ThingsError::applescript(format!("failed to query subtasks of {parent}: {e}"))
             })?;
-        rows.into_iter()
+        Ok(rows
+            .into_iter()
             .map(|row| {
                 let s: String = row.get("uuid");
-                Uuid::parse_str(&s).map_err(|e| {
-                    ThingsError::applescript(format!("invalid subtask uuid in DB: {e}"))
-                })
+                ThingsId::from_trusted(s)
             })
-            .collect()
+            .collect())
     }
 }
 
@@ -96,15 +94,7 @@ fn not_yet_implemented(method: &str, phase: &str, issue: &str) -> ThingsError {
 impl MutationBackend for AppleScriptBackend {
     // ---- Tasks (Phase B — implemented) ----
 
-    /// # Known limitation (#139)
-    ///
-    /// Things 3 IDs are 21–22-char base62-style strings (e.g.
-    /// `R4t2G8Q63aGZq4epMHNeCr`), not RFC-4122 UUIDs. [`parse::extract_id`]
-    /// will return `Err` for these; today this method only succeeds when the
-    /// caller doesn't actually care about the returned UUID. The fix — a
-    /// `TaskId` newtype that round-trips both formats — is tracked in #139,
-    /// which is a blocker for #125 (default-backend switch).
-    async fn create_task(&self, request: CreateTaskRequest) -> ThingsResult<Uuid> {
+    async fn create_task(&self, request: CreateTaskRequest) -> ThingsResult<ThingsId> {
         let script = script::create_task_script(&request);
         let stdout = runner::run_script(&script).await?;
         parse::extract_id(&stdout)
@@ -116,30 +106,30 @@ impl MutationBackend for AppleScriptBackend {
         Ok(())
     }
 
-    async fn complete_task(&self, uuid: &Uuid) -> ThingsResult<()> {
-        let script = script::complete_task_script(uuid);
+    async fn complete_task(&self, id: &ThingsId) -> ThingsResult<()> {
+        let script = script::complete_task_script(id);
         runner::run_script(&script).await?;
         Ok(())
     }
 
-    async fn uncomplete_task(&self, uuid: &Uuid) -> ThingsResult<()> {
-        let script = script::uncomplete_task_script(uuid);
+    async fn uncomplete_task(&self, id: &ThingsId) -> ThingsResult<()> {
+        let script = script::uncomplete_task_script(id);
         runner::run_script(&script).await?;
         Ok(())
     }
 
     async fn delete_task(
         &self,
-        uuid: &Uuid,
+        id: &ThingsId,
         child_handling: DeleteChildHandling,
     ) -> ThingsResult<()> {
-        let children = self.list_subtask_uuids(uuid).await?;
+        let children = self.list_subtask_uuids(id).await?;
 
         if !children.is_empty() {
             match child_handling {
                 DeleteChildHandling::Error => {
                     return Err(ThingsError::applescript(format!(
-                        "task {uuid} has {} subtask(s); pass DeleteChildHandling::Cascade or ::Orphan",
+                        "task {id} has {} subtask(s); pass DeleteChildHandling::Cascade or ::Orphan",
                         children.len()
                     )));
                 }
@@ -163,7 +153,7 @@ impl MutationBackend for AppleScriptBackend {
             }
         }
 
-        let script = script::delete_task_script(uuid);
+        let script = script::delete_task_script(id);
         runner::run_script(&script).await?;
         Ok(())
     }
@@ -201,7 +191,7 @@ impl MutationBackend for AppleScriptBackend {
 
     // ---- Projects (Phase C — stubbed) ----
 
-    async fn create_project(&self, _request: CreateProjectRequest) -> ThingsResult<Uuid> {
+    async fn create_project(&self, _request: CreateProjectRequest) -> ThingsResult<ThingsId> {
         Err(not_yet_implemented("create_project", "Phase C", "#135"))
     }
 
@@ -211,7 +201,7 @@ impl MutationBackend for AppleScriptBackend {
 
     async fn complete_project(
         &self,
-        _uuid: &Uuid,
+        _id: &ThingsId,
         _child_handling: ProjectChildHandling,
     ) -> ThingsResult<()> {
         Err(not_yet_implemented("complete_project", "Phase C", "#135"))
@@ -219,7 +209,7 @@ impl MutationBackend for AppleScriptBackend {
 
     async fn delete_project(
         &self,
-        _uuid: &Uuid,
+        _id: &ThingsId,
         _child_handling: ProjectChildHandling,
     ) -> ThingsResult<()> {
         Err(not_yet_implemented("delete_project", "Phase C", "#135"))
@@ -227,7 +217,7 @@ impl MutationBackend for AppleScriptBackend {
 
     // ---- Areas (Phase C — stubbed) ----
 
-    async fn create_area(&self, _request: CreateAreaRequest) -> ThingsResult<Uuid> {
+    async fn create_area(&self, _request: CreateAreaRequest) -> ThingsResult<ThingsId> {
         Err(not_yet_implemented("create_area", "Phase C", "#135"))
     }
 
@@ -235,7 +225,7 @@ impl MutationBackend for AppleScriptBackend {
         Err(not_yet_implemented("update_area", "Phase C", "#135"))
     }
 
-    async fn delete_area(&self, _uuid: &Uuid) -> ThingsResult<()> {
+    async fn delete_area(&self, _id: &ThingsId) -> ThingsResult<()> {
         Err(not_yet_implemented("delete_area", "Phase C", "#135"))
     }
 
@@ -253,23 +243,27 @@ impl MutationBackend for AppleScriptBackend {
         Err(not_yet_implemented("update_tag", "Phase D", "#136"))
     }
 
-    async fn delete_tag(&self, _uuid: &Uuid, _remove_from_tasks: bool) -> ThingsResult<()> {
+    async fn delete_tag(&self, _id: &ThingsId, _remove_from_tasks: bool) -> ThingsResult<()> {
         Err(not_yet_implemented("delete_tag", "Phase D", "#136"))
     }
 
-    async fn merge_tags(&self, _source: &Uuid, _target: &Uuid) -> ThingsResult<()> {
+    async fn merge_tags(&self, _source_id: &ThingsId, _target_id: &ThingsId) -> ThingsResult<()> {
         Err(not_yet_implemented("merge_tags", "Phase D", "#136"))
     }
 
     async fn add_tag_to_task(
         &self,
-        _task_uuid: &Uuid,
+        _task_id: &ThingsId,
         _tag_title: &str,
     ) -> ThingsResult<TagAssignmentResult> {
         Err(not_yet_implemented("add_tag_to_task", "Phase D", "#136"))
     }
 
-    async fn remove_tag_from_task(&self, _task_uuid: &Uuid, _tag_title: &str) -> ThingsResult<()> {
+    async fn remove_tag_from_task(
+        &self,
+        _task_id: &ThingsId,
+        _tag_title: &str,
+    ) -> ThingsResult<()> {
         Err(not_yet_implemented(
             "remove_tag_from_task",
             "Phase D",
@@ -279,7 +273,7 @@ impl MutationBackend for AppleScriptBackend {
 
     async fn set_task_tags(
         &self,
-        _task_uuid: &Uuid,
+        _task_id: &ThingsId,
         _tag_titles: Vec<String>,
     ) -> ThingsResult<Vec<TagMatch>> {
         Err(not_yet_implemented("set_task_tags", "Phase D", "#136"))
@@ -353,63 +347,92 @@ mod tests {
         }
     }
 
-    /// Smoke test against the user's real Things 3 install — verifies the
-    /// AppleScript plumbing reaches Things 3 and a `make new to do` script
-    /// executes. Does NOT verify the returned ID round-trips back through the
-    /// trait, because Things 3 IDs are 21–22-char base62-style strings (e.g.
-    /// `R4t2G8Q63aGZq4epMHNeCr`), not RFC-4122 UUIDs — see the
-    /// "Known limitation" note on [`AppleScriptBackend::create_task`].
+    /// Full create→update→complete→delete lifecycle test against the user's real Things 3 install.
     ///
-    /// The full lifecycle test (`create → update → complete → delete`,
-    /// asserting via DB reads) lands in Phase E (#137) once the ID-unification
-    /// blocker on #125 is resolved.
+    /// With ID unification (#139) landed, `create_task` now returns a [`ThingsId`] that
+    /// correctly round-trips through both Things 3 native IDs (21–22 char base62) and
+    /// RFC-4122 UUIDs. The returned ID is immediately usable in subsequent trait calls.
     ///
     /// Run explicitly with:
     ///
     /// ```text
-    /// cargo test -p things3-core mutations::applescript::tests::create_task_smoke \
+    /// THINGS3_LIVE_TESTS=1 cargo test -p things3-core \
+    ///     mutations::applescript::tests::task_lifecycle_round_trip \
     ///     -- --ignored --nocapture
     /// ```
     ///
-    /// Creates a clearly-marked test task in the user's Things 3 inbox; you'll
-    /// want to delete it manually after running.
+    /// Creates a clearly-marked test task in the user's Things 3 inbox and
+    /// deletes it before returning. If the test panics mid-run, a stale task
+    /// may remain in the inbox.
     #[tokio::test]
-    #[ignore = "requires Things 3 + Automation permission; mutates the user's real DB"]
-    async fn create_task_smoke() {
+    #[ignore = "requires Things 3 + Automation permission; set THINGS3_LIVE_TESTS=1"]
+    async fn task_lifecycle_round_trip() {
+        if std::env::var("THINGS3_LIVE_TESTS").as_deref() != Ok("1") {
+            return;
+        }
+
+        let db_path = crate::database::get_default_database_path();
+        let db = Arc::new(
+            ThingsDatabase::new(&db_path)
+                .await
+                .expect("failed to open Things 3 database"),
+        );
+        let backend = AppleScriptBackend::new(Arc::clone(&db));
+
         let title = format!(
-            "rust-things3 phase B smoke test {}",
+            "rust-things3 lifecycle test {}",
             chrono::Utc::now().timestamp()
         );
-        let req = CreateTaskRequest {
-            title: title.clone(),
-            task_type: None,
-            notes: Some("with \"quotes\" and\nnewline and \\backslash".into()),
-            start_date: None,
-            deadline: None,
-            project_uuid: None,
-            area_uuid: None,
-            parent_uuid: None,
-            tags: None,
-            status: None,
-        };
 
-        let stdout = runner::run_script(&script::create_task_script(&req))
+        // --- create ---
+        let id = backend
+            .create_task(CreateTaskRequest {
+                title: title.clone(),
+                task_type: None,
+                notes: Some("with \"quotes\" and\nnewline and \\backslash".into()),
+                start_date: None,
+                deadline: None,
+                project_uuid: None,
+                area_uuid: None,
+                parent_uuid: None,
+                tags: None,
+                status: None,
+            })
             .await
-            .expect("osascript should reach Things 3");
+            .expect("create_task should succeed");
 
-        // Things 3 returns a 21- or 22-char base62-style ID. Until ID
-        // unification lands, we don't try to parse this back through the
-        // public API — just assert the shape so a script regression would
-        // fail loudly here.
-        let id = stdout.trim();
         assert!(
-            id.len() == 21 || id.len() == 22,
-            "expected Things ID of length 21–22, got {}: {id:?}",
-            id.len(),
+            !id.as_str().is_empty(),
+            "returned ThingsId should not be empty"
         );
-        assert!(
-            id.chars().all(|c| c.is_ascii_alphanumeric()),
-            "expected base62-style id, got: {id:?}"
-        );
+        println!("created task id: {id}");
+
+        // --- update ---
+        backend
+            .update_task(crate::models::UpdateTaskRequest {
+                uuid: id.clone(),
+                title: Some(format!("{title} (updated)")),
+                notes: None,
+                start_date: None,
+                deadline: None,
+                project_uuid: None,
+                area_uuid: None,
+                tags: None,
+                status: None,
+            })
+            .await
+            .expect("update_task should succeed");
+
+        // --- complete ---
+        backend
+            .complete_task(&id)
+            .await
+            .expect("complete_task should succeed");
+
+        // --- delete ---
+        backend
+            .delete_task(&id, DeleteChildHandling::Error)
+            .await
+            .expect("delete_task should succeed");
     }
 }

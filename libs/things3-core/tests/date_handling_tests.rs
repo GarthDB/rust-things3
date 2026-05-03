@@ -374,7 +374,7 @@ async fn test_update_task_dates_successfully() {
     let deadline = NaiveDate::from_ymd_opt(2024, 12, 31).unwrap();
 
     let update_request = things3_core::models::UpdateTaskRequest {
-        uuid: task_uuid,
+        uuid: task_uuid.clone(),
         title: None,
         notes: None,
         start_date: Some(start),

@@ -5,6 +5,40 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Breaking Changes
+
+- **`ThingsId` replaces `Uuid` for all entity identifiers** (#139) — the `Uuid` type from the
+  `uuid` crate no longer appears in any public API for task, project, area, tag, or heading IDs.
+  All methods on `ThingsDatabase`, all `MutationBackend` trait methods, and all request/response
+  model types now use `ThingsId` (from `things3_core::ThingsId`).
+
+  **Migration guide for callers:**
+  - `ThingsDatabase::create_task(...)` now returns `ThingsResult<ThingsId>` (was `ThingsResult<Uuid>`)
+  - All `&Uuid` parameters become `&ThingsId`; construct with `ThingsId::from_str(s)?` at API
+    boundaries or `ThingsId::new_v4()` for fresh IDs
+  - `Uuid::parse_str(s)` → `ThingsId::from_str(s)` (add `use std::str::FromStr;`)
+  - `.bind(uuid.to_string())` in sqlx queries → `.bind(id.as_str())`
+
+- **`things_uuid_to_uuid` deleted** — the `pub(crate)` function in `database/core.rs` that
+  hashed Things native IDs into `Uuid` values was lossy and non-deterministic (`DefaultHasher`
+  is randomized per process). Any code that called it must switch to storing the raw `ThingsId`
+  string directly.
+
+- **`MutationBackend` trait** — all 21 method signatures updated to use `ThingsId` for entity
+  IDs. Existing impls of `MutationBackend` must update their method signatures to match.
+
+### Added
+
+- **`ThingsId` type** (#139) — `things3_core::ThingsId` is a transparent newtype over `String`
+  that accepts both RFC-4122 UUIDs (from `SqlxBackend`-created entities, e.g.
+  `550e8400-e29b-41d4-a716-446655440000`) and Things native IDs (21–22-char base62 strings the
+  Things 3 app itself produces, e.g. `R4t2G8Q63aGZq4epMHNeCr`). Serializes as a bare JSON string
+  (`#[serde(transparent)]`). `FromStr` validates strictly at MCP/API boundaries; internal DB reads
+  use `ThingsId::from_trusted` to avoid re-parsing values the DB already owns. Implements
+  `Display`, `Hash`, `Eq`, `Ord`, `From<Uuid>`.
+
 ## [1.4.0] - 2026-04-28
 
 ### Added

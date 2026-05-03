@@ -2,6 +2,7 @@
 //! These tests verify that the async functionality works in real scenarios
 
 use std::time::Duration;
+use things3_core::ThingsId;
 use tokio::time::timeout;
 
 /// Test the WebSocket server creation
@@ -57,7 +58,7 @@ async fn test_event_broadcasting_integration() {
     let event = things3_cli::events::Event {
         id: uuid::Uuid::new_v4(),
         event_type: things3_cli::events::EventType::TaskCreated {
-            task_id: uuid::Uuid::new_v4(),
+            task_id: ThingsId::new_v4(),
         },
         timestamp: chrono::Utc::now(),
         data: None,

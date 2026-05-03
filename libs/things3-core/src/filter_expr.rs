@@ -16,9 +16,8 @@
 
 use chrono::NaiveDate;
 use serde::{Deserialize, Serialize};
-use uuid::Uuid;
 
-use crate::models::{Task, TaskStatus, TaskType};
+use crate::models::{Task, TaskStatus, TaskType, ThingsId};
 
 /// Boolean combinator over [`FilterPredicate`]s.
 ///
@@ -56,9 +55,9 @@ pub enum FilterPredicate {
     /// Task type matches.
     TaskType(TaskType),
     /// Task belongs to the given project.
-    Project(Uuid),
+    Project(ThingsId),
     /// Task belongs to the given area.
-    Area(Uuid),
+    Area(ThingsId),
     /// Task carries the named tag (case-sensitive, matches existing tag filters).
     HasTag(String),
     /// `start_date < d`. Tasks with no start date never match.
@@ -136,14 +135,14 @@ impl FilterExpr {
 
     /// Convenience: leaf predicate filtering to a project.
     #[must_use]
-    pub fn project(uuid: Uuid) -> Self {
-        FilterExpr::Pred(FilterPredicate::Project(uuid))
+    pub fn project(id: ThingsId) -> Self {
+        FilterExpr::Pred(FilterPredicate::Project(id))
     }
 
     /// Convenience: leaf predicate filtering to an area.
     #[must_use]
-    pub fn area(uuid: Uuid) -> Self {
-        FilterExpr::Pred(FilterPredicate::Area(uuid))
+    pub fn area(id: ThingsId) -> Self {
+        FilterExpr::Pred(FilterPredicate::Area(id))
     }
 
     /// Convenience: leaf predicate matching a single tag.
@@ -194,8 +193,8 @@ impl FilterPredicate {
         match self {
             FilterPredicate::Status(s) => task.status == *s,
             FilterPredicate::TaskType(t) => task.task_type == *t,
-            FilterPredicate::Project(uuid) => task.project_uuid == Some(*uuid),
-            FilterPredicate::Area(uuid) => task.area_uuid == Some(*uuid),
+            FilterPredicate::Project(id) => task.project_uuid.as_ref() == Some(id),
+            FilterPredicate::Area(id) => task.area_uuid.as_ref() == Some(id),
             FilterPredicate::HasTag(tag) => task.tags.iter().any(|t| t == tag),
             FilterPredicate::StartDateBefore(d) => task.start_date.is_some_and(|sd| sd < *d),
             FilterPredicate::StartDateAfter(d) => task.start_date.is_some_and(|sd| sd > *d),
@@ -219,7 +218,7 @@ mod tests {
 
     fn task(title: &str) -> Task {
         Task {
-            uuid: Uuid::new_v4(),
+            uuid: ThingsId::new_v4(),
             title: title.to_string(),
             task_type: TaskType::Todo,
             status: TaskStatus::Incomplete,
@@ -260,10 +259,10 @@ mod tests {
 
     #[test]
     fn test_pred_project_matches_only_when_set() {
-        let project = Uuid::new_v4();
+        let project = ThingsId::new_v4();
         let mut t = task("a");
-        assert!(!FilterExpr::project(project).matches(&t));
-        t.project_uuid = Some(project);
+        assert!(!FilterExpr::project(project.clone()).matches(&t));
+        t.project_uuid = Some(project.clone());
         assert!(FilterExpr::project(project).matches(&t));
     }
 
@@ -409,7 +408,7 @@ mod tests {
 
     #[test]
     fn test_serde_roundtrip_full_tree() {
-        let project = Uuid::new_v4();
+        let project = ThingsId::new_v4();
         let original = FilterExpr::And(vec![
             FilterExpr::Or(vec![
                 FilterExpr::status(TaskStatus::Incomplete),
