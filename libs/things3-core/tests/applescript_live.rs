@@ -317,6 +317,11 @@ async fn tag_lifecycle_round_trip() {
         })
         .await
         .expect("update_tag should succeed");
+    // `add_tag_to_task` immediately looks up the renamed title in the DB.
+    // This assumes Things 3 flushes the rename to SQLite synchronously before
+    // osascript returns. If the flush were async, `find_tag_by_normalized_title`
+    // would return None, fall through to auto-create, and the `tag_uuid`
+    // assertion below would fail. In practice Things 3 appears synchronous here.
 
     let task_id = backend
         .create_task(CreateTaskRequest {
