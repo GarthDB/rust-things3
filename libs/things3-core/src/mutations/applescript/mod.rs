@@ -151,12 +151,18 @@ impl AppleScriptBackend {
     ) -> ThingsResult<Vec<(ThingsId, Vec<String>)>> {
         use crate::database::tag_utils::normalize_tag_title;
 
-        let escaped = tag_title.replace('%', "\\%").replace('_', "\\_");
+        // SQLite LIKE only treats `\` as an escape when paired with an explicit
+        // ESCAPE clause; without it `\_` is a literal two-char sequence and a
+        // tag containing `_` or `%` would silently skip its tasks.
+        let escaped = tag_title
+            .replace('\\', "\\\\")
+            .replace('%', "\\%")
+            .replace('_', "\\_");
         let pattern = format!("%\"{escaped}\"%");
         let rows = sqlx::query(
-            "SELECT uuid, cachedTags FROM TMTask
+            r"SELECT uuid, cachedTags FROM TMTask
              WHERE cachedTags IS NOT NULL
-             AND json_extract(cachedTags, '$') LIKE ?
+             AND json_extract(cachedTags, '$') LIKE ? ESCAPE '\'
              AND trashed = 0",
         )
         .bind(&pattern)
@@ -912,6 +918,43 @@ mod tests {
             .await
             .expect("query nonexistent");
         assert!(not_found.is_empty(), "no tasks should match an absent tag");
+    }
+
+    /// Tag titles containing SQL LIKE wildcards (`_`, `%`) must still match
+    /// their exact tasks — the pre-filter escapes wildcards via `ESCAPE '\'`.
+    /// Regression: previously `replace('_', "\\_")` produced a literal `\_`
+    /// that didn't match because the LIKE clause had no `ESCAPE`.
+    #[tokio::test]
+    async fn list_tasks_with_tag_title_handles_underscore_in_tag_name() {
+        let (db, _tmp) = crate::test_utils::create_test_database_and_connect()
+            .await
+            .expect("test db");
+
+        let task_id = ThingsId::new_v4();
+        let blob =
+            crate::database::serialize_tags_to_blob(&["to_do".to_string()]).expect("serialize");
+        let now = 1_700_000_000.0_f64;
+        sqlx::query(
+            "INSERT INTO TMTask \
+             (uuid, title, type, status, trashed, cachedTags, creationDate, userModificationDate) \
+             VALUES (?, 'Task with underscored tag', 0, 0, 0, ?, ?, ?)",
+        )
+        .bind(task_id.as_str())
+        .bind(&blob)
+        .bind(now)
+        .bind(now)
+        .execute(&db.pool)
+        .await
+        .expect("insert");
+
+        let backend = AppleScriptBackend::new(Arc::new(db));
+
+        let found = backend
+            .list_tasks_with_tag_title("to_do")
+            .await
+            .expect("query");
+        assert_eq!(found.len(), 1, "should match tag name with underscore");
+        assert_eq!(found[0].0.as_str(), task_id.as_str());
     }
 
     /// `merge_tags` rejects identical source/target with a Validation error.
