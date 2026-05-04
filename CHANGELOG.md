@@ -31,6 +31,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **AppleScriptBackend Phase C: projects, areas, bulk operations** (#135) — implements 12 of the 16
+  remaining `MutationBackend` stubs in `AppleScriptBackend`: `create_project`, `update_project`,
+  `complete_project`, `delete_project` (all three `ProjectChildHandling` modes — Error, Cascade,
+  Orphan); `create_area`, `update_area`, `delete_area`; and the five bulk ops
+  (`bulk_create_tasks`, `bulk_delete`, `bulk_move`, `bulk_update_dates`, `bulk_complete`). Each
+  bulk op runs as a single `osascript` invocation with per-item `try`/`on error` blocks; partial
+  failures surface via `BulkOperationResult.message`. The 1000-item batch cap and empty-array
+  validation mirror `SqlxBackend`. Tag operations remain stubbed (Phase D, #136).
 - **`ThingsId` type** (#139) — `things3_core::ThingsId` is a transparent newtype over `String`
   that accepts both RFC-4122 UUIDs (from `SqlxBackend`-created entities, e.g.
   `550e8400-e29b-41d4-a716-446655440000`) and Things native IDs (21–22-char base62 strings the
