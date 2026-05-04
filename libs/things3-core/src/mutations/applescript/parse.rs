@@ -70,6 +70,10 @@ pub(crate) fn parse_bulk_result(stdout: &str, total: usize) -> Result<BulkOperat
             ))
         })?;
 
+    // Clamp against `total` to keep the count coherent if a script-generation
+    // bug ever reports more processed items than were requested.
+    let processed = processed.min(total);
+
     let errors: Vec<String> = lines.map(|l| l.trim().to_string()).collect();
     let success = errors.is_empty();
     let message = if success {
@@ -195,6 +199,16 @@ mod tests {
         let res = parse_bulk_result("OK 0\n", 0).unwrap();
         assert!(res.success);
         assert_eq!(res.processed_count, 0);
+    }
+
+    #[test]
+    fn parse_bulk_clamps_processed_to_total() {
+        // Defensive: if a future script-generation bug ever reports more
+        // processed items than were requested, the parser must not return a
+        // count that exceeds `total`.
+        let res = parse_bulk_result("OK 10\n", 5).unwrap();
+        assert!(res.success);
+        assert_eq!(res.processed_count, 5);
     }
 
     #[test]

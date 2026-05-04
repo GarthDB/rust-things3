@@ -39,6 +39,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   bulk op runs as a single `osascript` invocation with per-item `try`/`on error` blocks; partial
   failures surface via `BulkOperationResult.message`. The 1000-item batch cap and empty-array
   validation mirror `SqlxBackend`. Tag operations remain stubbed (Phase D, #136).
+- **AppleScriptBackend Phase C followups** — post-merge hardening of #142:
+  - Document the fail-fast contract on the remaining cascade/orphan project
+    script builders (`cascade_delete_project_script`,
+    `orphan_complete_project_script`, `orphan_delete_project_script`) to
+    match `cascade_complete_project_script`.
+  - Cap project-cascade child counts at `MAX_BULK_BATCH_SIZE` in
+    `complete_project` and `delete_project` so the generated osascript
+    payload stays bounded for the same reason `bulk_*` operations cap.
+  - Replace the silent `bulk_wrap(&[])` no-op fallback in `bulk_move_script`
+    with `unreachable!`, asserting the destination invariant the caller
+    already validates.
+  - Clamp `parse_bulk_result`'s `processed` count against `total` so a
+    future script-generation bug cannot report more processed items than
+    were requested.
 - **`ThingsId` type** (#139) — `things3_core::ThingsId` is a transparent newtype over `String`
   that accepts both RFC-4122 UUIDs (from `SqlxBackend`-created entities, e.g.
   `550e8400-e29b-41d4-a716-446655440000`) and Things native IDs (21–22-char base62 strings the
