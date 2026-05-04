@@ -80,7 +80,31 @@ impl AppleScriptBackend {
             })
             .collect())
     }
+
+    /// Read the IDs of every non-trashed direct child task of `project` via
+    /// sqlx. Used by `complete_project` / `delete_project` to handle
+    /// `ProjectChildHandling`. Read-only, CulturedCode-safe.
+    async fn list_project_task_uuids(&self, project: &ThingsId) -> ThingsResult<Vec<ThingsId>> {
+        let rows = sqlx::query("SELECT uuid FROM TMTask WHERE project = ? AND trashed = 0")
+            .bind(project.as_str())
+            .fetch_all(&self.db.pool)
+            .await
+            .map_err(|e| {
+                ThingsError::applescript(format!(
+                    "failed to query child tasks of project {project}: {e}"
+                ))
+            })?;
+        Ok(rows
+            .into_iter()
+            .map(|row| {
+                let s: String = row.get("uuid");
+                ThingsId::from_trusted(s)
+            })
+            .collect())
+    }
 }
+
+const MAX_BULK_BATCH_SIZE: usize = 1000;
 
 /// Helper: every stub method gets the same error shape so callers can grep
 /// for the phase that adds it.
@@ -158,75 +182,189 @@ impl MutationBackend for AppleScriptBackend {
         Ok(())
     }
 
-    // ---- Tasks (Phase C — stubbed) ----
+    // ---- Bulk operations (Phase C — implemented) ----
 
     async fn bulk_create_tasks(
         &self,
-        _request: BulkCreateTasksRequest,
+        request: BulkCreateTasksRequest,
     ) -> ThingsResult<BulkOperationResult> {
-        Err(not_yet_implemented("bulk_create_tasks", "Phase C", "#135"))
+        if request.tasks.is_empty() {
+            return Err(ThingsError::validation("Tasks array cannot be empty"));
+        }
+        if request.tasks.len() > MAX_BULK_BATCH_SIZE {
+            return Err(ThingsError::validation(format!(
+                "Batch size {} exceeds maximum of {MAX_BULK_BATCH_SIZE}",
+                request.tasks.len(),
+            )));
+        }
+        let total = request.tasks.len();
+        let script = script::bulk_create_tasks_script(&request);
+        let stdout = runner::run_script(&script).await?;
+        parse::parse_bulk_result(&stdout, total)
     }
 
-    async fn bulk_delete(&self, _request: BulkDeleteRequest) -> ThingsResult<BulkOperationResult> {
-        Err(not_yet_implemented("bulk_delete", "Phase C", "#135"))
+    async fn bulk_delete(&self, request: BulkDeleteRequest) -> ThingsResult<BulkOperationResult> {
+        if request.task_uuids.is_empty() {
+            return Err(ThingsError::validation("Task UUIDs array cannot be empty"));
+        }
+        if request.task_uuids.len() > MAX_BULK_BATCH_SIZE {
+            return Err(ThingsError::validation(format!(
+                "Batch size {} exceeds maximum of {MAX_BULK_BATCH_SIZE}",
+                request.task_uuids.len(),
+            )));
+        }
+        let total = request.task_uuids.len();
+        let script = script::bulk_delete_script(&request);
+        let stdout = runner::run_script(&script).await?;
+        parse::parse_bulk_result(&stdout, total)
     }
 
-    async fn bulk_move(&self, _request: BulkMoveRequest) -> ThingsResult<BulkOperationResult> {
-        Err(not_yet_implemented("bulk_move", "Phase C", "#135"))
+    async fn bulk_move(&self, request: BulkMoveRequest) -> ThingsResult<BulkOperationResult> {
+        if request.task_uuids.is_empty() {
+            return Err(ThingsError::validation("Task UUIDs array cannot be empty"));
+        }
+        if request.task_uuids.len() > MAX_BULK_BATCH_SIZE {
+            return Err(ThingsError::validation(format!(
+                "Batch size {} exceeds maximum of {MAX_BULK_BATCH_SIZE}",
+                request.task_uuids.len(),
+            )));
+        }
+        if request.project_uuid.is_none() && request.area_uuid.is_none() {
+            return Err(ThingsError::validation(
+                "bulk_move requires either project_uuid or area_uuid",
+            ));
+        }
+        let total = request.task_uuids.len();
+        let script = script::bulk_move_script(&request);
+        let stdout = runner::run_script(&script).await?;
+        parse::parse_bulk_result(&stdout, total)
     }
 
     async fn bulk_update_dates(
         &self,
-        _request: BulkUpdateDatesRequest,
+        request: BulkUpdateDatesRequest,
     ) -> ThingsResult<BulkOperationResult> {
-        Err(not_yet_implemented("bulk_update_dates", "Phase C", "#135"))
+        if request.task_uuids.is_empty() {
+            return Err(ThingsError::validation("Task UUIDs array cannot be empty"));
+        }
+        if request.task_uuids.len() > MAX_BULK_BATCH_SIZE {
+            return Err(ThingsError::validation(format!(
+                "Batch size {} exceeds maximum of {MAX_BULK_BATCH_SIZE}",
+                request.task_uuids.len(),
+            )));
+        }
+        let total = request.task_uuids.len();
+        let script = script::bulk_update_dates_script(&request);
+        let stdout = runner::run_script(&script).await?;
+        parse::parse_bulk_result(&stdout, total)
     }
 
     async fn bulk_complete(
         &self,
-        _request: BulkCompleteRequest,
+        request: BulkCompleteRequest,
     ) -> ThingsResult<BulkOperationResult> {
-        Err(not_yet_implemented("bulk_complete", "Phase C", "#135"))
+        if request.task_uuids.is_empty() {
+            return Err(ThingsError::validation("Task UUIDs array cannot be empty"));
+        }
+        if request.task_uuids.len() > MAX_BULK_BATCH_SIZE {
+            return Err(ThingsError::validation(format!(
+                "Batch size {} exceeds maximum of {MAX_BULK_BATCH_SIZE}",
+                request.task_uuids.len(),
+            )));
+        }
+        let total = request.task_uuids.len();
+        let script = script::bulk_complete_script(&request);
+        let stdout = runner::run_script(&script).await?;
+        parse::parse_bulk_result(&stdout, total)
     }
 
-    // ---- Projects (Phase C — stubbed) ----
+    // ---- Projects (Phase C — implemented) ----
 
-    async fn create_project(&self, _request: CreateProjectRequest) -> ThingsResult<ThingsId> {
-        Err(not_yet_implemented("create_project", "Phase C", "#135"))
+    async fn create_project(&self, request: CreateProjectRequest) -> ThingsResult<ThingsId> {
+        let script = script::create_project_script(&request);
+        let stdout = runner::run_script(&script).await?;
+        parse::extract_id(&stdout)
     }
 
-    async fn update_project(&self, _request: UpdateProjectRequest) -> ThingsResult<()> {
-        Err(not_yet_implemented("update_project", "Phase C", "#135"))
+    async fn update_project(&self, request: UpdateProjectRequest) -> ThingsResult<()> {
+        let script = script::update_project_script(&request);
+        runner::run_script(&script).await?;
+        Ok(())
     }
 
     async fn complete_project(
         &self,
-        _id: &ThingsId,
-        _child_handling: ProjectChildHandling,
+        id: &ThingsId,
+        child_handling: ProjectChildHandling,
     ) -> ThingsResult<()> {
-        Err(not_yet_implemented("complete_project", "Phase C", "#135"))
+        let children = self.list_project_task_uuids(id).await?;
+
+        if children.is_empty() {
+            // No children — just complete the project regardless of mode.
+            let script = script::complete_project_script(id);
+            runner::run_script(&script).await?;
+            return Ok(());
+        }
+
+        let script = match child_handling {
+            ProjectChildHandling::Error => {
+                return Err(ThingsError::applescript(format!(
+                    "project {id} has {} child task(s); pass ProjectChildHandling::Cascade or ::Orphan",
+                    children.len()
+                )));
+            }
+            ProjectChildHandling::Cascade => script::cascade_complete_project_script(id, &children),
+            ProjectChildHandling::Orphan => script::orphan_complete_project_script(id, &children),
+        };
+        runner::run_script(&script).await?;
+        Ok(())
     }
 
     async fn delete_project(
         &self,
-        _id: &ThingsId,
-        _child_handling: ProjectChildHandling,
+        id: &ThingsId,
+        child_handling: ProjectChildHandling,
     ) -> ThingsResult<()> {
-        Err(not_yet_implemented("delete_project", "Phase C", "#135"))
+        let children = self.list_project_task_uuids(id).await?;
+
+        if children.is_empty() {
+            let script = script::delete_project_script(id);
+            runner::run_script(&script).await?;
+            return Ok(());
+        }
+
+        let script = match child_handling {
+            ProjectChildHandling::Error => {
+                return Err(ThingsError::applescript(format!(
+                    "project {id} has {} child task(s); pass ProjectChildHandling::Cascade or ::Orphan",
+                    children.len()
+                )));
+            }
+            ProjectChildHandling::Cascade => script::cascade_delete_project_script(id, &children),
+            ProjectChildHandling::Orphan => script::orphan_delete_project_script(id, &children),
+        };
+        runner::run_script(&script).await?;
+        Ok(())
     }
 
-    // ---- Areas (Phase C — stubbed) ----
+    // ---- Areas (Phase C — implemented) ----
 
-    async fn create_area(&self, _request: CreateAreaRequest) -> ThingsResult<ThingsId> {
-        Err(not_yet_implemented("create_area", "Phase C", "#135"))
+    async fn create_area(&self, request: CreateAreaRequest) -> ThingsResult<ThingsId> {
+        let script = script::create_area_script(&request);
+        let stdout = runner::run_script(&script).await?;
+        parse::extract_id(&stdout)
     }
 
-    async fn update_area(&self, _request: UpdateAreaRequest) -> ThingsResult<()> {
-        Err(not_yet_implemented("update_area", "Phase C", "#135"))
+    async fn update_area(&self, request: UpdateAreaRequest) -> ThingsResult<()> {
+        let script = script::update_area_script(&request);
+        runner::run_script(&script).await?;
+        Ok(())
     }
 
-    async fn delete_area(&self, _id: &ThingsId) -> ThingsResult<()> {
-        Err(not_yet_implemented("delete_area", "Phase C", "#135"))
+    async fn delete_area(&self, id: &ThingsId) -> ThingsResult<()> {
+        let script = script::delete_area_script(id);
+        runner::run_script(&script).await?;
+        Ok(())
     }
 
     // ---- Tags (Phase D — stubbed) ----
@@ -295,36 +433,17 @@ mod tests {
         let _backend = AppleScriptBackend::new(db);
     }
 
-    /// Every Phase-C / Phase-D stub returns AppleScript error pointing at the
-    /// tracking issue. Spot-check one per category.
+    /// Every remaining Phase-D stub returns AppleScript error pointing at the
+    /// tracking issue. Phase B (tasks) and Phase C (projects/areas/bulk) are
+    /// fully implemented; tags remain stubbed.
     #[tokio::test]
-    async fn unimplemented_methods_return_phase_error() {
+    async fn unimplemented_tag_methods_return_phase_error() {
         let db = Arc::new(
             ThingsDatabase::from_connection_string("sqlite::memory:")
                 .await
                 .expect("in-memory db"),
         );
         let backend = AppleScriptBackend::new(db);
-
-        let err = backend
-            .create_project(CreateProjectRequest {
-                title: "x".into(),
-                notes: None,
-                area_uuid: None,
-                start_date: None,
-                deadline: None,
-                tags: None,
-            })
-            .await
-            .expect_err("stub");
-        match err {
-            ThingsError::AppleScript { message } => {
-                assert!(message.contains("create_project"));
-                assert!(message.contains("Phase C"));
-                assert!(message.contains("#135"));
-            }
-            _ => panic!("expected AppleScript error, got {err:?}"),
-        }
 
         let err = backend
             .create_tag(
@@ -345,6 +464,41 @@ mod tests {
             }
             _ => panic!("expected AppleScript error, got {err:?}"),
         }
+    }
+
+    /// Validation errors fire before osascript spawn for empty / oversize bulk requests.
+    #[tokio::test]
+    async fn bulk_validation_rejects_empty_and_oversize() {
+        let db = Arc::new(
+            ThingsDatabase::from_connection_string("sqlite::memory:")
+                .await
+                .expect("in-memory db"),
+        );
+        let backend = AppleScriptBackend::new(db);
+
+        let err = backend
+            .bulk_complete(BulkCompleteRequest { task_uuids: vec![] })
+            .await
+            .expect_err("empty");
+        assert!(matches!(err, ThingsError::Validation { .. }));
+
+        let err = backend
+            .bulk_delete(BulkDeleteRequest {
+                task_uuids: (0..1001).map(|_| ThingsId::new_v4()).collect(),
+            })
+            .await
+            .expect_err("oversize");
+        assert!(matches!(err, ThingsError::Validation { .. }));
+
+        let err = backend
+            .bulk_move(BulkMoveRequest {
+                task_uuids: vec![ThingsId::new_v4()],
+                project_uuid: None,
+                area_uuid: None,
+            })
+            .await
+            .expect_err("missing destination");
+        assert!(matches!(err, ThingsError::Validation { .. }));
     }
 
     /// Full create→update→complete→delete lifecycle test against the user's real Things 3 install.

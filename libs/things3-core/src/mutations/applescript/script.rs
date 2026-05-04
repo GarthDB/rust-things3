@@ -23,7 +23,11 @@
 use chrono::{Datelike, NaiveDate};
 
 use super::escape::as_applescript_string;
-use crate::models::{CreateTaskRequest, TaskStatus, ThingsId, UpdateTaskRequest};
+use crate::models::{
+    BulkCompleteRequest, BulkCreateTasksRequest, BulkDeleteRequest, BulkMoveRequest,
+    BulkUpdateDatesRequest, CreateAreaRequest, CreateProjectRequest, CreateTaskRequest, TaskStatus,
+    ThingsId, UpdateAreaRequest, UpdateProjectRequest, UpdateTaskRequest,
+};
 
 /// Wrap a script body in the standard `tell application` + `with timeout`
 /// envelope. `body` is appended verbatim — caller controls indentation.
@@ -186,6 +190,373 @@ pub(crate) fn uncomplete_task_script(id: &ThingsId) -> String {
 #[allow(dead_code)] // Used by AppleScriptBackend, added in #134.
 pub(crate) fn delete_task_script(id: &ThingsId) -> String {
     wrap(&format!("\t\tdelete to do id \"{id}\"\n"))
+}
+
+// =====================================================================
+// Projects (Phase C — #135)
+// =====================================================================
+
+/// Build the `make new project` script for a [`CreateProjectRequest`].
+///
+/// Returns the new project's UUID via `return id of newProject`.
+#[allow(dead_code)] // Used by AppleScriptBackend, added in #135.
+pub(crate) fn create_project_script(req: &CreateProjectRequest) -> String {
+    let mut props = vec![format!("name:{}", as_applescript_string(&req.title))];
+    if let Some(notes) = &req.notes {
+        props.push(format!("notes:{}", as_applescript_string(notes)));
+    }
+    if let Some(tags) = &req.tags {
+        if !tags.is_empty() {
+            let joined = tags.join(", ");
+            props.push(format!("tag names:{}", as_applescript_string(&joined)));
+        }
+    }
+
+    let mut body = format!(
+        "\t\tset newProject to make new project with properties {{{}}}\n",
+        props.join(", "),
+    );
+
+    if let Some(date) = req.start_date {
+        body.push_str(&assign_date_var("activationDate", date));
+        body.push_str("\t\tset activation date of newProject to activationDate\n");
+    }
+    if let Some(date) = req.deadline {
+        body.push_str(&assign_date_var("dueDate", date));
+        body.push_str("\t\tset due date of newProject to dueDate\n");
+    }
+
+    if let Some(uuid) = &req.area_uuid {
+        body.push_str(&format!("\t\tmove newProject to area id \"{uuid}\"\n"));
+    }
+
+    body.push_str("\t\treturn id of newProject\n");
+    wrap(&body)
+}
+
+/// Build the partial-update script for an [`UpdateProjectRequest`].
+#[allow(dead_code)] // Used by AppleScriptBackend, added in #135.
+pub(crate) fn update_project_script(req: &UpdateProjectRequest) -> String {
+    let mut body = format!("\t\tset p to project id \"{}\"\n", req.uuid);
+
+    if let Some(title) = &req.title {
+        body.push_str(&format!(
+            "\t\tset name of p to {}\n",
+            as_applescript_string(title),
+        ));
+    }
+    if let Some(notes) = &req.notes {
+        body.push_str(&format!(
+            "\t\tset notes of p to {}\n",
+            as_applescript_string(notes),
+        ));
+    }
+    if let Some(date) = req.start_date {
+        body.push_str(&assign_date_var("activationDate", date));
+        body.push_str("\t\tset activation date of p to activationDate\n");
+    }
+    if let Some(date) = req.deadline {
+        body.push_str(&assign_date_var("dueDate", date));
+        body.push_str("\t\tset due date of p to dueDate\n");
+    }
+    if let Some(uuid) = &req.area_uuid {
+        body.push_str(&format!("\t\tmove p to area id \"{uuid}\"\n"));
+    }
+    if let Some(tags) = &req.tags {
+        let joined = tags.join(", ");
+        body.push_str(&format!(
+            "\t\tset tag names of p to {}\n",
+            as_applescript_string(&joined),
+        ));
+    }
+
+    wrap(&body)
+}
+
+#[allow(dead_code)] // Used by AppleScriptBackend, added in #135.
+pub(crate) fn complete_project_script(id: &ThingsId) -> String {
+    wrap(&format!(
+        "\t\tset status of project id \"{id}\" to completed\n"
+    ))
+}
+
+#[allow(dead_code)] // Used by AppleScriptBackend, added in #135.
+pub(crate) fn delete_project_script(id: &ThingsId) -> String {
+    wrap(&format!("\t\tdelete project id \"{id}\"\n"))
+}
+
+/// Build a cascading complete-project script: completes every child task in
+/// `child_ids`, then completes the project. Single osascript invocation.
+/// Fail-fast — if any sub-statement raises, the project status is left untouched.
+#[allow(dead_code)] // Used by AppleScriptBackend, added in #135.
+pub(crate) fn cascade_complete_project_script(
+    project_id: &ThingsId,
+    child_ids: &[ThingsId],
+) -> String {
+    let mut body = String::new();
+    for child in child_ids {
+        body.push_str(&format!(
+            "\t\tset status of to do id \"{child}\" to completed\n"
+        ));
+    }
+    body.push_str(&format!(
+        "\t\tset status of project id \"{project_id}\" to completed\n"
+    ));
+    wrap(&body)
+}
+
+/// Build a cascading delete-project script: deletes every child task in
+/// `child_ids`, then deletes the project. Single osascript invocation.
+#[allow(dead_code)] // Used by AppleScriptBackend, added in #135.
+pub(crate) fn cascade_delete_project_script(
+    project_id: &ThingsId,
+    child_ids: &[ThingsId],
+) -> String {
+    let mut body = String::new();
+    for child in child_ids {
+        body.push_str(&format!("\t\tdelete to do id \"{child}\"\n"));
+    }
+    body.push_str(&format!("\t\tdelete project id \"{project_id}\"\n"));
+    wrap(&body)
+}
+
+/// Build an orphan-then-complete-project script: detaches every child task
+/// (`set project to missing value`), then completes the project.
+#[allow(dead_code)] // Used by AppleScriptBackend, added in #135.
+pub(crate) fn orphan_complete_project_script(
+    project_id: &ThingsId,
+    child_ids: &[ThingsId],
+) -> String {
+    let mut body = String::new();
+    for child in child_ids {
+        body.push_str(&format!(
+            "\t\tset project of to do id \"{child}\" to missing value\n"
+        ));
+    }
+    body.push_str(&format!(
+        "\t\tset status of project id \"{project_id}\" to completed\n"
+    ));
+    wrap(&body)
+}
+
+/// Build an orphan-then-delete-project script: detaches every child task,
+/// then deletes the project.
+#[allow(dead_code)] // Used by AppleScriptBackend, added in #135.
+pub(crate) fn orphan_delete_project_script(
+    project_id: &ThingsId,
+    child_ids: &[ThingsId],
+) -> String {
+    let mut body = String::new();
+    for child in child_ids {
+        body.push_str(&format!(
+            "\t\tset project of to do id \"{child}\" to missing value\n"
+        ));
+    }
+    body.push_str(&format!("\t\tdelete project id \"{project_id}\"\n"));
+    wrap(&body)
+}
+
+// =====================================================================
+// Areas (Phase C — #135)
+// =====================================================================
+
+/// Build the `make new area` script for a [`CreateAreaRequest`].
+///
+/// Returns the new area's UUID via `return id of newArea`.
+#[allow(dead_code)] // Used by AppleScriptBackend, added in #135.
+pub(crate) fn create_area_script(req: &CreateAreaRequest) -> String {
+    let body = format!(
+        "\t\tset newArea to make new area with properties {{name:{}}}\n\
+         \t\treturn id of newArea\n",
+        as_applescript_string(&req.title),
+    );
+    wrap(&body)
+}
+
+#[allow(dead_code)] // Used by AppleScriptBackend, added in #135.
+pub(crate) fn update_area_script(req: &UpdateAreaRequest) -> String {
+    wrap(&format!(
+        "\t\tset name of area id \"{}\" to {}\n",
+        req.uuid,
+        as_applescript_string(&req.title),
+    ))
+}
+
+#[allow(dead_code)] // Used by AppleScriptBackend, added in #135.
+pub(crate) fn delete_area_script(id: &ThingsId) -> String {
+    wrap(&format!("\t\tdelete area id \"{id}\"\n"))
+}
+
+// =====================================================================
+// Bulk operations (Phase C — #135)
+// =====================================================================
+
+/// Wrap a sequence of per-item snippets in a try/on-error harness.
+///
+/// Each snippet runs inside its own `try ... on error ... end try` block. On
+/// success, an `okCount` counter increments. On failure, the index and
+/// AppleScript error message are appended to an `errorList`. The script
+/// returns:
+///
+/// - `"OK <count>"` if no errors
+/// - `"OK <count>\nitem <idx>: <msg>\nitem <idx>: <msg>\n..."` otherwise
+///
+/// Parsed by [`super::parse::parse_bulk_result`].
+fn bulk_wrap(per_item: &[String]) -> String {
+    let mut body = String::from("\t\tset okCount to 0\n\t\tset errorList to {}\n");
+    for (idx, snippet) in per_item.iter().enumerate() {
+        body.push_str("\t\ttry\n");
+        body.push_str(snippet);
+        body.push_str("\t\t\tset okCount to okCount + 1\n");
+        body.push_str("\t\ton error errMsg\n");
+        body.push_str(&format!(
+            "\t\t\tset end of errorList to \"item {idx}: \" & errMsg\n"
+        ));
+        body.push_str("\t\tend try\n");
+    }
+    body.push_str("\t\tif (count of errorList) is 0 then\n");
+    body.push_str("\t\t\treturn \"OK \" & okCount\n");
+    body.push_str("\t\telse\n");
+    body.push_str("\t\t\tset oldDelims to AppleScript's text item delimiters\n");
+    body.push_str("\t\t\tset AppleScript's text item delimiters to linefeed\n");
+    body.push_str("\t\t\tset output to \"OK \" & okCount & linefeed & (errorList as string)\n");
+    body.push_str("\t\t\tset AppleScript's text item delimiters to oldDelims\n");
+    body.push_str("\t\t\treturn output\n");
+    body.push_str("\t\tend if\n");
+    wrap(&body)
+}
+
+/// Render the property-list + post-statements for a single `make new to do`
+/// inside a bulk script. Indented one extra level (`\t\t\t`) to sit inside
+/// the `try` block emitted by [`bulk_wrap`].
+fn create_task_snippet(req: &CreateTaskRequest) -> String {
+    let mut props = vec![format!("name:{}", as_applescript_string(&req.title))];
+    if let Some(notes) = &req.notes {
+        props.push(format!("notes:{}", as_applescript_string(notes)));
+    }
+    if let Some(tags) = &req.tags {
+        if !tags.is_empty() {
+            let joined = tags.join(", ");
+            props.push(format!("tag names:{}", as_applescript_string(&joined)));
+        }
+    }
+
+    let mut snippet = format!(
+        "\t\t\tset newTask to make new to do with properties {{{}}}\n",
+        props.join(", "),
+    );
+
+    if let Some(date) = req.start_date {
+        snippet.push_str(&assign_date_var_indented("activationDate", date, 3));
+        snippet.push_str("\t\t\tset activation date of newTask to activationDate\n");
+    }
+    if let Some(date) = req.deadline {
+        snippet.push_str(&assign_date_var_indented("dueDate", date, 3));
+        snippet.push_str("\t\t\tset due date of newTask to dueDate\n");
+    }
+
+    if let Some(uuid) = &req.project_uuid {
+        snippet.push_str(&format!("\t\t\tmove newTask to project id \"{uuid}\"\n"));
+    } else if let Some(uuid) = &req.area_uuid {
+        snippet.push_str(&format!("\t\t\tmove newTask to area id \"{uuid}\"\n"));
+    } else if let Some(uuid) = &req.parent_uuid {
+        snippet.push_str(&format!("\t\t\tmove newTask to to do id \"{uuid}\"\n"));
+    }
+
+    if let Some(status) = req.status {
+        snippet.push_str(&format!(
+            "\t\t\tset status of newTask to {}\n",
+            status_as_applescript(status),
+        ));
+    }
+    snippet
+}
+
+/// Indented variant of [`assign_date_var`] for use inside bulk try-blocks.
+fn assign_date_var_indented(var: &str, date: NaiveDate, level: usize) -> String {
+    let tabs = "\t".repeat(level);
+    format!(
+        "{tabs}set {var} to current date\n\
+         {tabs}set day of {var} to 1\n\
+         {tabs}set year of {var} to {year}\n\
+         {tabs}set month of {var} to {month}\n\
+         {tabs}set day of {var} to {day}\n\
+         {tabs}set time of {var} to 0\n",
+        year = date.year(),
+        month = date.month(),
+        day = date.day(),
+    )
+}
+
+#[allow(dead_code)] // Used by AppleScriptBackend, added in #135.
+pub(crate) fn bulk_create_tasks_script(req: &BulkCreateTasksRequest) -> String {
+    let snippets: Vec<String> = req.tasks.iter().map(create_task_snippet).collect();
+    bulk_wrap(&snippets)
+}
+
+#[allow(dead_code)] // Used by AppleScriptBackend, added in #135.
+pub(crate) fn bulk_delete_script(req: &BulkDeleteRequest) -> String {
+    let snippets: Vec<String> = req
+        .task_uuids
+        .iter()
+        .map(|id| format!("\t\t\tdelete to do id \"{id}\"\n"))
+        .collect();
+    bulk_wrap(&snippets)
+}
+
+#[allow(dead_code)] // Used by AppleScriptBackend, added in #135.
+pub(crate) fn bulk_complete_script(req: &BulkCompleteRequest) -> String {
+    let snippets: Vec<String> = req
+        .task_uuids
+        .iter()
+        .map(|id| format!("\t\t\tset status of to do id \"{id}\" to completed\n"))
+        .collect();
+    bulk_wrap(&snippets)
+}
+
+#[allow(dead_code)] // Used by AppleScriptBackend, added in #135.
+pub(crate) fn bulk_move_script(req: &BulkMoveRequest) -> String {
+    let dest = if let Some(uuid) = &req.project_uuid {
+        format!("project id \"{uuid}\"")
+    } else if let Some(uuid) = &req.area_uuid {
+        format!("area id \"{uuid}\"")
+    } else {
+        // Caller validates this; emitting a no-op script keeps generation total.
+        return bulk_wrap(&[]);
+    };
+    let snippets: Vec<String> = req
+        .task_uuids
+        .iter()
+        .map(|id| format!("\t\t\tmove to do id \"{id}\" to {dest}\n"))
+        .collect();
+    bulk_wrap(&snippets)
+}
+
+#[allow(dead_code)] // Used by AppleScriptBackend, added in #135.
+pub(crate) fn bulk_update_dates_script(req: &BulkUpdateDatesRequest) -> String {
+    // Build the per-item snippet once: it depends only on the request, not the id.
+    // Date variables are assigned once per try-block; per-item set statements reference them.
+    let snippets: Vec<String> = req
+        .task_uuids
+        .iter()
+        .map(|id| {
+            let mut snippet = format!("\t\t\tset t to to do id \"{id}\"\n");
+            if let Some(date) = req.start_date {
+                snippet.push_str(&assign_date_var_indented("activationDate", date, 3));
+                snippet.push_str("\t\t\tset activation date of t to activationDate\n");
+            } else if req.clear_start_date {
+                snippet.push_str("\t\t\tset activation date of t to missing value\n");
+            }
+            if let Some(date) = req.deadline {
+                snippet.push_str(&assign_date_var_indented("dueDate", date, 3));
+                snippet.push_str("\t\t\tset due date of t to dueDate\n");
+            } else if req.clear_deadline {
+                snippet.push_str("\t\t\tset due date of t to missing value\n");
+            }
+            snippet
+        })
+        .collect();
+    bulk_wrap(&snippets)
 }
 
 #[cfg(test)]
@@ -487,5 +858,298 @@ mod tests {
             month_pos < final_day_pos,
             "final day assignment must come last"
         );
+    }
+
+    // -----------------------------------------------------------------
+    // Phase C — Projects
+    // -----------------------------------------------------------------
+
+    #[test]
+    fn create_project_minimal() {
+        let req = CreateProjectRequest {
+            title: "Launch".into(),
+            notes: None,
+            area_uuid: None,
+            start_date: None,
+            deadline: None,
+            tags: None,
+        };
+        let script = create_project_script(&req);
+        assert!(script.contains("make new project with properties {name:\"Launch\"}"));
+        assert!(script.contains("return id of newProject"));
+        assert!(!script.contains("move newProject"));
+    }
+
+    #[test]
+    fn create_project_with_area_emits_move() {
+        let req = CreateProjectRequest {
+            title: "x".into(),
+            notes: Some("notes\nwith newline".into()),
+            area_uuid: Some(project_uuid()),
+            start_date: Some(date(2026, 7, 4)),
+            deadline: None,
+            tags: Some(vec!["ops".into(), "urgent".into()]),
+        };
+        let script = create_project_script(&req);
+        assert!(script.contains("notes:\"notes\\nwith newline\""));
+        assert!(script.contains("tag names:\"ops, urgent\""));
+        assert!(script.contains(&format!(
+            "move newProject to area id \"{}\"",
+            project_uuid()
+        )));
+        assert!(script.contains("set activation date of newProject to activationDate"));
+    }
+
+    #[test]
+    fn update_project_emits_only_specified_fields() {
+        let req = UpdateProjectRequest {
+            uuid: sample_uuid(),
+            title: Some("renamed".into()),
+            notes: None,
+            area_uuid: None,
+            start_date: None,
+            deadline: Some(date(2026, 12, 31)),
+            tags: None,
+        };
+        let script = update_project_script(&req);
+        assert!(script.contains(&format!("set p to project id \"{}\"", sample_uuid())));
+        assert!(script.contains("set name of p to \"renamed\""));
+        assert!(script.contains("set due date of p to dueDate"));
+        assert!(!script.contains("set notes"));
+        assert!(!script.contains("set tag names"));
+    }
+
+    #[test]
+    fn complete_project_script_shape() {
+        let script = complete_project_script(&sample_uuid());
+        assert!(script.contains(&format!(
+            "set status of project id \"{}\" to completed",
+            sample_uuid()
+        )));
+    }
+
+    #[test]
+    fn delete_project_script_shape() {
+        let script = delete_project_script(&sample_uuid());
+        assert!(script.contains(&format!("delete project id \"{}\"", sample_uuid())));
+    }
+
+    #[test]
+    fn cascade_complete_project_includes_each_child_and_parent() {
+        let project = sample_uuid();
+        let children = vec![project_uuid(), ThingsId::from_trusted("abc-123".into())];
+        let script = cascade_complete_project_script(&project, &children);
+        for child in &children {
+            assert!(script.contains(&format!("set status of to do id \"{child}\" to completed")));
+        }
+        assert!(script.contains(&format!(
+            "set status of project id \"{project}\" to completed"
+        )));
+    }
+
+    #[test]
+    fn cascade_delete_project_includes_each_child_and_parent() {
+        let project = sample_uuid();
+        let children = vec![project_uuid()];
+        let script = cascade_delete_project_script(&project, &children);
+        assert!(script.contains(&format!("delete to do id \"{}\"", project_uuid())));
+        assert!(script.contains(&format!("delete project id \"{project}\"")));
+        // Order matters: children deleted before parent.
+        let child_pos = script.find("delete to do id").unwrap();
+        let parent_pos = script.find("delete project id").unwrap();
+        assert!(child_pos < parent_pos);
+    }
+
+    #[test]
+    fn orphan_complete_project_uses_missing_value_for_children() {
+        let project = sample_uuid();
+        let children = vec![project_uuid()];
+        let script = orphan_complete_project_script(&project, &children);
+        assert!(script.contains(&format!(
+            "set project of to do id \"{}\" to missing value",
+            project_uuid()
+        )));
+        assert!(script.contains(&format!(
+            "set status of project id \"{project}\" to completed"
+        )));
+    }
+
+    #[test]
+    fn orphan_delete_project_uses_missing_value_for_children() {
+        let project = sample_uuid();
+        let children = vec![project_uuid()];
+        let script = orphan_delete_project_script(&project, &children);
+        assert!(script.contains(&format!(
+            "set project of to do id \"{}\" to missing value",
+            project_uuid()
+        )));
+        assert!(script.contains(&format!("delete project id \"{project}\"")));
+    }
+
+    // -----------------------------------------------------------------
+    // Phase C — Areas
+    // -----------------------------------------------------------------
+
+    #[test]
+    fn create_area_script_returns_id() {
+        let script = create_area_script(&CreateAreaRequest {
+            title: "Personal \"life\"".into(),
+        });
+        assert!(script.contains("make new area with properties {name:\"Personal \\\"life\\\"\"}"));
+        assert!(script.contains("return id of newArea"));
+    }
+
+    #[test]
+    fn update_area_renames() {
+        let script = update_area_script(&UpdateAreaRequest {
+            uuid: sample_uuid(),
+            title: "New name".into(),
+        });
+        assert!(script.contains(&format!(
+            "set name of area id \"{}\" to \"New name\"",
+            sample_uuid()
+        )));
+    }
+
+    #[test]
+    fn delete_area_script_shape() {
+        let script = delete_area_script(&sample_uuid());
+        assert!(script.contains(&format!("delete area id \"{}\"", sample_uuid())));
+    }
+
+    // -----------------------------------------------------------------
+    // Phase C — Bulk operations
+    // -----------------------------------------------------------------
+
+    fn task(title: &str) -> CreateTaskRequest {
+        CreateTaskRequest {
+            title: title.into(),
+            task_type: None,
+            notes: None,
+            start_date: None,
+            deadline: None,
+            project_uuid: None,
+            area_uuid: None,
+            parent_uuid: None,
+            tags: None,
+            status: None,
+        }
+    }
+
+    #[test]
+    fn bulk_create_tasks_wraps_each_in_try_block() {
+        let req = BulkCreateTasksRequest {
+            tasks: vec![task("a"), task("b")],
+        };
+        let script = bulk_create_tasks_script(&req);
+        // Each item gets its own try block. Match "\t\ttry\n" specifically so we
+        // don't double-count the "try\n" suffix of "end try\n".
+        assert_eq!(script.matches("\t\ttry\n").count(), 2);
+        assert_eq!(script.matches("on error errMsg").count(), 2);
+        assert_eq!(script.matches("end try").count(), 2);
+        // Per-item error tagging.
+        assert!(script.contains("\"item 0: \" & errMsg"));
+        assert!(script.contains("\"item 1: \" & errMsg"));
+        // Counter + result formatting.
+        assert!(script.contains("set okCount to 0"));
+        assert!(script.contains("set errorList to {}"));
+        assert!(script.contains("return \"OK \" & okCount"));
+        // Both task names present.
+        assert!(script.contains("name:\"a\""));
+        assert!(script.contains("name:\"b\""));
+    }
+
+    #[test]
+    fn bulk_delete_one_per_item() {
+        let req = BulkDeleteRequest {
+            task_uuids: vec![sample_uuid(), project_uuid()],
+        };
+        let script = bulk_delete_script(&req);
+        assert!(script.contains(&format!("delete to do id \"{}\"", sample_uuid())));
+        assert!(script.contains(&format!("delete to do id \"{}\"", project_uuid())));
+        assert_eq!(script.matches("\t\ttry\n").count(), 2);
+        assert_eq!(script.matches("on error errMsg").count(), 2);
+    }
+
+    #[test]
+    fn bulk_complete_one_per_item() {
+        let req = BulkCompleteRequest {
+            task_uuids: vec![sample_uuid()],
+        };
+        let script = bulk_complete_script(&req);
+        assert!(script.contains(&format!(
+            "set status of to do id \"{}\" to completed",
+            sample_uuid()
+        )));
+    }
+
+    #[test]
+    fn bulk_move_emits_project_destination() {
+        let req = BulkMoveRequest {
+            task_uuids: vec![sample_uuid()],
+            project_uuid: Some(project_uuid()),
+            area_uuid: None,
+        };
+        let script = bulk_move_script(&req);
+        assert!(script.contains(&format!(
+            "move to do id \"{}\" to project id \"{}\"",
+            sample_uuid(),
+            project_uuid()
+        )));
+    }
+
+    #[test]
+    fn bulk_move_prefers_project_over_area_when_both_set() {
+        let req = BulkMoveRequest {
+            task_uuids: vec![sample_uuid()],
+            project_uuid: Some(project_uuid()),
+            area_uuid: Some(sample_uuid()),
+        };
+        let script = bulk_move_script(&req);
+        assert!(script.contains("to project id"));
+        assert!(!script.contains("to area id"));
+    }
+
+    #[test]
+    fn bulk_move_emits_area_destination_when_project_unset() {
+        let req = BulkMoveRequest {
+            task_uuids: vec![sample_uuid()],
+            project_uuid: None,
+            area_uuid: Some(project_uuid()),
+        };
+        let script = bulk_move_script(&req);
+        assert!(script.contains(&format!(
+            "move to do id \"{}\" to area id \"{}\"",
+            sample_uuid(),
+            project_uuid()
+        )));
+    }
+
+    #[test]
+    fn bulk_update_dates_with_clears() {
+        let req = BulkUpdateDatesRequest {
+            task_uuids: vec![sample_uuid()],
+            start_date: None,
+            deadline: None,
+            clear_start_date: true,
+            clear_deadline: true,
+        };
+        let script = bulk_update_dates_script(&req);
+        assert!(script.contains("set activation date of t to missing value"));
+        assert!(script.contains("set due date of t to missing value"));
+    }
+
+    #[test]
+    fn bulk_update_dates_with_values() {
+        let req = BulkUpdateDatesRequest {
+            task_uuids: vec![sample_uuid()],
+            start_date: Some(date(2026, 6, 1)),
+            deadline: Some(date(2026, 7, 1)),
+            clear_start_date: false,
+            clear_deadline: false,
+        };
+        let script = bulk_update_dates_script(&req);
+        assert!(script.contains("set activation date of t to activationDate"));
+        assert!(script.contains("set due date of t to dueDate"));
     }
 }

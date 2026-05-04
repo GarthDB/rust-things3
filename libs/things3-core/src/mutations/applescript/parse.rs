@@ -7,7 +7,7 @@
 //! full reference does not break callers.
 
 use crate::error::{Result, ThingsError};
-use crate::models::ThingsId;
+use crate::models::{BulkOperationResult, ThingsId};
 
 /// Extract a [`ThingsId`] from an osascript stdout buffer.
 ///
@@ -44,6 +44,48 @@ pub(crate) fn extract_id(stdout: &str) -> Result<ThingsId> {
     Err(ThingsError::applescript(format!(
         "could not extract ID from osascript output: {trimmed:?}"
     )))
+}
+
+/// Parse the output of a [`super::script::bulk_wrap`]-built bulk script into a
+/// [`BulkOperationResult`].
+///
+/// Expected output shapes:
+/// - `"OK <count>"` — all items succeeded
+/// - `"OK <count>\nitem <idx>: <msg>\nitem <idx>: <msg>\n..."` — partial failure
+///
+/// `total` is the requested item count; used to build a clear message when
+/// failures occur.
+#[allow(dead_code)] // Used by AppleScriptBackend, added in #135.
+pub(crate) fn parse_bulk_result(stdout: &str, total: usize) -> Result<BulkOperationResult> {
+    let trimmed = stdout.trim();
+    let mut lines = trimmed.lines();
+    let header = lines.next().unwrap_or("");
+
+    let processed: usize = header
+        .strip_prefix("OK ")
+        .and_then(|s| s.trim().parse().ok())
+        .ok_or_else(|| {
+            ThingsError::applescript(format!(
+                "bulk script returned unexpected output: {trimmed:?}"
+            ))
+        })?;
+
+    let errors: Vec<String> = lines.map(|l| l.trim().to_string()).collect();
+    let success = errors.is_empty();
+    let message = if success {
+        format!("Successfully processed {processed} item(s)")
+    } else {
+        format!(
+            "Processed {processed}/{total}; errors: {}",
+            errors.join("; ")
+        )
+    };
+
+    Ok(BulkOperationResult {
+        success,
+        processed_count: processed,
+        message,
+    })
 }
 
 #[cfg(test)]
@@ -127,5 +169,42 @@ mod tests {
         let stdout = format!("to do id \"{SAMPLE_THINGS_ID}\" of application \"Things3\"\n");
         let id = extract_id(&stdout).unwrap();
         assert_eq!(id.as_str(), SAMPLE_THINGS_ID);
+    }
+
+    #[test]
+    fn parse_bulk_all_success() {
+        let res = parse_bulk_result("OK 5\n", 5).unwrap();
+        assert!(res.success);
+        assert_eq!(res.processed_count, 5);
+        assert!(res.message.contains("Successfully processed 5"));
+    }
+
+    #[test]
+    fn parse_bulk_partial_failure() {
+        let stdout = "OK 3\nitem 1: not found\nitem 4: invalid";
+        let res = parse_bulk_result(stdout, 5).unwrap();
+        assert!(!res.success);
+        assert_eq!(res.processed_count, 3);
+        assert!(res.message.contains("3/5"));
+        assert!(res.message.contains("item 1: not found"));
+        assert!(res.message.contains("item 4: invalid"));
+    }
+
+    #[test]
+    fn parse_bulk_zero_items() {
+        let res = parse_bulk_result("OK 0\n", 0).unwrap();
+        assert!(res.success);
+        assert_eq!(res.processed_count, 0);
+    }
+
+    #[test]
+    fn parse_bulk_rejects_garbage_header() {
+        let err = parse_bulk_result("garbage", 1).unwrap_err();
+        match err {
+            ThingsError::AppleScript { message } => {
+                assert!(message.contains("unexpected output"));
+            }
+            _ => panic!("expected AppleScript error, got {err:?}"),
+        }
     }
 }
