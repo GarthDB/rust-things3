@@ -307,6 +307,7 @@ pub(crate) fn cascade_complete_project_script(
 
 /// Build a cascading delete-project script: deletes every child task in
 /// `child_ids`, then deletes the project. Single osascript invocation.
+/// Fail-fast — if any sub-statement raises, the project is left untouched.
 #[allow(dead_code)] // Used by AppleScriptBackend, added in #135.
 pub(crate) fn cascade_delete_project_script(
     project_id: &ThingsId,
@@ -322,6 +323,7 @@ pub(crate) fn cascade_delete_project_script(
 
 /// Build an orphan-then-complete-project script: detaches every child task
 /// (`set project to missing value`), then completes the project.
+/// Fail-fast — if any sub-statement raises, the project is left untouched.
 #[allow(dead_code)] // Used by AppleScriptBackend, added in #135.
 pub(crate) fn orphan_complete_project_script(
     project_id: &ThingsId,
@@ -341,6 +343,7 @@ pub(crate) fn orphan_complete_project_script(
 
 /// Build an orphan-then-delete-project script: detaches every child task,
 /// then deletes the project.
+/// Fail-fast — if any sub-statement raises, the project is left untouched.
 #[allow(dead_code)] // Used by AppleScriptBackend, added in #135.
 pub(crate) fn orphan_delete_project_script(
     project_id: &ThingsId,
@@ -521,8 +524,10 @@ pub(crate) fn bulk_move_script(req: &BulkMoveRequest) -> String {
     } else if let Some(uuid) = &req.area_uuid {
         format!("area id \"{uuid}\"")
     } else {
-        // Caller validates this; emitting a no-op script keeps generation total.
-        return bulk_wrap(&[]);
+        unreachable!(
+            "bulk_move_script called without project_uuid or area_uuid; \
+             bulk_move() must validate before constructing the script"
+        );
     };
     let snippets: Vec<String> = req
         .task_uuids
@@ -1123,6 +1128,17 @@ mod tests {
             sample_uuid(),
             project_uuid()
         )));
+    }
+
+    #[test]
+    #[should_panic(expected = "bulk_move_script called without project_uuid or area_uuid")]
+    fn bulk_move_without_destination_panics() {
+        let req = BulkMoveRequest {
+            task_uuids: vec![sample_uuid()],
+            project_uuid: None,
+            area_uuid: None,
+        };
+        let _ = bulk_move_script(&req);
     }
 
     #[test]

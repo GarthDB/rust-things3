@@ -306,6 +306,13 @@ impl MutationBackend for AppleScriptBackend {
             return Ok(());
         }
 
+        if children.len() > MAX_BULK_BATCH_SIZE {
+            return Err(ThingsError::validation(format!(
+                "Batch size {} exceeds maximum of {MAX_BULK_BATCH_SIZE}",
+                children.len(),
+            )));
+        }
+
         let script = match child_handling {
             ProjectChildHandling::Error => {
                 return Err(ThingsError::applescript(format!(
@@ -331,6 +338,13 @@ impl MutationBackend for AppleScriptBackend {
             let script = script::delete_project_script(id);
             runner::run_script(&script).await?;
             return Ok(());
+        }
+
+        if children.len() > MAX_BULK_BATCH_SIZE {
+            return Err(ThingsError::validation(format!(
+                "Batch size {} exceeds maximum of {MAX_BULK_BATCH_SIZE}",
+                children.len(),
+            )));
         }
 
         let script = match child_handling {
