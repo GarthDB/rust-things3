@@ -25,8 +25,9 @@ use chrono::{Datelike, NaiveDate};
 use super::escape::as_applescript_string;
 use crate::models::{
     BulkCompleteRequest, BulkCreateTasksRequest, BulkDeleteRequest, BulkMoveRequest,
-    BulkUpdateDatesRequest, CreateAreaRequest, CreateProjectRequest, CreateTaskRequest, TaskStatus,
-    ThingsId, UpdateAreaRequest, UpdateProjectRequest, UpdateTaskRequest,
+    BulkUpdateDatesRequest, CreateAreaRequest, CreateProjectRequest, CreateTagRequest,
+    CreateTaskRequest, TaskStatus, ThingsId, UpdateAreaRequest, UpdateProjectRequest,
+    UpdateTagRequest, UpdateTaskRequest,
 };
 
 /// Wrap a script body in the standard `tell application` + `with timeout`
@@ -559,6 +560,80 @@ pub(crate) fn bulk_update_dates_script(req: &BulkUpdateDatesRequest) -> String {
                 snippet.push_str("\t\t\tset due date of t to missing value\n");
             }
             snippet
+        })
+        .collect();
+    bulk_wrap(&snippets)
+}
+
+// =====================================================================
+// Tags (Phase D — #136)
+// =====================================================================
+
+/// Build the `make new tag` script for a [`CreateTagRequest`].
+///
+/// Returns the new tag's UUID via `return id of newTag`.
+///
+/// **Note:** Things AppleScript does not expose `shortcut` or `parent`
+/// properties on `tag`, so [`CreateTagRequest::shortcut`] and
+/// [`CreateTagRequest::parent_uuid`] are silently dropped here. The caller
+/// is responsible for `tracing::debug!`-logging that drop. This is a known
+/// divergence from `SqlxBackend` — see Phase D PR notes (#136).
+#[allow(dead_code)] // Used by AppleScriptBackend, added in #136.
+pub(crate) fn create_tag_script(req: &CreateTagRequest) -> String {
+    let body = format!(
+        "\t\tset newTag to make new tag with properties {{name:{}}}\n\
+         \t\treturn id of newTag\n",
+        as_applescript_string(&req.title),
+    );
+    wrap(&body)
+}
+
+/// Build the partial-update script for an [`UpdateTagRequest`].
+///
+/// Same `shortcut` / `parent_uuid` caveat as [`create_tag_script`] — those
+/// fields are silently ignored.
+#[allow(dead_code)] // Used by AppleScriptBackend, added in #136.
+pub(crate) fn update_tag_script(req: &UpdateTagRequest) -> String {
+    let mut body = format!("\t\tset t to tag id \"{}\"\n", req.uuid);
+    if let Some(title) = &req.title {
+        body.push_str(&format!(
+            "\t\tset name of t to {}\n",
+            as_applescript_string(title),
+        ));
+    }
+    wrap(&body)
+}
+
+#[allow(dead_code)] // Used by AppleScriptBackend, added in #136.
+pub(crate) fn delete_tag_script(id: &ThingsId) -> String {
+    wrap(&format!("\t\tdelete tag id \"{id}\"\n"))
+}
+
+/// Set a task's `tag names` property to the provided comma-joined string.
+///
+/// Things AS treats `tag names` as a single text value: a comma-separated
+/// list that Things parses internally. Caller is responsible for joining
+/// titles with `", "` and for any deduplication.
+#[allow(dead_code)] // Used by AppleScriptBackend, added in #136.
+pub(crate) fn set_task_tag_names_script(task_id: &ThingsId, joined: &str) -> String {
+    wrap(&format!(
+        "\t\tset tag names of to do id \"{task_id}\" to {}\n",
+        as_applescript_string(joined),
+    ))
+}
+
+/// Bulk variant of [`set_task_tag_names_script`] — one osascript invocation
+/// rewrites tag names for many tasks. Each item runs in its own try block
+/// via [`bulk_wrap`]. Used by `merge_tags` and `delete_tag(remove_from_tasks=true)`.
+#[allow(dead_code)] // Used by AppleScriptBackend, added in #136.
+pub(crate) fn bulk_set_task_tag_names_script(items: &[(ThingsId, String)]) -> String {
+    let snippets: Vec<String> = items
+        .iter()
+        .map(|(task_id, joined)| {
+            format!(
+                "\t\t\tset tag names of to do id \"{task_id}\" to {}\n",
+                as_applescript_string(joined),
+            )
         })
         .collect();
     bulk_wrap(&snippets)
@@ -1167,5 +1242,117 @@ mod tests {
         let script = bulk_update_dates_script(&req);
         assert!(script.contains("set activation date of t to activationDate"));
         assert!(script.contains("set due date of t to dueDate"));
+    }
+
+    // -----------------------------------------------------------------
+    // Phase D — Tags
+    // -----------------------------------------------------------------
+
+    #[test]
+    fn create_tag_emits_make_new_with_name_only() {
+        let req = CreateTagRequest {
+            title: "Work".into(),
+            shortcut: Some("w".into()),
+            parent_uuid: Some(sample_uuid()),
+        };
+        let script = create_tag_script(&req);
+        assert!(script.contains("make new tag with properties {name:\"Work\"}"));
+        assert!(script.contains("return id of newTag"));
+        // shortcut and parent are intentionally dropped — Things AS does not
+        // expose them. The Rust backend logs the drop at debug level.
+        assert!(!script.contains("shortcut"));
+        assert!(!script.contains("parent"));
+    }
+
+    #[test]
+    fn create_tag_escapes_title() {
+        let req = CreateTagRequest {
+            title: "Has \"quotes\" and\nnewline".into(),
+            shortcut: None,
+            parent_uuid: None,
+        };
+        let script = create_tag_script(&req);
+        assert!(script.contains("name:\"Has \\\"quotes\\\" and\\nnewline\""));
+    }
+
+    #[test]
+    fn update_tag_no_fields_only_resolves_target() {
+        let req = UpdateTagRequest {
+            uuid: sample_uuid(),
+            title: None,
+            shortcut: Some("w".into()),
+            parent_uuid: Some(project_uuid()),
+        };
+        let script = update_tag_script(&req);
+        assert!(script.contains(&format!("set t to tag id \"{}\"", sample_uuid())));
+        assert!(!script.contains("set name"));
+        // shortcut/parent silently dropped
+        assert!(!script.contains("shortcut"));
+        assert!(!script.contains("parent"));
+    }
+
+    #[test]
+    fn update_tag_renames_when_title_set() {
+        let req = UpdateTagRequest {
+            uuid: sample_uuid(),
+            title: Some("Renamed".into()),
+            shortcut: None,
+            parent_uuid: None,
+        };
+        let script = update_tag_script(&req);
+        assert!(script.contains("set name of t to \"Renamed\""));
+    }
+
+    #[test]
+    fn delete_tag_script_shape() {
+        let script = delete_tag_script(&sample_uuid());
+        assert!(script.contains(&format!("delete tag id \"{}\"", sample_uuid())));
+    }
+
+    #[test]
+    fn set_task_tag_names_emits_set_with_joined_string() {
+        let script = set_task_tag_names_script(&sample_uuid(), "work, urgent");
+        assert!(script.contains(&format!(
+            "set tag names of to do id \"{}\" to \"work, urgent\"",
+            sample_uuid()
+        )));
+    }
+
+    #[test]
+    fn set_task_tag_names_escapes_joined_string() {
+        let script = set_task_tag_names_script(&sample_uuid(), "has \"quote\"");
+        assert!(script.contains("\"has \\\"quote\\\"\""));
+    }
+
+    #[test]
+    fn bulk_set_task_tag_names_wraps_each_in_try_block() {
+        let items = vec![
+            (sample_uuid(), "a, b".to_string()),
+            (project_uuid(), "c".to_string()),
+        ];
+        let script = bulk_set_task_tag_names_script(&items);
+        // Each item gets its own try block.
+        assert_eq!(script.matches("\t\ttry\n").count(), 2);
+        assert_eq!(script.matches("on error errMsg").count(), 2);
+        assert_eq!(script.matches("end try").count(), 2);
+        assert!(script.contains(&format!(
+            "set tag names of to do id \"{}\" to \"a, b\"",
+            sample_uuid()
+        )));
+        assert!(script.contains(&format!(
+            "set tag names of to do id \"{}\" to \"c\"",
+            project_uuid()
+        )));
+        // Per-item error tagging.
+        assert!(script.contains("\"item 0: \" & errMsg"));
+        assert!(script.contains("\"item 1: \" & errMsg"));
+    }
+
+    #[test]
+    fn bulk_set_task_tag_names_empty_items_still_returns_ok() {
+        let script = bulk_set_task_tag_names_script(&[]);
+        assert!(script.contains("set okCount to 0"));
+        assert!(script.contains("return \"OK \" & okCount"));
+        assert_eq!(script.matches("\t\ttry\n").count(), 0);
     }
 }

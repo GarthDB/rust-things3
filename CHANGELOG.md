@@ -31,6 +31,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **AppleScriptBackend Phase D: tag operations** (#136) — implements the remaining 7
+  `MutationBackend` stubs in `AppleScriptBackend`: `create_tag` (with `force` flag, smart-flow
+  read via `find_tag_by_normalized_title` + `find_similar_tags` ≥0.8 before any AS write),
+  `update_tag`, `delete_tag` (`remove_from_tasks=true` rewrites each affected task's `tag names`
+  in a single bulk osascript invocation, then deletes the tag — a strict capability improvement
+  over `SqlxBackend`, which has this branch as a TODO), `merge_tags` (replaces source with target
+  in every affected task's `tag names`, then deletes source), `add_tag_to_task`,
+  `remove_tag_from_task`, `set_task_tags`. Three methods are read+write hybrids: the read side
+  computes similarity scores from the live DB and short-circuits with `Suggestions` /
+  `SimilarFound` before any AS spawn, while only the unambiguous-write path routes through
+  osascript. Things AppleScript does not expose `shortcut` or `parent` properties on `tag`, so
+  `CreateTagRequest::shortcut` / `parent_uuid` and the equivalents on `UpdateTagRequest` are
+  silently dropped with a `tracing::debug!` log. Closes #124 once Phase E (#137) lands.
 - **AppleScriptBackend Phase C: projects, areas, bulk operations** (#135) — implements 12 of the 16
   remaining `MutationBackend` stubs in `AppleScriptBackend`: `create_project`, `update_project`,
   `complete_project`, `delete_project` (all three `ProjectChildHandling` modes — Error, Cascade,
