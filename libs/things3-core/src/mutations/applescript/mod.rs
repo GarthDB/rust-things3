@@ -151,7 +151,8 @@ impl AppleScriptBackend {
     ) -> ThingsResult<Vec<(ThingsId, Vec<String>)>> {
         use crate::database::tag_utils::normalize_tag_title;
 
-        let pattern = format!("%\"{tag_title}\"%");
+        let escaped = tag_title.replace('%', "\\%").replace('_', "\\_");
+        let pattern = format!("%\"{escaped}\"%");
         let rows = sqlx::query(
             "SELECT uuid, cachedTags FROM TMTask
              WHERE cachedTags IS NOT NULL
@@ -686,10 +687,14 @@ impl MutationBackend for AppleScriptBackend {
 
         let normalized = normalize_tag_title(tag_title);
         let current = self.read_task_tag_titles(task_id).await?;
+        let original_len = current.len();
         let new_list: Vec<String> = current
             .into_iter()
             .filter(|t| normalize_tag_title(t) != normalized)
             .collect();
+        if new_list.len() == original_len {
+            return Ok(());
+        }
         let joined = new_list.join(", ");
         let script = script::set_task_tag_names_script(task_id, &joined);
         runner::run_script(&script).await?;
@@ -703,6 +708,9 @@ impl MutationBackend for AppleScriptBackend {
     ) -> ThingsResult<Vec<TagMatch>> {
         use crate::database::tag_utils::normalize_tag_title;
 
+        // Intentionally asymmetric with add_tag_to_task: similar-tag suggestions
+        // accumulate for the caller but never block the write — every title is
+        // auto-created if absent, matching ThingsDatabase::set_task_tags semantics.
         let mut suggestions: Vec<TagMatch> = Vec::new();
         let mut resolved: Vec<String> = Vec::with_capacity(tag_titles.len());
 
@@ -857,6 +865,53 @@ mod tests {
             }
             other => panic!("expected Suggestions, got {other:?}"),
         }
+    }
+
+    /// `list_tasks_with_tag_title` (the read-side helper backing
+    /// `delete_tag(remove_from_tasks=true)`) correctly finds tasks whose
+    /// `cachedTags` blob contains the target tag, and deserializes the full
+    /// tag list per task. Also confirms that an unrelated tag name returns
+    /// no results.
+    #[tokio::test]
+    async fn delete_tag_remove_from_tasks_finds_tagged_tasks() {
+        let (db, _tmp) = crate::test_utils::create_test_database_and_connect()
+            .await
+            .expect("test db");
+
+        let task_id = ThingsId::new_v4();
+        let blob =
+            crate::database::serialize_tags_to_blob(&["Work".to_string(), "Personal".to_string()])
+                .expect("serialize");
+        let now = 1_700_000_000.0_f64;
+        sqlx::query(
+            "INSERT INTO TMTask \
+             (uuid, title, type, status, trashed, cachedTags, creationDate, userModificationDate) \
+             VALUES (?, 'Tagged Task', 0, 0, 0, ?, ?, ?)",
+        )
+        .bind(task_id.as_str())
+        .bind(&blob)
+        .bind(now)
+        .bind(now)
+        .execute(&db.pool)
+        .await
+        .expect("insert tagged task");
+
+        let backend = AppleScriptBackend::new(Arc::new(db));
+
+        let found = backend
+            .list_tasks_with_tag_title("Work")
+            .await
+            .expect("query");
+        assert_eq!(found.len(), 1, "should find exactly one tagged task");
+        let (found_id, found_tags) = &found[0];
+        assert_eq!(found_id.as_str(), task_id.as_str());
+        assert_eq!(found_tags, &["Work", "Personal"]);
+
+        let not_found = backend
+            .list_tasks_with_tag_title("Nonexistent")
+            .await
+            .expect("query nonexistent");
+        assert!(not_found.is_empty(), "no tasks should match an absent tag");
     }
 
     /// `merge_tags` rejects identical source/target with a Validation error.
