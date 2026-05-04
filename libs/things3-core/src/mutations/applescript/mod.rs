@@ -16,14 +16,13 @@
 //! - This module ([`AppleScriptBackend`]) — wires the four together behind the
 //!   [`crate::mutations::MutationBackend`] trait. Gated `#[cfg(target_os = "macos")]`.
 //!
-//! ## Phase B scope (#134)
+//! ## Implementation status
 //!
-//! Only the five most-used task methods are implemented end-to-end:
-//! `create_task`, `update_task`, `complete_task`, `uncomplete_task`,
-//! `delete_task`. The remaining 16 trait methods return
-//! [`ThingsError::AppleScript`] with a message pointing at the issue tracking
-//! the relevant phase. Until #125 ships, no production code constructs an
-//! `AppleScriptBackend`, so these stubs are unreachable in the default config.
+//! All 21 [`MutationBackend`] methods are implemented end-to-end:
+//! tasks (Phase B, #134), projects/areas/bulk ops (Phase C, #135), and tags
+//! (Phase D, #136). Live integration tests + the production default-switch
+//! land in Phase E (#137) and #125 respectively. Until #125 ships, no
+//! production code constructs an `AppleScriptBackend`.
 
 pub(crate) mod escape;
 pub(crate) mod parse;
@@ -102,17 +101,105 @@ impl AppleScriptBackend {
             })
             .collect())
     }
+
+    /// Read the title of a tag by UUID. Errors if the tag doesn't exist.
+    /// Used by `merge_tags` and `delete_tag(remove_from_tasks=true)` to find
+    /// what tag-name to look for in tasks' `cachedTags`.
+    async fn read_tag_title(&self, id: &ThingsId) -> ThingsResult<String> {
+        let row = sqlx::query("SELECT title FROM TMTag WHERE uuid = ?")
+            .bind(id.as_str())
+            .fetch_optional(&self.db.pool)
+            .await
+            .map_err(|e| ThingsError::applescript(format!("failed to read tag {id}: {e}")))?;
+        let row = row.ok_or_else(|| ThingsError::applescript(format!("tag not found: {id}")))?;
+        Ok(row.get("title"))
+    }
+
+    /// Read a task's current tag-title list from the DB's `cachedTags` blob.
+    /// Returns an empty list if the task has no tags. Errors if the task
+    /// doesn't exist.
+    ///
+    /// CulturedCode-safe: read-only access.
+    async fn read_task_tag_titles(&self, task_id: &ThingsId) -> ThingsResult<Vec<String>> {
+        let row = sqlx::query("SELECT cachedTags FROM TMTask WHERE uuid = ?")
+            .bind(task_id.as_str())
+            .fetch_optional(&self.db.pool)
+            .await
+            .map_err(|e| {
+                ThingsError::applescript(format!("failed to read tags for task {task_id}: {e}"))
+            })?;
+        let row =
+            row.ok_or_else(|| ThingsError::applescript(format!("task not found: {task_id}")))?;
+        let blob: Option<Vec<u8>> = row.get("cachedTags");
+        match blob {
+            None => Ok(Vec::new()),
+            Some(b) => crate::database::deserialize_tags_from_blob(&b),
+        }
+    }
+
+    /// List `(task_id, current_tag_titles)` for every non-trashed task whose
+    /// `cachedTags` contains a tag matching `tag_title` (case-insensitive
+    /// after `normalize_tag_title`). Used by `merge_tags` and
+    /// `delete_tag(remove_from_tasks=true)` to plan per-task rewrites.
+    ///
+    /// Pre-filters via `json_extract(cachedTags, '$') LIKE` to narrow the
+    /// candidate set, then deserializes each blob and re-checks the
+    /// normalized title to drop false positives.
+    async fn list_tasks_with_tag_title(
+        &self,
+        tag_title: &str,
+    ) -> ThingsResult<Vec<(ThingsId, Vec<String>)>> {
+        use crate::database::tag_utils::normalize_tag_title;
+
+        let pattern = format!("%\"{tag_title}\"%");
+        let rows = sqlx::query(
+            "SELECT uuid, cachedTags FROM TMTask
+             WHERE cachedTags IS NOT NULL
+             AND json_extract(cachedTags, '$') LIKE ?
+             AND trashed = 0",
+        )
+        .bind(&pattern)
+        .fetch_all(&self.db.pool)
+        .await
+        .map_err(|e| {
+            ThingsError::applescript(format!("failed to query tasks with tag '{tag_title}': {e}"))
+        })?;
+
+        let normalized_target = normalize_tag_title(tag_title);
+        let mut out = Vec::new();
+        for row in rows {
+            let id_str: String = row.get("uuid");
+            let blob: Vec<u8> = row.get("cachedTags");
+            let tags = crate::database::deserialize_tags_from_blob(&blob)?;
+            if tags
+                .iter()
+                .any(|t| normalize_tag_title(t) == normalized_target)
+            {
+                out.push((ThingsId::from_trusted(id_str), tags));
+            }
+        }
+        Ok(out)
+    }
+
+    /// Create a tag via osascript and parse its returned UUID. Used by
+    /// `create_tag(force=true)` and the auto-create branches of
+    /// `add_tag_to_task` / `set_task_tags`.
+    async fn create_tag_via_as(&self, request: &CreateTagRequest) -> ThingsResult<ThingsId> {
+        if request.shortcut.is_some() || request.parent_uuid.is_some() {
+            tracing::debug!(
+                tag = %request.title,
+                "shortcut and/or parent_uuid set on CreateTagRequest; \
+                 Things AppleScript does not expose those properties on `tag`, \
+                 so they are silently dropped (#136)"
+            );
+        }
+        let script = script::create_tag_script(request);
+        let stdout = runner::run_script(&script).await?;
+        parse::extract_id(&stdout)
+    }
 }
 
 const MAX_BULK_BATCH_SIZE: usize = 1000;
-
-/// Helper: every stub method gets the same error shape so callers can grep
-/// for the phase that adds it.
-fn not_yet_implemented(method: &str, phase: &str, issue: &str) -> ThingsError {
-    ThingsError::applescript(format!(
-        "{method} is not yet implemented in AppleScriptBackend ({phase} — {issue})"
-    ))
-}
 
 #[async_trait]
 impl MutationBackend for AppleScriptBackend {
@@ -381,54 +468,270 @@ impl MutationBackend for AppleScriptBackend {
         Ok(())
     }
 
-    // ---- Tags (Phase D — stubbed) ----
+    // ---- Tags (Phase D — implemented) ----
 
     async fn create_tag(
         &self,
-        _request: CreateTagRequest,
-        _force: bool,
+        request: CreateTagRequest,
+        force: bool,
     ) -> ThingsResult<TagCreationResult> {
-        Err(not_yet_implemented("create_tag", "Phase D", "#136"))
+        use crate::database::tag_utils::normalize_tag_title;
+
+        if force {
+            let uuid = self.create_tag_via_as(&request).await?;
+            return Ok(TagCreationResult::Created { uuid, is_new: true });
+        }
+
+        // Smart flow: exact-match → similar → create.
+        let normalized = normalize_tag_title(&request.title);
+        if let Some(existing) = self.db.find_tag_by_normalized_title(&normalized).await? {
+            return Ok(TagCreationResult::Existing {
+                tag: existing,
+                is_new: false,
+            });
+        }
+        let similar = self.db.find_similar_tags(&normalized, 0.8).await?;
+        if !similar.is_empty() {
+            return Ok(TagCreationResult::SimilarFound {
+                similar_tags: similar,
+                requested_title: request.title.clone(),
+            });
+        }
+        let uuid = self.create_tag_via_as(&request).await?;
+        Ok(TagCreationResult::Created { uuid, is_new: true })
     }
 
-    async fn update_tag(&self, _request: UpdateTagRequest) -> ThingsResult<()> {
-        Err(not_yet_implemented("update_tag", "Phase D", "#136"))
+    async fn update_tag(&self, request: UpdateTagRequest) -> ThingsResult<()> {
+        if request.shortcut.is_some() || request.parent_uuid.is_some() {
+            tracing::debug!(
+                tag = %request.uuid,
+                "shortcut and/or parent_uuid set on UpdateTagRequest; \
+                 Things AppleScript does not expose those properties on `tag`, \
+                 so they are silently dropped (#136)"
+            );
+        }
+        let script = script::update_tag_script(&request);
+        runner::run_script(&script).await?;
+        Ok(())
     }
 
-    async fn delete_tag(&self, _id: &ThingsId, _remove_from_tasks: bool) -> ThingsResult<()> {
-        Err(not_yet_implemented("delete_tag", "Phase D", "#136"))
+    async fn delete_tag(&self, id: &ThingsId, remove_from_tasks: bool) -> ThingsResult<()> {
+        if !remove_from_tasks {
+            let script = script::delete_tag_script(id);
+            runner::run_script(&script).await?;
+            return Ok(());
+        }
+
+        // Find the tag's title and the tasks that hold it. AppleScriptBackend
+        // implements `remove_from_tasks=true` correctly, while the sqlx path
+        // has this as a TODO — divergent capability, called out in the PR.
+        use crate::database::tag_utils::normalize_tag_title;
+        let title = self.read_tag_title(id).await?;
+        let normalized = normalize_tag_title(&title);
+        let candidates = self.list_tasks_with_tag_title(&title).await?;
+
+        if !candidates.is_empty() {
+            if candidates.len() > MAX_BULK_BATCH_SIZE {
+                return Err(ThingsError::validation(format!(
+                    "Cannot remove tag from {} tasks; exceeds maximum of {MAX_BULK_BATCH_SIZE}",
+                    candidates.len(),
+                )));
+            }
+            let items: Vec<(ThingsId, String)> = candidates
+                .into_iter()
+                .map(|(task_id, tags)| {
+                    let new_tags: Vec<String> = tags
+                        .into_iter()
+                        .filter(|t| normalize_tag_title(t) != normalized)
+                        .collect();
+                    (task_id, new_tags.join(", "))
+                })
+                .collect();
+
+            let total = items.len();
+            let rewrite_script = script::bulk_set_task_tag_names_script(&items);
+            let stdout = runner::run_script(&rewrite_script).await?;
+            let result = parse::parse_bulk_result(&stdout, total)?;
+            if !result.success {
+                return Err(ThingsError::applescript(format!(
+                    "delete_tag(remove_from_tasks=true): per-task rewrite failed; \
+                     tag {id} was NOT deleted. {}",
+                    result.message
+                )));
+            }
+        }
+
+        let delete_script = script::delete_tag_script(id);
+        runner::run_script(&delete_script).await?;
+        Ok(())
     }
 
-    async fn merge_tags(&self, _source_id: &ThingsId, _target_id: &ThingsId) -> ThingsResult<()> {
-        Err(not_yet_implemented("merge_tags", "Phase D", "#136"))
+    async fn merge_tags(&self, source_id: &ThingsId, target_id: &ThingsId) -> ThingsResult<()> {
+        use crate::database::tag_utils::normalize_tag_title;
+
+        if source_id == target_id {
+            return Err(ThingsError::validation(
+                "merge_tags: source and target must differ",
+            ));
+        }
+
+        let source_title = self.read_tag_title(source_id).await?;
+        let target_title = self.read_tag_title(target_id).await?;
+        let source_normalized = normalize_tag_title(&source_title);
+        let target_normalized = normalize_tag_title(&target_title);
+
+        let candidates = self.list_tasks_with_tag_title(&source_title).await?;
+        if !candidates.is_empty() {
+            if candidates.len() > MAX_BULK_BATCH_SIZE {
+                return Err(ThingsError::validation(format!(
+                    "Cannot merge tag across {} tasks; exceeds maximum of {MAX_BULK_BATCH_SIZE}",
+                    candidates.len(),
+                )));
+            }
+            let items: Vec<(ThingsId, String)> = candidates
+                .into_iter()
+                .map(|(task_id, tags)| {
+                    let mut new_tags: Vec<String> = Vec::with_capacity(tags.len());
+                    for t in tags {
+                        let n = normalize_tag_title(&t);
+                        if n == source_normalized {
+                            // Replace source with target, deduping.
+                            if !new_tags
+                                .iter()
+                                .any(|nt| normalize_tag_title(nt) == target_normalized)
+                            {
+                                new_tags.push(target_title.clone());
+                            }
+                        } else if n == target_normalized {
+                            // Keep an existing target reference, but de-dup
+                            // against any earlier insertion.
+                            if !new_tags
+                                .iter()
+                                .any(|nt| normalize_tag_title(nt) == target_normalized)
+                            {
+                                new_tags.push(t);
+                            }
+                        } else {
+                            new_tags.push(t);
+                        }
+                    }
+                    (task_id, new_tags.join(", "))
+                })
+                .collect();
+
+            let total = items.len();
+            let rewrite_script = script::bulk_set_task_tag_names_script(&items);
+            let stdout = runner::run_script(&rewrite_script).await?;
+            let result = parse::parse_bulk_result(&stdout, total)?;
+            if !result.success {
+                return Err(ThingsError::applescript(format!(
+                    "merge_tags: per-task rewrite failed; source tag {source_id} was NOT deleted. {}",
+                    result.message
+                )));
+            }
+        }
+
+        // Source tag is no longer referenced by any task — safe to delete.
+        let delete_script = script::delete_tag_script(source_id);
+        runner::run_script(&delete_script).await?;
+        Ok(())
     }
 
     async fn add_tag_to_task(
         &self,
-        _task_id: &ThingsId,
-        _tag_title: &str,
+        task_id: &ThingsId,
+        tag_title: &str,
     ) -> ThingsResult<TagAssignmentResult> {
-        Err(not_yet_implemented("add_tag_to_task", "Phase D", "#136"))
+        use crate::database::tag_utils::normalize_tag_title;
+
+        let normalized = normalize_tag_title(tag_title);
+
+        let (resolved_title, resolved_uuid) =
+            if let Some(existing) = self.db.find_tag_by_normalized_title(&normalized).await? {
+                (existing.title, existing.uuid)
+            } else {
+                let similar = self.db.find_similar_tags(&normalized, 0.8).await?;
+                if !similar.is_empty() {
+                    return Ok(TagAssignmentResult::Suggestions {
+                        similar_tags: similar,
+                    });
+                }
+                // No existing match and no similar tags — auto-create. Mirrors
+                // `ThingsDatabase::add_tag_to_task` (`database/core.rs:2792-2802`).
+                let create_req = CreateTagRequest {
+                    title: tag_title.to_string(),
+                    shortcut: None,
+                    parent_uuid: None,
+                };
+                let new_id = self.create_tag_via_as(&create_req).await?;
+                (tag_title.to_string(), new_id)
+            };
+
+        let current = self.read_task_tag_titles(task_id).await?;
+        let already_present = current.iter().any(|t| normalize_tag_title(t) == normalized);
+        if !already_present {
+            let mut new_list = current;
+            new_list.push(resolved_title);
+            let joined = new_list.join(", ");
+            let script = script::set_task_tag_names_script(task_id, &joined);
+            runner::run_script(&script).await?;
+        }
+        Ok(TagAssignmentResult::Assigned {
+            tag_uuid: resolved_uuid,
+        })
     }
 
-    async fn remove_tag_from_task(
-        &self,
-        _task_id: &ThingsId,
-        _tag_title: &str,
-    ) -> ThingsResult<()> {
-        Err(not_yet_implemented(
-            "remove_tag_from_task",
-            "Phase D",
-            "#136",
-        ))
+    async fn remove_tag_from_task(&self, task_id: &ThingsId, tag_title: &str) -> ThingsResult<()> {
+        use crate::database::tag_utils::normalize_tag_title;
+
+        let normalized = normalize_tag_title(tag_title);
+        let current = self.read_task_tag_titles(task_id).await?;
+        let new_list: Vec<String> = current
+            .into_iter()
+            .filter(|t| normalize_tag_title(t) != normalized)
+            .collect();
+        let joined = new_list.join(", ");
+        let script = script::set_task_tag_names_script(task_id, &joined);
+        runner::run_script(&script).await?;
+        Ok(())
     }
 
     async fn set_task_tags(
         &self,
-        _task_id: &ThingsId,
-        _tag_titles: Vec<String>,
+        task_id: &ThingsId,
+        tag_titles: Vec<String>,
     ) -> ThingsResult<Vec<TagMatch>> {
-        Err(not_yet_implemented("set_task_tags", "Phase D", "#136"))
+        use crate::database::tag_utils::normalize_tag_title;
+
+        let mut suggestions: Vec<TagMatch> = Vec::new();
+        let mut resolved: Vec<String> = Vec::with_capacity(tag_titles.len());
+
+        for title in tag_titles {
+            let normalized = normalize_tag_title(&title);
+            if let Some(existing) = self.db.find_tag_by_normalized_title(&normalized).await? {
+                resolved.push(existing.title);
+                continue;
+            }
+            let similar = self.db.find_similar_tags(&normalized, 0.8).await?;
+            if !similar.is_empty() {
+                suggestions.extend(similar);
+            }
+            // Auto-create on miss — mirrors `ThingsDatabase::set_task_tags`
+            // (`database/core.rs:2966-2981`). Suggestions are accumulated
+            // for the caller's review but do not block creation.
+            let create_req = CreateTagRequest {
+                title: title.clone(),
+                shortcut: None,
+                parent_uuid: None,
+            };
+            self.create_tag_via_as(&create_req).await?;
+            resolved.push(title);
+        }
+
+        let joined = resolved.join(", ");
+        let script = script::set_task_tag_names_script(task_id, &joined);
+        runner::run_script(&script).await?;
+        Ok(suggestions)
     }
 }
 
@@ -447,37 +750,131 @@ mod tests {
         let _backend = AppleScriptBackend::new(db);
     }
 
-    /// Every remaining Phase-D stub returns AppleScript error pointing at the
-    /// tracking issue. Phase B (tasks) and Phase C (projects/areas/bulk) are
-    /// fully implemented; tags remain stubbed.
+    /// `create_tag(force=false)` returns `Existing` for a case-insensitive
+    /// exact match without ever spawning osascript. Read-side decision is
+    /// pure DB.
     #[tokio::test]
-    async fn unimplemented_tag_methods_return_phase_error() {
-        let db = Arc::new(
-            ThingsDatabase::from_connection_string("sqlite::memory:")
-                .await
-                .expect("in-memory db"),
-        );
-        let backend = AppleScriptBackend::new(db);
+    async fn create_tag_returns_existing_on_exact_case_insensitive_match() {
+        let (db, _tmp) = crate::test_utils::create_test_database_and_connect()
+            .await
+            .expect("test db");
+        db.create_tag_force(CreateTagRequest {
+            title: "Work".into(),
+            shortcut: None,
+            parent_uuid: None,
+        })
+        .await
+        .expect("seed tag");
+        let backend = AppleScriptBackend::new(Arc::new(db));
 
-        let err = backend
+        let result = backend
             .create_tag(
                 CreateTagRequest {
-                    title: "x".into(),
+                    title: "WORK".into(),
                     shortcut: None,
                     parent_uuid: None,
                 },
                 false,
             )
             .await
-            .expect_err("stub");
-        match err {
-            ThingsError::AppleScript { message } => {
-                assert!(message.contains("create_tag"));
-                assert!(message.contains("Phase D"));
-                assert!(message.contains("#136"));
+            .expect("smart flow");
+        match result {
+            TagCreationResult::Existing { tag, is_new } => {
+                assert_eq!(tag.title, "Work");
+                assert!(!is_new);
             }
-            _ => panic!("expected AppleScript error, got {err:?}"),
+            other => panic!("expected Existing, got {other:?}"),
         }
+    }
+
+    /// `create_tag(force=false)` returns `SimilarFound` when no exact match
+    /// but Levenshtein-≥0.8 candidates exist. Pure DB read; no osascript.
+    #[tokio::test]
+    async fn create_tag_returns_similar_found_on_fuzzy_match() {
+        let (db, _tmp) = crate::test_utils::create_test_database_and_connect()
+            .await
+            .expect("test db");
+        db.create_tag_force(CreateTagRequest {
+            title: "important".into(),
+            shortcut: None,
+            parent_uuid: None,
+        })
+        .await
+        .expect("seed tag");
+        let backend = AppleScriptBackend::new(Arc::new(db));
+
+        let result = backend
+            .create_tag(
+                CreateTagRequest {
+                    // 1-char typo from "important".
+                    title: "importnt".into(),
+                    shortcut: None,
+                    parent_uuid: None,
+                },
+                false,
+            )
+            .await
+            .expect("smart flow");
+        match result {
+            TagCreationResult::SimilarFound {
+                similar_tags,
+                requested_title,
+            } => {
+                assert_eq!(requested_title, "importnt");
+                assert!(
+                    similar_tags.iter().any(|m| m.tag.title == "important"),
+                    "should suggest 'important' as similar"
+                );
+            }
+            other => panic!("expected SimilarFound, got {other:?}"),
+        }
+    }
+
+    /// `add_tag_to_task` returns `Suggestions` and does NOT spawn osascript
+    /// when the requested title is ambiguous against existing tags.
+    #[tokio::test]
+    async fn add_tag_to_task_returns_suggestions_when_ambiguous() {
+        let (db, _tmp) = crate::test_utils::create_test_database_and_connect()
+            .await
+            .expect("test db");
+        db.create_tag_force(CreateTagRequest {
+            title: "important".into(),
+            shortcut: None,
+            parent_uuid: None,
+        })
+        .await
+        .expect("seed tag");
+        let backend = AppleScriptBackend::new(Arc::new(db));
+
+        let task_id = ThingsId::new_v4();
+        let result = backend
+            .add_tag_to_task(&task_id, "importnt")
+            .await
+            .expect("smart flow");
+        match result {
+            TagAssignmentResult::Suggestions { similar_tags } => {
+                assert!(similar_tags.iter().any(|m| m.tag.title == "important"));
+            }
+            other => panic!("expected Suggestions, got {other:?}"),
+        }
+    }
+
+    /// `merge_tags` rejects identical source/target with a Validation error.
+    /// No DB read or osascript invocation needed.
+    #[tokio::test]
+    async fn merge_tags_rejects_identical_source_and_target() {
+        let db = Arc::new(
+            ThingsDatabase::from_connection_string("sqlite::memory:")
+                .await
+                .expect("in-memory db"),
+        );
+        let backend = AppleScriptBackend::new(db);
+        let id = ThingsId::new_v4();
+        let err = backend
+            .merge_tags(&id, &id)
+            .await
+            .expect_err("same source/target");
+        assert!(matches!(err, ThingsError::Validation { .. }));
     }
 
     /// Validation errors fire before osascript spawn for empty / oversize bulk requests.
