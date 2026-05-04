@@ -308,7 +308,7 @@ impl MutationBackend for AppleScriptBackend {
 
         if children.len() > MAX_BULK_BATCH_SIZE {
             return Err(ThingsError::validation(format!(
-                "project {id} has {} child task(s), which exceeds maximum of {MAX_BULK_BATCH_SIZE}",
+                "Batch size {} exceeds maximum of {MAX_BULK_BATCH_SIZE}",
                 children.len(),
             )));
         }
@@ -342,7 +342,7 @@ impl MutationBackend for AppleScriptBackend {
 
         if children.len() > MAX_BULK_BATCH_SIZE {
             return Err(ThingsError::validation(format!(
-                "project {id} has {} child task(s), which exceeds maximum of {MAX_BULK_BATCH_SIZE}",
+                "Batch size {} exceeds maximum of {MAX_BULK_BATCH_SIZE}",
                 children.len(),
             )));
         }
