@@ -2447,7 +2447,7 @@ impl ThingsDatabase {
 
         sqlx::query(
             "INSERT INTO TMTag (uuid, title, shortcut, parent, usedDate, `index`) \
-             VALUES (?, ?, ?, ?, NULL, 0)"
+             VALUES (?, ?, ?, ?, NULL, 0)",
         )
         .bind(id.as_str())
         .bind(&request.title)
@@ -2478,7 +2478,7 @@ impl ThingsDatabase {
 
         sqlx::query(
             "INSERT INTO TMTag (uuid, title, shortcut, parent, usedDate, `index`) \
-             VALUES (?, ?, ?, ?, NULL, 0)"
+             VALUES (?, ?, ?, ?, NULL, 0)",
         )
         .bind(id.as_str())
         .bind(&request.title)
@@ -3740,13 +3740,17 @@ fn discover_things_database(group_container: &std::path::Path) -> Option<PathBuf
     let mut best: Option<(PathBuf, std::time::SystemTime)> = None;
     for entry in entries.flatten() {
         let name = entry.file_name();
-        let Some(name_str) = name.to_str() else { continue };
+        let Some(name_str) = name.to_str() else {
+            continue;
+        };
         if !name_str.starts_with("ThingsData-") {
             continue;
         }
 
         let candidate = entry.path().join(THINGS_DB_RELATIVE);
-        let Ok(meta) = std::fs::metadata(&candidate) else { continue };
+        let Ok(meta) = std::fs::metadata(&candidate) else {
+            continue;
+        };
         if !meta.is_file() {
             continue;
         }
@@ -4160,9 +4164,7 @@ mod tests {
         let group_container = TempDir::new().unwrap();
         std::fs::create_dir_all(group_container.path().join("SomethingElse")).unwrap();
         std::fs::create_dir_all(
-            group_container
-                .path()
-                .join("ThingsData-EMPTY"), // no main.sqlite inside
+            group_container.path().join("ThingsData-EMPTY"), // no main.sqlite inside
         )
         .unwrap();
         assert!(discover_things_database(group_container.path()).is_none());

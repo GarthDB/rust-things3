@@ -48,7 +48,6 @@ struct Args {
     json_output: bool,
 }
 
-
 #[tokio::main]
 async fn main() -> Result<()> {
     let args = Args::parse();
