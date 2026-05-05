@@ -2,7 +2,6 @@
 
 use serde_json::json;
 use things3_cli::mcp::CallToolRequest;
-use uuid::Uuid;
 
 mod mcp_tests;
 use mcp_tests::common::create_test_mcp_server;
@@ -594,7 +593,9 @@ async fn test_tag_lifecycle_integration() {
     };
     let create_response: serde_json::Value = serde_json::from_str(create_text).unwrap();
     assert_eq!(create_response["status"], "created");
-    let tag_uuid = Uuid::parse_str(create_response["uuid"].as_str().unwrap()).unwrap();
+    // Created entities now use 22-char Things-native Base62 IDs (#148), not
+    // hyphenated UUIDs — keep the returned string verbatim for downstream calls.
+    let tag_uuid = create_response["uuid"].as_str().unwrap().to_string();
 
     // 2. Update the tag
     let update_request = CallToolRequest {

@@ -1323,7 +1323,7 @@ impl ThingsDatabase {
         crate::database::validate_date_range(request.start_date, request.deadline)?;
 
         // Generate ID for new task
-        let id = ThingsId::new_v4();
+        let id = ThingsId::new_things_native();
 
         // Validate referenced entities
         if let Some(project_uuid) = &request.project_uuid {
@@ -1401,7 +1401,7 @@ impl ThingsDatabase {
         crate::database::validate_date_range(request.start_date, request.deadline)?;
 
         // Generate ID for new project
-        let id = ThingsId::new_v4();
+        let id = ThingsId::new_things_native();
 
         // Validate area if provided
         if let Some(area_uuid) = &request.area_uuid {
@@ -2008,7 +2008,7 @@ impl ThingsDatabase {
         request: crate::models::CreateAreaRequest,
     ) -> ThingsResult<ThingsId> {
         // Generate ID for new area
-        let id = ThingsId::new_v4();
+        let id = ThingsId::new_things_native();
 
         // Get current timestamp for creation/modification dates
         let now = Utc::now().timestamp() as f64;
@@ -2496,7 +2496,7 @@ impl ThingsDatabase {
         }
 
         // 5. No duplicates, safe to create
-        let id = ThingsId::new_v4();
+        let id = ThingsId::new_things_native();
         let now = Utc::now().timestamp() as f64;
 
         sqlx::query(
@@ -2530,7 +2530,7 @@ impl ThingsDatabase {
         &self,
         request: crate::models::CreateTagRequest,
     ) -> ThingsResult<ThingsId> {
-        let id = ThingsId::new_v4();
+        let id = ThingsId::new_things_native();
         let now = Utc::now().timestamp() as f64;
 
         sqlx::query(

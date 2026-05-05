@@ -223,18 +223,27 @@ impl MutationBackend for AppleScriptBackend {
     }
 
     async fn update_task(&self, request: UpdateTaskRequest) -> ThingsResult<()> {
+        request.uuid.as_things_native()?;
+        if let Some(p) = &request.project_uuid {
+            p.as_things_native()?;
+        }
+        if let Some(a) = &request.area_uuid {
+            a.as_things_native()?;
+        }
         let script = script::update_task_script(&request);
         runner::run_script(&script).await?;
         Ok(())
     }
 
     async fn complete_task(&self, id: &ThingsId) -> ThingsResult<()> {
+        id.as_things_native()?;
         let script = script::complete_task_script(id);
         runner::run_script(&script).await?;
         Ok(())
     }
 
     async fn uncomplete_task(&self, id: &ThingsId) -> ThingsResult<()> {
+        id.as_things_native()?;
         let script = script::uncomplete_task_script(id);
         runner::run_script(&script).await?;
         Ok(())
@@ -245,6 +254,7 @@ impl MutationBackend for AppleScriptBackend {
         id: &ThingsId,
         child_handling: DeleteChildHandling,
     ) -> ThingsResult<()> {
+        id.as_things_native()?;
         let children = self.list_subtask_uuids(id).await?;
 
         if !children.is_empty() {
@@ -311,6 +321,9 @@ impl MutationBackend for AppleScriptBackend {
                 request.task_uuids.len(),
             )));
         }
+        for id in &request.task_uuids {
+            id.as_things_native()?;
+        }
         let total = request.task_uuids.len();
         let script = script::bulk_delete_script(&request);
         let stdout = runner::run_script(&script).await?;
@@ -332,6 +345,15 @@ impl MutationBackend for AppleScriptBackend {
                 "bulk_move requires either project_uuid or area_uuid",
             ));
         }
+        for id in &request.task_uuids {
+            id.as_things_native()?;
+        }
+        if let Some(p) = &request.project_uuid {
+            p.as_things_native()?;
+        }
+        if let Some(a) = &request.area_uuid {
+            a.as_things_native()?;
+        }
         let total = request.task_uuids.len();
         let script = script::bulk_move_script(&request);
         let stdout = runner::run_script(&script).await?;
@@ -350,6 +372,9 @@ impl MutationBackend for AppleScriptBackend {
                 "Batch size {} exceeds maximum of {MAX_BULK_BATCH_SIZE}",
                 request.task_uuids.len(),
             )));
+        }
+        for id in &request.task_uuids {
+            id.as_things_native()?;
         }
         let total = request.task_uuids.len();
         let script = script::bulk_update_dates_script(&request);
@@ -370,6 +395,9 @@ impl MutationBackend for AppleScriptBackend {
                 request.task_uuids.len(),
             )));
         }
+        for id in &request.task_uuids {
+            id.as_things_native()?;
+        }
         let total = request.task_uuids.len();
         let script = script::bulk_complete_script(&request);
         let stdout = runner::run_script(&script).await?;
@@ -385,6 +413,10 @@ impl MutationBackend for AppleScriptBackend {
     }
 
     async fn update_project(&self, request: UpdateProjectRequest) -> ThingsResult<()> {
+        request.uuid.as_things_native()?;
+        if let Some(a) = &request.area_uuid {
+            a.as_things_native()?;
+        }
         let script = script::update_project_script(&request);
         runner::run_script(&script).await?;
         Ok(())
@@ -395,6 +427,7 @@ impl MutationBackend for AppleScriptBackend {
         id: &ThingsId,
         child_handling: ProjectChildHandling,
     ) -> ThingsResult<()> {
+        id.as_things_native()?;
         let children = self.list_project_task_uuids(id).await?;
 
         if children.is_empty() {
@@ -430,6 +463,7 @@ impl MutationBackend for AppleScriptBackend {
         id: &ThingsId,
         child_handling: ProjectChildHandling,
     ) -> ThingsResult<()> {
+        id.as_things_native()?;
         let children = self.list_project_task_uuids(id).await?;
 
         if children.is_empty() {
@@ -468,12 +502,14 @@ impl MutationBackend for AppleScriptBackend {
     }
 
     async fn update_area(&self, request: UpdateAreaRequest) -> ThingsResult<()> {
+        request.uuid.as_things_native()?;
         let script = script::update_area_script(&request);
         runner::run_script(&script).await?;
         Ok(())
     }
 
     async fn delete_area(&self, id: &ThingsId) -> ThingsResult<()> {
+        id.as_things_native()?;
         let script = script::delete_area_script(id);
         runner::run_script(&script).await?;
         Ok(())
@@ -513,6 +549,10 @@ impl MutationBackend for AppleScriptBackend {
     }
 
     async fn update_tag(&self, request: UpdateTagRequest) -> ThingsResult<()> {
+        request.uuid.as_things_native()?;
+        if let Some(p) = &request.parent_uuid {
+            p.as_things_native()?;
+        }
         if request.shortcut.is_some() || request.parent_uuid.is_some() {
             tracing::debug!(
                 tag = %request.uuid,
@@ -527,6 +567,7 @@ impl MutationBackend for AppleScriptBackend {
     }
 
     async fn delete_tag(&self, id: &ThingsId, remove_from_tasks: bool) -> ThingsResult<()> {
+        id.as_things_native()?;
         if !remove_from_tasks {
             let script = script::delete_tag_script(id);
             runner::run_script(&script).await?;
@@ -579,6 +620,9 @@ impl MutationBackend for AppleScriptBackend {
 
     async fn merge_tags(&self, source_id: &ThingsId, target_id: &ThingsId) -> ThingsResult<()> {
         use crate::database::tag_utils::normalize_tag_title;
+
+        source_id.as_things_native()?;
+        target_id.as_things_native()?;
 
         if source_id == target_id {
             return Err(ThingsError::validation(
@@ -655,6 +699,8 @@ impl MutationBackend for AppleScriptBackend {
     ) -> ThingsResult<TagAssignmentResult> {
         use crate::database::tag_utils::normalize_tag_title;
 
+        task_id.as_things_native()?;
+
         let normalized = normalize_tag_title(tag_title);
 
         let (resolved_title, resolved_uuid) =
@@ -695,6 +741,8 @@ impl MutationBackend for AppleScriptBackend {
     async fn remove_tag_from_task(&self, task_id: &ThingsId, tag_title: &str) -> ThingsResult<()> {
         use crate::database::tag_utils::normalize_tag_title;
 
+        task_id.as_things_native()?;
+
         let normalized = normalize_tag_title(tag_title);
         let current = self.read_task_tag_titles(task_id).await?;
         let original_len = current.len();
@@ -717,6 +765,8 @@ impl MutationBackend for AppleScriptBackend {
         tag_titles: Vec<String>,
     ) -> ThingsResult<Vec<TagMatch>> {
         use crate::database::tag_utils::normalize_tag_title;
+
+        task_id.as_things_native()?;
 
         // Intentionally asymmetric with add_tag_to_task: similar-tag suggestions
         // accumulate for the caller but never block the write — every title is
@@ -864,7 +914,7 @@ mod tests {
         .expect("seed tag");
         let backend = AppleScriptBackend::new(Arc::new(db));
 
-        let task_id = ThingsId::new_v4();
+        let task_id = ThingsId::new_things_native();
         let result = backend
             .add_tag_to_task(&task_id, "importnt")
             .await
@@ -888,7 +938,7 @@ mod tests {
             .await
             .expect("test db");
 
-        let task_id = ThingsId::new_v4();
+        let task_id = ThingsId::new_things_native();
         let blob =
             crate::database::serialize_tags_to_blob(&["Work".to_string(), "Personal".to_string()])
                 .expect("serialize");
@@ -934,7 +984,7 @@ mod tests {
             .await
             .expect("test db");
 
-        let task_id = ThingsId::new_v4();
+        let task_id = ThingsId::new_things_native();
         let blob =
             crate::database::serialize_tags_to_blob(&["to_do".to_string()]).expect("serialize");
         let now = 1_700_000_000.0_f64;
@@ -971,7 +1021,7 @@ mod tests {
                 .expect("in-memory db"),
         );
         let backend = AppleScriptBackend::new(db);
-        let id = ThingsId::new_v4();
+        let id = ThingsId::new_things_native();
         let err = backend
             .merge_tags(&id, &id)
             .await
@@ -997,7 +1047,7 @@ mod tests {
 
         let err = backend
             .bulk_delete(BulkDeleteRequest {
-                task_uuids: (0..1001).map(|_| ThingsId::new_v4()).collect(),
+                task_uuids: (0..1001).map(|_| ThingsId::new_things_native()).collect(),
             })
             .await
             .expect_err("oversize");
@@ -1005,13 +1055,115 @@ mod tests {
 
         let err = backend
             .bulk_move(BulkMoveRequest {
-                task_uuids: vec![ThingsId::new_v4()],
+                task_uuids: vec![ThingsId::new_things_native()],
                 project_uuid: None,
                 area_uuid: None,
             })
             .await
             .expect_err("missing destination");
         assert!(matches!(err, ThingsError::Validation { .. }));
+    }
+
+    // ============================================================================
+    // ID format guard (#148) — every mutation method that takes a `ThingsId`
+    // must reject hyphenated UUIDs *before* invoking osascript, so the user
+    // sees an actionable Validation error instead of AppleScript's opaque
+    // `-1728`. The guard fires synchronously before any `runner::run_script`
+    // call, which is what makes these tests deterministic in CI without a
+    // live Things 3 install.
+    // ============================================================================
+
+    fn hyphenated_uuid() -> ThingsId {
+        "9d3f1e44-5c2a-4b8e-9c1f-7e2d8a4b3c5e".parse().unwrap()
+    }
+
+    async fn guard_test_backend() -> AppleScriptBackend {
+        let db = Arc::new(
+            ThingsDatabase::from_connection_string("sqlite::memory:")
+                .await
+                .expect("in-memory db"),
+        );
+        AppleScriptBackend::new(db)
+    }
+
+    fn assert_native_format_validation(err: ThingsError) {
+        match &err {
+            ThingsError::Validation { .. } => {
+                assert!(
+                    err.to_string().contains("not in Things native format"),
+                    "wrong validation error: {err}"
+                );
+            }
+            other => panic!("expected Validation, got {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn complete_task_rejects_hyphenated_uuid() {
+        let backend = guard_test_backend().await;
+        let err = backend
+            .complete_task(&hyphenated_uuid())
+            .await
+            .expect_err("guard should fire");
+        assert_native_format_validation(err);
+    }
+
+    #[tokio::test]
+    async fn update_task_rejects_hyphenated_uuid_in_request() {
+        let backend = guard_test_backend().await;
+        let req = UpdateTaskRequest {
+            uuid: hyphenated_uuid(),
+            title: Some("x".into()),
+            notes: None,
+            start_date: None,
+            deadline: None,
+            status: None,
+            project_uuid: None,
+            area_uuid: None,
+            tags: None,
+        };
+        let err = backend
+            .update_task(req)
+            .await
+            .expect_err("guard should fire on request.uuid");
+        assert_native_format_validation(err);
+    }
+
+    #[tokio::test]
+    async fn update_task_rejects_hyphenated_secondary_id() {
+        // request.uuid is native, but a secondary optional ID is hyphenated —
+        // the guard must catch it too.
+        let backend = guard_test_backend().await;
+        let req = UpdateTaskRequest {
+            uuid: ThingsId::new_things_native(),
+            title: Some("x".into()),
+            notes: None,
+            start_date: None,
+            deadline: None,
+            status: None,
+            project_uuid: Some(hyphenated_uuid()),
+            area_uuid: None,
+            tags: None,
+        };
+        let err = backend
+            .update_task(req)
+            .await
+            .expect_err("guard should fire on request.project_uuid");
+        assert_native_format_validation(err);
+    }
+
+    #[tokio::test]
+    async fn bulk_delete_rejects_hyphenated_uuid_in_vec() {
+        let backend = guard_test_backend().await;
+        let req = BulkDeleteRequest {
+            // Mix of valid + invalid; guard must fail-fast on the bad one.
+            task_uuids: vec![ThingsId::new_things_native(), hyphenated_uuid()],
+        };
+        let err = backend
+            .bulk_delete(req)
+            .await
+            .expect_err("guard should fire on the bad ID");
+        assert_native_format_validation(err);
     }
 
     // Live lifecycle tests live in `libs/things3-core/tests/applescript_live.rs`
