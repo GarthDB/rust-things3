@@ -56,6 +56,36 @@ async fn create_test_schema(db: &ThingsDatabase) -> Result<(), Box<dyn std::erro
     .execute(pool)
     .await?;
 
+    // Create TMTag table
+    sqlx::query(
+        r"
+        CREATE TABLE IF NOT EXISTS TMTag (
+            uuid TEXT PRIMARY KEY,
+            title TEXT,
+            shortcut TEXT,
+            usedDate REAL,
+            parent TEXT,
+            'index' INTEGER,
+            experimental BLOB
+        )
+        ",
+    )
+    .execute(pool)
+    .await?;
+
+    // Create TMTaskTag join table
+    sqlx::query(
+        r"
+        CREATE TABLE IF NOT EXISTS TMTaskTag (
+            tasks TEXT,
+            tags  TEXT,
+            PRIMARY KEY (tasks, tags)
+        )
+        ",
+    )
+    .execute(pool)
+    .await?;
+
     // Insert test data
     // Use a safe conversion for timestamp to avoid precision loss
     let timestamp_i64 = Utc::now().timestamp();
@@ -632,6 +662,36 @@ async fn create_minimal_task_schema(pool: &sqlx::SqlitePool) {
             trashed INTEGER NOT NULL DEFAULT 0,
             cachedTags BLOB,
             todayIndex INTEGER
+        )
+        ",
+    )
+    .execute(pool)
+    .await
+    .unwrap();
+
+    sqlx::query(
+        r"
+        CREATE TABLE IF NOT EXISTS TMTag (
+            uuid TEXT PRIMARY KEY,
+            title TEXT,
+            shortcut TEXT,
+            usedDate REAL,
+            parent TEXT,
+            'index' INTEGER,
+            experimental BLOB
+        )
+        ",
+    )
+    .execute(pool)
+    .await
+    .unwrap();
+
+    sqlx::query(
+        r"
+        CREATE TABLE IF NOT EXISTS TMTaskTag (
+            tasks TEXT,
+            tags  TEXT,
+            PRIMARY KEY (tasks, tags)
         )
         ",
     )

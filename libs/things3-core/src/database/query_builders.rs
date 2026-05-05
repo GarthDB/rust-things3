@@ -58,10 +58,6 @@ impl TaskUpdateBuilder {
             builder = builder.add_field("area");
         }
 
-        if request.tags.is_some() {
-            builder = builder.add_field("cachedTags");
-        }
-
         builder
     }
 
@@ -173,7 +169,7 @@ mod tests {
         };
 
         let builder = TaskUpdateBuilder::from_request(&request);
-        assert_eq!(builder.len(), 8);
+        assert_eq!(builder.len(), 7);
 
         let query = builder.build_query_string();
         assert!(query.contains("title = ?"));
@@ -183,7 +179,7 @@ mod tests {
         assert!(query.contains("status = ?"));
         assert!(query.contains("project = ?"));
         assert!(query.contains("area = ?"));
-        assert!(query.contains("cachedTags = ?"));
+        assert!(!query.contains("cachedTags = ?"));
     }
 
     #[test]

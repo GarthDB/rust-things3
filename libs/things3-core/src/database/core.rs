@@ -849,11 +849,15 @@ impl ThingsDatabase {
         let search_pattern = format!("%{query}%");
         let rows = sqlx::query(
             r"
-            SELECT 
-                uuid, title, status, type, 
+            SELECT
+                uuid, title, status, type,
                 startDate, deadline, stopDate,
                 project, area, heading,
-                notes, cachedTags, 
+                notes,
+                (SELECT GROUP_CONCAT(tg.title, char(31))
+                   FROM TMTaskTag tt
+                   JOIN TMTag tg ON tg.uuid = tt.tags
+                  WHERE tt.tasks = TMTask.uuid) AS tags_csv,
                 creationDate, userModificationDate
             FROM TMTask
             WHERE (title LIKE ? OR notes LIKE ?) AND type IN (0, 2) AND trashed = 0
@@ -913,7 +917,11 @@ impl ThingsDatabase {
         after: Option<(i64, Uuid)>,
     ) -> ThingsResult<Vec<Task>> {
         const COLS: &str = "uuid, title, type, status, notes, startDate, deadline, stopDate, \
-                            creationDate, userModificationDate, project, area, heading, cachedTags";
+                            creationDate, userModificationDate, project, area, heading, \
+                            (SELECT GROUP_CONCAT(tg.title, char(31)) \
+                               FROM TMTaskTag tt \
+                               JOIN TMTag tg ON tg.uuid = tt.tags \
+                              WHERE tt.tasks = TMTask.uuid) AS tags_csv";
 
         // Things 3 soft-deletes by setting trashed = 1; the status column is unchanged.
         // Requesting Trashed means "show trashed rows", not a status = 3 predicate.
@@ -1104,7 +1112,7 @@ impl ThingsDatabase {
         let rows = if let Some(ref text) = search_text {
             let pattern = format!("%{text}%");
             let mut q = String::from(
-                "SELECT uuid, title, status, type, startDate, deadline, stopDate, project, area, heading, notes, cachedTags, creationDate, userModificationDate FROM TMTask WHERE status = 3 AND trashed = 0 AND type = 0",
+                "SELECT uuid, title, status, type, startDate, deadline, stopDate, project, area, heading, notes, (SELECT GROUP_CONCAT(tg.title, char(31)) FROM TMTaskTag tt JOIN TMTag tg ON tg.uuid = tt.tags WHERE tt.tasks = TMTask.uuid) AS tags_csv, creationDate, userModificationDate FROM TMTask WHERE status = 3 AND trashed = 0 AND type = 0",
             );
             q.push_str(" AND (title LIKE ? OR notes LIKE ?)");
 
@@ -1141,7 +1149,7 @@ impl ThingsDatabase {
                 .map_err(|e| ThingsError::unknown(format!("Failed to search logbook: {e}")))?
         } else {
             let mut q = String::from(
-                "SELECT uuid, title, status, type, startDate, deadline, stopDate, project, area, heading, notes, cachedTags, creationDate, userModificationDate FROM TMTask WHERE status = 3 AND trashed = 0 AND type = 0",
+                "SELECT uuid, title, status, type, startDate, deadline, stopDate, project, area, heading, notes, (SELECT GROUP_CONCAT(tg.title, char(31)) FROM TMTaskTag tt JOIN TMTag tg ON tg.uuid = tt.tags WHERE tt.tasks = TMTask.uuid) AS tags_csv, creationDate, userModificationDate FROM TMTask WHERE status = 3 AND trashed = 0 AND type = 0",
             );
 
             if let Some(date) = from_date {
@@ -1204,9 +1212,9 @@ impl ThingsDatabase {
     #[instrument(skip(self))]
     pub async fn get_inbox(&self, limit: Option<usize>) -> ThingsResult<Vec<Task>> {
         let query = if let Some(limit) = limit {
-            format!("SELECT uuid, title, type, status, notes, startDate, deadline, stopDate, creationDate, userModificationDate, project, area, heading, cachedTags FROM TMTask WHERE type IN (0, 2) AND status = 0 AND project IS NULL AND trashed = 0 ORDER BY creationDate DESC LIMIT {limit}")
+            format!("SELECT uuid, title, type, status, notes, startDate, deadline, stopDate, creationDate, userModificationDate, project, area, heading, (SELECT GROUP_CONCAT(tg.title, char(31)) FROM TMTaskTag tt JOIN TMTag tg ON tg.uuid = tt.tags WHERE tt.tasks = TMTask.uuid) AS tags_csv FROM TMTask WHERE type IN (0, 2) AND status = 0 AND project IS NULL AND trashed = 0 ORDER BY creationDate DESC LIMIT {limit}")
         } else {
-            "SELECT uuid, title, type, status, notes, startDate, deadline, stopDate, creationDate, userModificationDate, project, area, heading, cachedTags FROM TMTask WHERE type IN (0, 2) AND status = 0 AND project IS NULL AND trashed = 0 ORDER BY creationDate DESC"
+            "SELECT uuid, title, type, status, notes, startDate, deadline, stopDate, creationDate, userModificationDate, project, area, heading, (SELECT GROUP_CONCAT(tg.title, char(31)) FROM TMTaskTag tt JOIN TMTag tg ON tg.uuid = tt.tags WHERE tt.tasks = TMTask.uuid) AS tags_csv FROM TMTask WHERE type IN (0, 2) AND status = 0 AND project IS NULL AND trashed = 0 ORDER BY creationDate DESC"
                 .to_string()
         };
 
@@ -1238,10 +1246,10 @@ impl ThingsDatabase {
         // A task is in "Today" if todayIndex IS NOT NULL AND todayIndex != 0
         let query = if let Some(limit) = limit {
             format!(
-                "SELECT uuid, title, type, status, notes, startDate, deadline, stopDate, creationDate, userModificationDate, project, area, heading, cachedTags FROM TMTask WHERE status = 0 AND todayIndex IS NOT NULL AND todayIndex != 0 AND trashed = 0 ORDER BY todayIndex ASC LIMIT {limit}"
+                "SELECT uuid, title, type, status, notes, startDate, deadline, stopDate, creationDate, userModificationDate, project, area, heading, (SELECT GROUP_CONCAT(tg.title, char(31)) FROM TMTaskTag tt JOIN TMTag tg ON tg.uuid = tt.tags WHERE tt.tasks = TMTask.uuid) AS tags_csv FROM TMTask WHERE status = 0 AND todayIndex IS NOT NULL AND todayIndex != 0 AND trashed = 0 ORDER BY todayIndex ASC LIMIT {limit}"
             )
         } else {
-            "SELECT uuid, title, type, status, notes, startDate, deadline, stopDate, creationDate, userModificationDate, project, area, heading, cachedTags FROM TMTask WHERE status = 0 AND todayIndex IS NOT NULL AND todayIndex != 0 AND trashed = 0 ORDER BY todayIndex ASC".to_string()
+            "SELECT uuid, title, type, status, notes, startDate, deadline, stopDate, creationDate, userModificationDate, project, area, heading, (SELECT GROUP_CONCAT(tg.title, char(31)) FROM TMTaskTag tt JOIN TMTag tg ON tg.uuid = tt.tags WHERE tt.tasks = TMTask.uuid) AS tags_csv FROM TMTask WHERE status = 0 AND todayIndex IS NOT NULL AND todayIndex != 0 AND trashed = 0 ORDER BY todayIndex ASC".to_string()
         };
 
         let rows = sqlx::query(&query)
@@ -1349,22 +1357,15 @@ impl ThingsDatabase {
         // Get current timestamp for creation/modification dates
         let now = Utc::now().timestamp() as f64;
 
-        // Serialize tags to binary format (if provided)
-        let cached_tags = request
-            .tags
-            .as_ref()
-            .map(|tags| serialize_tags_to_blob(tags))
-            .transpose()?;
-
         // Insert into TMTask table
         sqlx::query(
             r"
             INSERT INTO TMTask (
                 uuid, title, type, status, notes,
                 startDate, deadline, project, area, heading,
-                cachedTags, creationDate, userModificationDate,
+                creationDate, userModificationDate,
                 trashed
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ",
         )
         .bind(id.as_str())
@@ -1377,13 +1378,17 @@ impl ThingsDatabase {
         .bind(request.project_uuid.map(|u| u.into_string()))
         .bind(request.area_uuid.map(|u| u.into_string()))
         .bind(request.parent_uuid.map(|u| u.into_string()))
-        .bind(cached_tags)
         .bind(now)
         .bind(now)
         .bind(0) // not trashed
         .execute(&self.pool)
         .await
         .map_err(|e| ThingsError::unknown(format!("Failed to create task: {e}")))?;
+
+        // Handle tags via TMTaskTag
+        if let Some(tags) = request.tags {
+            self.set_task_tags(&id, tags).await?;
+        }
 
         info!("Created task with UUID: {}", id);
         Ok(id)
@@ -1419,22 +1424,15 @@ impl ThingsDatabase {
         // Get current timestamp for creation/modification dates
         let now = Utc::now().timestamp() as f64;
 
-        // Serialize tags to binary format (if provided)
-        let cached_tags = request
-            .tags
-            .as_ref()
-            .map(|tags| serialize_tags_to_blob(tags))
-            .transpose()?;
-
         // Insert into TMTask table with type = 1 (project)
         sqlx::query(
             r"
             INSERT INTO TMTask (
                 uuid, title, type, status, notes,
                 startDate, deadline, project, area, heading,
-                cachedTags, creationDate, userModificationDate,
+                creationDate, userModificationDate,
                 trashed
-            ) VALUES (?, ?, 1, 0, ?, ?, ?, NULL, ?, NULL, ?, ?, ?, 0)
+            ) VALUES (?, ?, 1, 0, ?, ?, ?, NULL, ?, NULL, ?, ?, 0)
             ",
         )
         .bind(id.as_str())
@@ -1443,12 +1441,16 @@ impl ThingsDatabase {
         .bind(start_date_ts)
         .bind(deadline_ts)
         .bind(request.area_uuid.map(|u| u.into_string()))
-        .bind(cached_tags)
         .bind(now)
         .bind(now)
         .execute(&self.pool)
         .await
         .map_err(|e| ThingsError::unknown(format!("Failed to create project: {e}")))?;
+
+        // Handle tags via TMTaskTag
+        if let Some(tags) = request.tags {
+            self.set_task_tags(&id, tags).await?;
+        }
 
         info!("Created project with UUID: {}", id);
         Ok(id)
@@ -1526,11 +1528,6 @@ impl ThingsDatabase {
             q = q.bind(area_uuid.into_string());
         }
 
-        if let Some(tags) = &request.tags {
-            let cached_tags = serialize_tags_to_blob(tags)?;
-            q = q.bind(cached_tags);
-        }
-
         // Bind modification date and UUID (always added by builder)
         let now = Utc::now().timestamp() as f64;
         q = q.bind(now).bind(request.uuid.as_str());
@@ -1538,6 +1535,11 @@ impl ThingsDatabase {
         q.execute(&self.pool)
             .await
             .map_err(|e| ThingsError::unknown(format!("Failed to update task: {e}")))?;
+
+        // Handle tags via TMTaskTag (separate from the UPDATE query)
+        if let Some(tags) = request.tags {
+            self.set_task_tags(&request.uuid, tags).await?;
+        }
 
         info!("Updated task with UUID: {}", request.uuid);
         Ok(())
@@ -1630,47 +1632,48 @@ impl ThingsDatabase {
         if request.area_uuid.is_some() {
             builder = builder.add_field("area");
         }
-        if request.tags.is_some() {
-            builder = builder.add_field("cachedTags");
-        }
 
-        // If nothing to update, return early
-        if builder.is_empty() {
+        // If nothing to update (tags-only changes still need to proceed for TMTaskTag)
+        let has_db_fields = !builder.is_empty();
+
+        if has_db_fields {
+            // Build query string
+            let query_str = builder.build_query_string();
+            let mut q = sqlx::query(&query_str);
+
+            // Bind values in the same order they were added to the builder
+            if let Some(ref title) = request.title {
+                q = q.bind(title);
+            }
+            if let Some(ref notes) = request.notes {
+                q = q.bind(notes);
+            }
+            if let Some(start_date) = request.start_date {
+                q = q.bind(naive_date_to_things_timestamp(start_date));
+            }
+            if let Some(deadline) = request.deadline {
+                q = q.bind(naive_date_to_things_timestamp(deadline));
+            }
+            if let Some(area_uuid) = request.area_uuid {
+                q = q.bind(area_uuid.into_string());
+            }
+
+            // Bind modification date and UUID (always added by builder)
+            let now = Utc::now().timestamp() as f64;
+            q = q.bind(now).bind(request.uuid.as_str());
+
+            q.execute(&self.pool)
+                .await
+                .map_err(|e| ThingsError::unknown(format!("Failed to update project: {e}")))?;
+        } else if request.tags.is_none() {
+            // Nothing to update at all
             return Ok(());
         }
 
-        // Build query string
-        let query_str = builder.build_query_string();
-        let mut q = sqlx::query(&query_str);
-
-        // Bind values in the same order they were added to the builder
-        if let Some(ref title) = request.title {
-            q = q.bind(title);
+        // Handle tags via TMTaskTag (separate from the UPDATE query)
+        if let Some(tags) = request.tags {
+            self.set_task_tags(&request.uuid, tags).await?;
         }
-        if let Some(ref notes) = request.notes {
-            q = q.bind(notes);
-        }
-        if let Some(start_date) = request.start_date {
-            q = q.bind(naive_date_to_things_timestamp(start_date));
-        }
-        if let Some(deadline) = request.deadline {
-            q = q.bind(naive_date_to_things_timestamp(deadline));
-        }
-        if let Some(area_uuid) = request.area_uuid {
-            q = q.bind(area_uuid.into_string());
-        }
-        if let Some(tags) = &request.tags {
-            let cached_tags = serialize_tags_to_blob(tags)?;
-            q = q.bind(cached_tags);
-        }
-
-        // Bind modification date and UUID (always added by builder)
-        let now = Utc::now().timestamp() as f64;
-        q = q.bind(now).bind(request.uuid.as_str());
-
-        q.execute(&self.pool)
-            .await
-            .map_err(|e| ThingsError::unknown(format!("Failed to update project: {e}")))?;
 
         info!("Updated project with UUID: {}", request.uuid);
         Ok(())
@@ -1689,7 +1692,10 @@ impl ThingsDatabase {
                 uuid, title, status, type,
                 startDate, deadline, stopDate,
                 project, area, heading,
-                notes, cachedTags,
+                notes, (SELECT GROUP_CONCAT(tg.title, char(31))
+                          FROM TMTaskTag tt
+                          JOIN TMTag tg ON tg.uuid = tt.tags
+                         WHERE tt.tasks = TMTask.uuid) AS tags_csv,
                 creationDate, userModificationDate,
                 trashed
             FROM TMTask
@@ -2144,14 +2150,16 @@ impl ThingsDatabase {
                 DateTime::from_timestamp(ts_i64, 0)
             });
 
-            // Count usage by querying tasks with this tag
+            // Count usage by querying the TMTaskTag join table
             let usage_count: i64 = sqlx::query_scalar(
                 "SELECT COUNT(*) FROM TMTask
-                 WHERE cachedTags IS NOT NULL
-                 AND json_extract(cachedTags, '$') LIKE ?
-                 AND trashed = 0",
+                 WHERE trashed = 0
+                 AND EXISTS (
+                     SELECT 1 FROM TMTaskTag tt
+                     WHERE tt.tasks = TMTask.uuid AND tt.tags = ?
+                 )",
             )
-            .bind(format!("%\"{}\"%", title))
+            .bind(uuid_str.as_str())
             .fetch_one(&self.pool)
             .await
             .unwrap_or(0);
@@ -2247,14 +2255,16 @@ impl ThingsDatabase {
                 DateTime::from_timestamp(ts_i64, 0)
             });
 
-            // Count usage
+            // Count usage via TMTaskTag join table
             let usage_count: i64 = sqlx::query_scalar(
                 "SELECT COUNT(*) FROM TMTask
-                 WHERE cachedTags IS NOT NULL
-                 AND json_extract(cachedTags, '$') LIKE ?
-                 AND trashed = 0",
+                 WHERE trashed = 0
+                 AND EXISTS (
+                     SELECT 1 FROM TMTaskTag tt
+                     WHERE tt.tasks = TMTask.uuid AND tt.tags = ?
+                 )",
             )
-            .bind(format!("%\"{}\"%", title))
+            .bind(uuid_str.as_str())
             .fetch_one(&self.pool)
             .await
             .unwrap_or(0);
@@ -2302,14 +2312,16 @@ impl ThingsDatabase {
                 DateTime::from_timestamp(ts_i64, 0)
             });
 
-            // Count usage
+            // Count usage via TMTaskTag join table
             let usage_count: i64 = sqlx::query_scalar(
                 "SELECT COUNT(*) FROM TMTask
-                 WHERE cachedTags IS NOT NULL
-                 AND json_extract(cachedTags, '$') LIKE ?
-                 AND trashed = 0",
+                 WHERE trashed = 0
+                 AND EXISTS (
+                     SELECT 1 FROM TMTaskTag tt
+                     WHERE tt.tasks = TMTask.uuid AND tt.tags = ?
+                 )",
             )
-            .bind(format!("%\"{}\"%", title))
+            .bind(uuid_str.as_str())
             .fetch_one(&self.pool)
             .await
             .unwrap_or(0);
@@ -2378,14 +2390,16 @@ impl ThingsDatabase {
                 DateTime::from_timestamp(ts_i64, 0)
             });
 
-            // Count usage
+            // Count usage via TMTaskTag join table
             let usage_count: i64 = sqlx::query_scalar(
                 "SELECT COUNT(*) FROM TMTask
-                 WHERE cachedTags IS NOT NULL
-                 AND json_extract(cachedTags, '$') LIKE ?
-                 AND trashed = 0",
+                 WHERE trashed = 0
+                 AND EXISTS (
+                     SELECT 1 FROM TMTaskTag tt
+                     WHERE tt.tasks = TMTask.uuid AND tt.tags = ?
+                 )",
             )
-            .bind(format!("%\"{}\"%", title))
+            .bind(uuid_str.as_str())
             .fetch_one(&self.pool)
             .await
             .unwrap_or(0);
@@ -2738,48 +2752,32 @@ impl ThingsDatabase {
                 .ok_or_else(|| ThingsError::unknown("Failed to retrieve newly created tag"))?
         };
 
-        // 6. Get current tags from task
-        let row = sqlx::query("SELECT cachedTags FROM TMTask WHERE uuid = ?")
+        // 6. Insert into TMTaskTag (idempotent)
+        let now = Utc::now().timestamp() as f64;
+        sqlx::query("INSERT OR IGNORE INTO TMTaskTag (tasks, tags) VALUES (?, ?)")
             .bind(task_id.as_str())
-            .fetch_one(&self.pool)
+            .bind(tag.uuid.as_str())
+            .execute(&self.pool)
             .await
-            .map_err(|e| ThingsError::unknown(format!("Failed to fetch task tags: {e}")))?;
+            .map_err(|e| ThingsError::unknown(format!("Failed to assign tag: {e}")))?;
 
-        let cached_tags_blob: Option<Vec<u8>> = row.get("cachedTags");
-        let mut tags: Vec<String> = if let Some(blob) = cached_tags_blob {
-            deserialize_tags_from_blob(&blob)?
-        } else {
-            Vec::new()
-        };
-
-        // 7. Add tag if not already present
-        if !tags.contains(&tag.title) {
-            tags.push(tag.title.clone());
-
-            // 8. Serialize and update
-            let cached_tags = serialize_tags_to_blob(&tags)?;
-            let now = Utc::now().timestamp() as f64;
-
-            sqlx::query(
-                "UPDATE TMTask SET cachedTags = ?, userModificationDate = ? WHERE uuid = ?",
-            )
-            .bind(cached_tags)
+        // 7. Update task modification date
+        sqlx::query("UPDATE TMTask SET userModificationDate = ? WHERE uuid = ?")
             .bind(now)
             .bind(task_id.as_str())
             .execute(&self.pool)
             .await
-            .map_err(|e| ThingsError::unknown(format!("Failed to update task tags: {e}")))?;
+            .map_err(|e| ThingsError::unknown(format!("Failed to update modification date: {e}")))?;
 
-            // 9. Update tag's usedDate
-            sqlx::query("UPDATE TMTag SET usedDate = ? WHERE uuid = ?")
-                .bind(now)
-                .bind(tag.uuid.as_str())
-                .execute(&self.pool)
-                .await
-                .map_err(|e| ThingsError::unknown(format!("Failed to update tag usedDate: {e}")))?;
+        // 8. Update tag's usedDate
+        sqlx::query("UPDATE TMTag SET usedDate = ? WHERE uuid = ?")
+            .bind(now)
+            .bind(tag.uuid.as_str())
+            .execute(&self.pool)
+            .await
+            .map_err(|e| ThingsError::unknown(format!("Failed to update tag usedDate: {e}")))?;
 
-            info!("Added tag '{}' to task {}", tag.title, task_id);
-        }
+        info!("Added tag '{}' to task {}", tag.title, task_id);
 
         Ok(TagAssignmentResult::Assigned { tag_uuid: tag.uuid })
     }
@@ -2800,56 +2798,29 @@ impl ThingsDatabase {
         // 1. Verify task exists
         validators::validate_task_exists(&self.pool, task_id).await?;
 
-        // 2. Get current tags from task
-        let row = sqlx::query("SELECT cachedTags FROM TMTask WHERE uuid = ?")
-            .bind(task_id.as_str())
-            .fetch_one(&self.pool)
-            .await
-            .map_err(|e| ThingsError::unknown(format!("Failed to fetch task tags: {e}")))?;
-
-        let cached_tags_blob: Option<Vec<u8>> = row.get("cachedTags");
-        let mut tags: Vec<String> = if let Some(blob) = cached_tags_blob {
-            deserialize_tags_from_blob(&blob)?
-        } else {
-            return Ok(()); // No tags to remove
+        // 2. Find the tag UUID
+        let normalized = normalize_tag_title(tag_title);
+        let Some(tag) = self.find_tag_by_normalized_title(&normalized).await? else {
+            return Ok(()); // Tag doesn't exist, nothing to remove
         };
 
-        // 3. Normalize and find the tag to remove (case-insensitive)
-        let normalized = normalize_tag_title(tag_title);
-        let original_len = tags.len();
-        tags.retain(|t| normalize_tag_title(t) != normalized);
+        // 3. Delete from TMTaskTag
+        let now = Utc::now().timestamp() as f64;
+        let result = sqlx::query("DELETE FROM TMTaskTag WHERE tasks = ? AND tags = ?")
+            .bind(task_id.as_str())
+            .bind(tag.uuid.as_str())
+            .execute(&self.pool)
+            .await
+            .map_err(|e| ThingsError::unknown(format!("Failed to remove tag assignment: {e}")))?;
 
-        // 4. If tags were actually removed, update the task
-        if tags.len() < original_len {
-            let cached_tags = if tags.is_empty() {
-                None
-            } else {
-                Some(serialize_tags_to_blob(&tags)?)
-            };
-
-            let now = Utc::now().timestamp() as f64;
-
-            if let Some(cached_tags_val) = cached_tags {
-                sqlx::query(
-                    "UPDATE TMTask SET cachedTags = ?, userModificationDate = ? WHERE uuid = ?",
-                )
-                .bind(cached_tags_val)
+        if result.rows_affected() > 0 {
+            // 4. Update task modification date
+            sqlx::query("UPDATE TMTask SET userModificationDate = ? WHERE uuid = ?")
                 .bind(now)
                 .bind(task_id.as_str())
                 .execute(&self.pool)
                 .await
-                .map_err(|e| ThingsError::unknown(format!("Failed to update task tags: {e}")))?;
-            } else {
-                // Set cachedTags to NULL if no tags remain
-                sqlx::query(
-                    "UPDATE TMTask SET cachedTags = NULL, userModificationDate = ? WHERE uuid = ?",
-                )
-                .bind(now)
-                .bind(task_id.as_str())
-                .execute(&self.pool)
-                .await
-                .map_err(|e| ThingsError::unknown(format!("Failed to update task tags: {e}")))?;
-            }
+                .map_err(|e| ThingsError::unknown(format!("Failed to update modification date: {e}")))?;
 
             info!("Removed tag '{}' from task {}", tag_title, task_id);
         }
@@ -2915,37 +2886,36 @@ impl ThingsDatabase {
             }
         }
 
-        // 4. Update task's cachedTags
-        let cached_tags = if resolved_tags.is_empty() {
-            None
-        } else {
-            Some(serialize_tags_to_blob(&resolved_tags)?)
-        };
-
+        // 4. Delete existing tag assignments for this task
         let now = Utc::now().timestamp() as f64;
+        sqlx::query("DELETE FROM TMTaskTag WHERE tasks = ?")
+            .bind(task_id.as_str())
+            .execute(&self.pool)
+            .await
+            .map_err(|e| ThingsError::unknown(format!("Failed to clear task tags: {e}")))?;
 
-        if let Some(cached_tags_val) = cached_tags {
-            sqlx::query(
-                "UPDATE TMTask SET cachedTags = ?, userModificationDate = ? WHERE uuid = ?",
-            )
-            .bind(cached_tags_val)
-            .bind(now)
-            .bind(task_id.as_str())
-            .execute(&self.pool)
-            .await
-            .map_err(|e| ThingsError::unknown(format!("Failed to update task tags: {e}")))?;
-        } else {
-            sqlx::query(
-                "UPDATE TMTask SET cachedTags = NULL, userModificationDate = ? WHERE uuid = ?",
-            )
-            .bind(now)
-            .bind(task_id.as_str())
-            .execute(&self.pool)
-            .await
-            .map_err(|e| ThingsError::unknown(format!("Failed to update task tags: {e}")))?;
+        // 5. Insert new tag assignments
+        for title in &resolved_tags {
+            let normalized = normalize_tag_title(title);
+            if let Some(tag) = self.find_tag_by_normalized_title(&normalized).await? {
+                sqlx::query("INSERT OR IGNORE INTO TMTaskTag (tasks, tags) VALUES (?, ?)")
+                    .bind(task_id.as_str())
+                    .bind(tag.uuid.as_str())
+                    .execute(&self.pool)
+                    .await
+                    .map_err(|e| ThingsError::unknown(format!("Failed to assign tag: {e}")))?;
+            }
         }
 
-        // 5. Update usedDate for all tags
+        // Update task modification date
+        sqlx::query("UPDATE TMTask SET userModificationDate = ? WHERE uuid = ?")
+            .bind(now)
+            .bind(task_id.as_str())
+            .execute(&self.pool)
+            .await
+            .map_err(|e| ThingsError::unknown(format!("Failed to update modification date: {e}")))?;
+
+        // 6. Update usedDate for all tags
         for title in &resolved_tags {
             let normalized = normalize_tag_title(title);
             if let Some(tag) = self.find_tag_by_normalized_title(&normalized).await? {
@@ -3050,31 +3020,21 @@ impl ThingsDatabase {
             .ok_or_else(|| ThingsError::unknown(format!("Tag not found: {}", id)))?
             .get("title");
 
-        // Get all tasks using this tag
-        // Note: We query cachedTags BLOB which should contain JSON, but handle gracefully if malformed
+        // Get all tasks using this tag via TMTaskTag join table
         let task_rows = sqlx::query(
-            "SELECT uuid, cachedTags FROM TMTask 
-             WHERE cachedTags IS NOT NULL 
-             AND trashed = 0",
+            "SELECT tt.tasks AS uuid FROM TMTaskTag tt
+             JOIN TMTask t ON t.uuid = tt.tasks
+             WHERE tt.tags = ? AND t.trashed = 0",
         )
+        .bind(id.as_str())
         .fetch_all(&self.pool)
         .await
         .map_err(|e| ThingsError::unknown(format!("Failed to query tasks with tag: {e}")))?;
 
-        let mut task_uuids = Vec::new();
-        for row in task_rows {
-            let uuid_str: String = row.get("uuid");
-            let cached_tags_blob: Option<Vec<u8>> = row.get("cachedTags");
-
-            // Check if this task actually has the tag
-            if let Some(blob) = cached_tags_blob {
-                if let Ok(tags) = deserialize_tags_from_blob(&blob) {
-                    if tags.iter().any(|t| t.eq_ignore_ascii_case(&title)) {
-                        task_uuids.push(ThingsId::from_trusted(uuid_str));
-                    }
-                }
-            }
-        }
+        let task_uuids: Vec<ThingsId> = task_rows
+            .iter()
+            .map(|row| ThingsId::from_trusted(row.get::<String, _>("uuid")))
+            .collect();
 
         let usage_count = task_uuids.len() as u32;
 
@@ -3083,21 +3043,20 @@ impl ThingsDatabase {
             std::collections::HashMap::new();
 
         for task_uuid in &task_uuids {
-            let row = sqlx::query("SELECT cachedTags FROM TMTask WHERE uuid = ?")
-                .bind(task_uuid.as_str())
-                .fetch_optional(&self.pool)
-                .await
-                .map_err(|e| ThingsError::unknown(format!("Failed to fetch task tags: {e}")))?;
+            let rows = sqlx::query(
+                "SELECT DISTINCT tg.title FROM TMTaskTag tt
+                 JOIN TMTag tg ON tg.uuid = tt.tags
+                 WHERE tt.tasks = ?",
+            )
+            .bind(task_uuid.as_str())
+            .fetch_all(&self.pool)
+            .await
+            .map_err(|e| ThingsError::unknown(format!("Failed to fetch task tags: {e}")))?;
 
-            if let Some(row) = row {
-                let cached_tags_blob: Option<Vec<u8>> = row.get("cachedTags");
-                if let Some(blob) = cached_tags_blob {
-                    let tags: Vec<String> = deserialize_tags_from_blob(&blob)?;
-                    for tag in tags {
-                        if tag != title {
-                            *related_tags.entry(tag).or_insert(0) += 1;
-                        }
-                    }
+            for row in rows {
+                let tag_title: String = row.get("title");
+                if tag_title != title {
+                    *related_tags.entry(tag_title).or_insert(0) += 1;
                 }
             }
         }
@@ -4606,21 +4565,58 @@ mod tests {
             tags: &[&str],
         ) -> ThingsId {
             let raw_uuid = uuid::Uuid::new_v4();
-            let owned: Vec<String> = tags.iter().map(|s| (*s).to_string()).collect();
-            let blob = serialize_tags_to_blob(&owned).unwrap();
             sqlx::query(
                 "INSERT INTO TMTask \
-                 (uuid, title, notes, type, status, trashed, creationDate, userModificationDate, cachedTags) \
-                 VALUES (?, ?, ?, 0, 0, 0, 0, 0, ?)",
+                 (uuid, title, notes, type, status, trashed, creationDate, userModificationDate) \
+                 VALUES (?, ?, ?, 0, 0, 0, 0, 0)",
             )
             .bind(raw_uuid.to_string())
             .bind(title)
             .bind(notes)
-            .bind(blob)
             .execute(&db.pool)
             .await
             .unwrap();
-            ThingsId::from_trusted(raw_uuid.to_string())
+            let task_id = ThingsId::from_trusted(raw_uuid.to_string());
+
+            // Insert tags via TMTaskTag
+            for tag_title in tags {
+                // Find or create the tag
+                let normalized =
+                    crate::database::tag_utils::normalize_tag_title(tag_title);
+                let tag = if let Some(existing) =
+                    db.find_tag_by_normalized_title(&normalized).await.unwrap()
+                {
+                    existing
+                } else {
+                    let request = crate::models::CreateTagRequest {
+                        title: (*tag_title).to_string(),
+                        shortcut: None,
+                        parent_uuid: None,
+                    };
+                    let uuid = db.create_tag_force(request).await.unwrap();
+                    db.find_tag_by_normalized_title(&normalized)
+                        .await
+                        .unwrap()
+                        .unwrap_or_else(|| crate::models::Tag {
+                            uuid,
+                            title: (*tag_title).to_string(),
+                            shortcut: None,
+                            parent_uuid: None,
+                            usage_count: 0,
+                            last_used: None,
+                        })
+                };
+                sqlx::query(
+                    "INSERT OR IGNORE INTO TMTaskTag (tasks, tags) VALUES (?, ?)",
+                )
+                .bind(task_id.as_str())
+                .bind(tag.uuid.as_str())
+                .execute(&db.pool)
+                .await
+                .unwrap();
+            }
+
+            task_id
         }
 
         async fn insert_task_with_tags(
@@ -4862,7 +4858,6 @@ mod tests {
             status: TaskStatus,
         ) -> ThingsId {
             let raw_uuid = uuid::Uuid::new_v4();
-            let blob = serialize_tags_to_blob(&Vec::<String>::new()).unwrap();
             let status_n: i64 = match status {
                 TaskStatus::Incomplete => 0,
                 TaskStatus::Canceled => 2,
@@ -4871,13 +4866,12 @@ mod tests {
             };
             sqlx::query(
                 "INSERT INTO TMTask \
-                 (uuid, title, notes, type, status, trashed, creationDate, userModificationDate, cachedTags) \
-                 VALUES (?, ?, NULL, 0, ?, 0, 0, 0, ?)",
+                 (uuid, title, notes, type, status, trashed, creationDate, userModificationDate) \
+                 VALUES (?, ?, NULL, 0, ?, 0, 0, 0)",
             )
             .bind(raw_uuid.to_string())
             .bind(title)
             .bind(status_n)
-            .bind(blob)
             .execute(&db.pool)
             .await
             .unwrap();
@@ -4890,7 +4884,6 @@ mod tests {
             task_type: crate::models::TaskType,
         ) -> ThingsId {
             let raw_uuid = uuid::Uuid::new_v4();
-            let blob = serialize_tags_to_blob(&Vec::<String>::new()).unwrap();
             let type_n: i64 = match task_type {
                 crate::models::TaskType::Todo => 0,
                 crate::models::TaskType::Project => 1,
@@ -4899,13 +4892,12 @@ mod tests {
             };
             sqlx::query(
                 "INSERT INTO TMTask \
-                 (uuid, title, notes, type, status, trashed, creationDate, userModificationDate, cachedTags) \
-                 VALUES (?, ?, NULL, ?, 0, 0, 0, 0, ?)",
+                 (uuid, title, notes, type, status, trashed, creationDate, userModificationDate) \
+                 VALUES (?, ?, NULL, ?, 0, 0, 0, 0)",
             )
             .bind(raw_uuid.to_string())
             .bind(title)
             .bind(type_n)
-            .bind(blob)
             .execute(&db.pool)
             .await
             .unwrap();

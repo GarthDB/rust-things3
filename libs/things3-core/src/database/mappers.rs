@@ -85,12 +85,14 @@ pub fn map_task_row(row: &SqliteRow) -> ThingsResult<Task> {
     let area_uuid = optional_id_from_row(row.get::<Option<String>, _>("area"));
     let parent_uuid = optional_id_from_row(row.get::<Option<String>, _>("heading"));
 
-    // Try to get cachedTags as binary data and parse it
+    // Read tags from the tags_csv column (GROUP_CONCAT of TMTaskTag join)
     let tags = row
-        .get::<Option<Vec<u8>>, _>("cachedTags")
-        .and_then(|blob| {
-            // Parse the JSON blob into a Vec<String>
-            crate::database::deserialize_tags_from_blob(&blob).ok()
+        .get::<Option<String>, _>("tags_csv")
+        .map(|s| {
+            s.split('\x1f')
+                .filter(|t| !t.is_empty())
+                .map(str::to_owned)
+                .collect()
         })
         .unwrap_or_default();
 
