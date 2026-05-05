@@ -41,8 +41,15 @@ fn live_tests_enabled() -> bool {
 /// Connect to the user's real Things 3 SQLite database and wrap it in an
 /// `AppleScriptBackend`. Read-only DB access is CulturedCode-safe; the
 /// mutations route through osascript.
+///
+/// Honors `THINGS_DB_PATH` / `THINGS_DATABASE_PATH` so installs whose
+/// `ThingsData-*` group container suffix differs from the project default
+/// can still run this suite.
 async fn live_backend() -> Arc<AppleScriptBackend> {
-    let db_path = things3_core::get_default_database_path();
+    let db_path = std::env::var("THINGS_DB_PATH")
+        .or_else(|_| std::env::var("THINGS_DATABASE_PATH"))
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|_| things3_core::get_default_database_path());
     let db = Arc::new(
         ThingsDatabase::new(&db_path)
             .await

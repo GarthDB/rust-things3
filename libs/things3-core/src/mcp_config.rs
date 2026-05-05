@@ -694,13 +694,13 @@ impl McpServerConfig {
         )))
     }
 
-    /// Get the default Things 3 database path
+    /// Get the default Things 3 database path.
+    ///
+    /// Delegates to [`crate::database::get_default_database_path`], which
+    /// auto-discovers the per-install `ThingsData-XXXXX` suffix.
     #[must_use]
     pub fn get_default_database_path() -> PathBuf {
-        let home = std::env::var("HOME").unwrap_or_else(|_| "~".to_string());
-        PathBuf::from(format!(
-            "{home}/Library/Group Containers/JLMPQHK86H.com.culturedcode.ThingsMac/ThingsData-0Z0Z2/Things Database.thingsdatabase/main.sqlite"
-        ))
+        crate::database::get_default_database_path()
     }
 }
 

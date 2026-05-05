@@ -151,11 +151,8 @@ fn things_backup() {
 }
 
 fn things_db_location() {
-    let home = std::env::var("HOME").unwrap_or_else(|_| "~".to_string());
-    let db_path = format!(
-        "{home}/Library/Group Containers/JLMPQHK86H.com.culturedcode.ThingsMac/ThingsData-0Z0Z2/Things Database.thingsdatabase/main.sqlite"
-    );
-    println!("📁 Things database location: {db_path}");
+    let db_path = things3_core::get_default_database_path();
+    println!("📁 Things database location: {}", db_path.display());
 }
 
 fn analyze() {

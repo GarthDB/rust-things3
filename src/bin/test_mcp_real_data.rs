@@ -42,7 +42,6 @@ struct Args {
     dry_run: bool,
 }
 
-const DEFAULT_THINGS_DB_PATH: &str = "/Users/garthdb/Library/Group Containers/JLMPQHK86H.com.culturedcode.ThingsMac/ThingsData-0Z0Z2/Things Database.thingsdatabase/main.sqlite";
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -60,7 +59,7 @@ async fn main() -> Result<()> {
     // Determine database path
     let db_path = args
         .database_path
-        .unwrap_or_else(|| PathBuf::from(DEFAULT_THINGS_DB_PATH));
+        .unwrap_or_else(things3_core::get_default_database_path);
 
     if !db_path.exists() {
         error!("Database not found at: {}", db_path.display());

@@ -84,6 +84,9 @@ pub fn serialize_tags_to_blob(tags: &[String]) -> ThingsResult<Vec<u8>> {
 
 /// Deserialize tags from Things 3 binary format
 pub fn deserialize_tags_from_blob(blob: &[u8]) -> ThingsResult<Vec<String>> {
+    if blob.is_empty() {
+        return Ok(Vec::new());
+    }
     serde_json::from_slice(blob)
         .map_err(|e| ThingsError::unknown(format!("Failed to deserialize tags: {e}")))
 }
@@ -2118,8 +2121,8 @@ impl ThingsDatabase {
         normalized: &str,
     ) -> ThingsResult<Option<crate::models::Tag>> {
         let row = sqlx::query(
-            "SELECT uuid, title, shortcut, parent, creationDate, userModificationDate, usedDate 
-             FROM TMTag 
+            "SELECT uuid, title, shortcut, parent, usedDate
+             FROM TMTag
              WHERE LOWER(title) = LOWER(?)",
         )
         .bind(normalized)
@@ -2133,18 +2136,6 @@ impl ThingsDatabase {
             let shortcut: Option<String> = row.get("shortcut");
             let parent_str: Option<String> = row.get("parent");
             let parent_uuid = parent_str.map(ThingsId::from_trusted);
-
-            let creation_ts: f64 = row.get("creationDate");
-            let created = {
-                let ts = safe_timestamp_convert(creation_ts);
-                DateTime::from_timestamp(ts, 0).unwrap_or_else(Utc::now)
-            };
-
-            let modification_ts: f64 = row.get("userModificationDate");
-            let modified = {
-                let ts = safe_timestamp_convert(modification_ts);
-                DateTime::from_timestamp(ts, 0).unwrap_or_else(Utc::now)
-            };
 
             let used_ts: Option<f64> = row.get("usedDate");
             let last_used = used_ts.and_then(|ts| {
@@ -2169,8 +2160,6 @@ impl ThingsDatabase {
                 title,
                 shortcut,
                 parent_uuid,
-                created,
-                modified,
                 usage_count: usage_count as u32,
                 last_used,
             }))
@@ -2233,9 +2222,9 @@ impl ThingsDatabase {
     #[instrument(skip(self))]
     pub async fn search_tags(&self, query: &str) -> ThingsResult<Vec<crate::models::Tag>> {
         let rows = sqlx::query(
-            "SELECT uuid, title, shortcut, parent, creationDate, userModificationDate, usedDate 
-             FROM TMTag 
-             WHERE title LIKE ? 
+            "SELECT uuid, title, shortcut, parent, usedDate
+             FROM TMTag
+             WHERE title LIKE ?
              ORDER BY title",
         )
         .bind(format!("%{}%", query))
@@ -2250,18 +2239,6 @@ impl ThingsDatabase {
             let shortcut: Option<String> = row.get("shortcut");
             let parent_str: Option<String> = row.get("parent");
             let parent_uuid = parent_str.map(ThingsId::from_trusted);
-
-            let creation_ts: f64 = row.get("creationDate");
-            let created = {
-                let ts = safe_timestamp_convert(creation_ts);
-                DateTime::from_timestamp(ts, 0).unwrap_or_else(Utc::now)
-            };
-
-            let modification_ts: f64 = row.get("userModificationDate");
-            let modified = {
-                let ts = safe_timestamp_convert(modification_ts);
-                DateTime::from_timestamp(ts, 0).unwrap_or_else(Utc::now)
-            };
 
             let used_ts: Option<f64> = row.get("usedDate");
             let last_used = used_ts.and_then(|ts| {
@@ -2286,8 +2263,6 @@ impl ThingsDatabase {
                 title,
                 shortcut,
                 parent_uuid,
-                created,
-                modified,
                 usage_count: usage_count as u32,
                 last_used,
             });
@@ -2304,8 +2279,8 @@ impl ThingsDatabase {
     #[instrument(skip(self))]
     pub async fn get_all_tags(&self) -> ThingsResult<Vec<crate::models::Tag>> {
         let rows = sqlx::query(
-            "SELECT uuid, title, shortcut, parent, creationDate, userModificationDate, usedDate 
-             FROM TMTag 
+            "SELECT uuid, title, shortcut, parent, usedDate
+             FROM TMTag
              ORDER BY title",
         )
         .fetch_all(&self.pool)
@@ -2319,18 +2294,6 @@ impl ThingsDatabase {
             let shortcut: Option<String> = row.get("shortcut");
             let parent_str: Option<String> = row.get("parent");
             let parent_uuid = parent_str.map(ThingsId::from_trusted);
-
-            let creation_ts: f64 = row.get("creationDate");
-            let created = {
-                let ts = safe_timestamp_convert(creation_ts);
-                DateTime::from_timestamp(ts, 0).unwrap_or_else(Utc::now)
-            };
-
-            let modification_ts: f64 = row.get("userModificationDate");
-            let modified = {
-                let ts = safe_timestamp_convert(modification_ts);
-                DateTime::from_timestamp(ts, 0).unwrap_or_else(Utc::now)
-            };
 
             let used_ts: Option<f64> = row.get("usedDate");
             let last_used = used_ts.and_then(|ts| {
@@ -2355,8 +2318,6 @@ impl ThingsDatabase {
                 title,
                 shortcut,
                 parent_uuid,
-                created,
-                modified,
                 usage_count: usage_count as u32,
                 last_used,
             });
@@ -2391,10 +2352,10 @@ impl ThingsDatabase {
     #[instrument(skip(self))]
     pub async fn get_recent_tags(&self, limit: usize) -> ThingsResult<Vec<crate::models::Tag>> {
         let rows = sqlx::query(
-            "SELECT uuid, title, shortcut, parent, creationDate, userModificationDate, usedDate 
-             FROM TMTag 
-             WHERE usedDate IS NOT NULL 
-             ORDER BY usedDate DESC 
+            "SELECT uuid, title, shortcut, parent, usedDate
+             FROM TMTag
+             WHERE usedDate IS NOT NULL
+             ORDER BY usedDate DESC
              LIMIT ?",
         )
         .bind(limit as i64)
@@ -2409,18 +2370,6 @@ impl ThingsDatabase {
             let shortcut: Option<String> = row.get("shortcut");
             let parent_str: Option<String> = row.get("parent");
             let parent_uuid = parent_str.map(ThingsId::from_trusted);
-
-            let creation_ts: f64 = row.get("creationDate");
-            let created = {
-                let ts = safe_timestamp_convert(creation_ts);
-                DateTime::from_timestamp(ts, 0).unwrap_or_else(Utc::now)
-            };
-
-            let modification_ts: f64 = row.get("userModificationDate");
-            let modified = {
-                let ts = safe_timestamp_convert(modification_ts);
-                DateTime::from_timestamp(ts, 0).unwrap_or_else(Utc::now)
-            };
 
             let used_ts: Option<f64> = row.get("usedDate");
             let last_used = used_ts.and_then(|ts| {
@@ -2445,8 +2394,6 @@ impl ThingsDatabase {
                 title,
                 shortcut,
                 parent_uuid,
-                created,
-                modified,
                 usage_count: usage_count as u32,
                 last_used,
             });
@@ -2497,18 +2444,15 @@ impl ThingsDatabase {
 
         // 5. No duplicates, safe to create
         let id = ThingsId::new_things_native();
-        let now = Utc::now().timestamp() as f64;
 
         sqlx::query(
-            "INSERT INTO TMTag (uuid, title, shortcut, parent, creationDate, userModificationDate, usedDate, `index`) \
-             VALUES (?, ?, ?, ?, ?, ?, NULL, 0)"
+            "INSERT INTO TMTag (uuid, title, shortcut, parent, usedDate, `index`) \
+             VALUES (?, ?, ?, ?, NULL, 0)"
         )
         .bind(id.as_str())
         .bind(&request.title)
         .bind(request.shortcut.as_ref())
         .bind(request.parent_uuid.map(|u| u.into_string()))
-        .bind(now)
-        .bind(now)
         .execute(&self.pool)
         .await
         .map_err(|e| ThingsError::unknown(format!("Failed to create tag: {e}")))?;
@@ -2531,18 +2475,15 @@ impl ThingsDatabase {
         request: crate::models::CreateTagRequest,
     ) -> ThingsResult<ThingsId> {
         let id = ThingsId::new_things_native();
-        let now = Utc::now().timestamp() as f64;
 
         sqlx::query(
-            "INSERT INTO TMTag (uuid, title, shortcut, parent, creationDate, userModificationDate, usedDate, `index`) \
-             VALUES (?, ?, ?, ?, ?, ?, NULL, 0)"
+            "INSERT INTO TMTag (uuid, title, shortcut, parent, usedDate, `index`) \
+             VALUES (?, ?, ?, ?, NULL, 0)"
         )
         .bind(id.as_str())
         .bind(&request.title)
         .bind(request.shortcut.as_ref())
         .bind(request.parent_uuid.map(|u| u.into_string()))
-        .bind(now)
-        .bind(now)
         .execute(&self.pool)
         .await
         .map_err(|e| ThingsError::unknown(format!("Failed to create tag: {e}")))?;
@@ -2593,8 +2534,6 @@ impl ThingsDatabase {
             }
         }
 
-        let now = Utc::now().timestamp() as f64;
-
         // Build dynamic UPDATE query
         let mut updates = Vec::new();
         let mut params: Vec<String> = Vec::new();
@@ -2615,9 +2554,6 @@ impl ThingsDatabase {
         if updates.is_empty() {
             return Ok(()); // Nothing to update
         }
-
-        updates.push("userModificationDate = ?");
-        params.push(now.to_string());
 
         let sql = format!("UPDATE TMTag SET {} WHERE uuid = ?", updates.join(", "));
         params.push(request.uuid.as_str().to_string());
@@ -2729,8 +2665,7 @@ impl ThingsDatabase {
 
         // Update usedDate on target if source was used more recently
         let now = Utc::now().timestamp() as f64;
-        sqlx::query("UPDATE TMTag SET userModificationDate = ?, usedDate = ? WHERE uuid = ?")
-            .bind(now)
+        sqlx::query("UPDATE TMTag SET usedDate = ? WHERE uuid = ?")
             .bind(now)
             .bind(target_id.as_str())
             .execute(&self.pool)
@@ -2835,8 +2770,7 @@ impl ThingsDatabase {
             .map_err(|e| ThingsError::unknown(format!("Failed to update task tags: {e}")))?;
 
             // 9. Update tag's usedDate
-            sqlx::query("UPDATE TMTag SET usedDate = ?, userModificationDate = ? WHERE uuid = ?")
-                .bind(now)
+            sqlx::query("UPDATE TMTag SET usedDate = ? WHERE uuid = ?")
                 .bind(now)
                 .bind(tag.uuid.as_str())
                 .execute(&self.pool)
@@ -3014,15 +2948,14 @@ impl ThingsDatabase {
         for title in &resolved_tags {
             let normalized = normalize_tag_title(title);
             if let Some(tag) = self.find_tag_by_normalized_title(&normalized).await? {
-                sqlx::query(
-                    "UPDATE TMTag SET usedDate = ?, userModificationDate = ? WHERE uuid = ?",
-                )
-                .bind(now)
-                .bind(now)
-                .bind(tag.uuid.as_str())
-                .execute(&self.pool)
-                .await
-                .map_err(|e| ThingsError::unknown(format!("Failed to update tag usedDate: {e}")))?;
+                sqlx::query("UPDATE TMTag SET usedDate = ? WHERE uuid = ?")
+                    .bind(now)
+                    .bind(tag.uuid.as_str())
+                    .execute(&self.pool)
+                    .await
+                    .map_err(|e| {
+                        ThingsError::unknown(format!("Failed to update tag usedDate: {e}"))
+                    })?;
             }
         }
 
@@ -3759,7 +3692,22 @@ impl DatabaseStats {
     }
 }
 
-/// Get the default Things 3 database path
+/// Things 3 group container directory under the user's `Library`.
+const THINGS_GROUP_CONTAINER: &str =
+    "Library/Group Containers/JLMPQHK86H.com.culturedcode.ThingsMac";
+
+/// Path inside a `ThingsData-XXXXX` directory that points at the SQLite file.
+const THINGS_DB_RELATIVE: &str = "Things Database.thingsdatabase/main.sqlite";
+
+/// Get the default Things 3 database path.
+///
+/// The 4-character suffix on `ThingsData-XXXXX` varies per install (App Store
+/// vs. direct purchase, possibly tied to iCloud account), so this function
+/// scans the group container for any `ThingsData-*` directory containing a
+/// real database file. If multiple candidates exist, the one whose
+/// `main.sqlite` was modified most recently wins. When no candidate is found
+/// the function falls back to the historical literal `ThingsData-0Z0Z2` path
+/// — callers downstream surface a clean "file not found" error in that case.
 ///
 /// # Examples
 ///
@@ -3773,9 +3721,44 @@ impl DatabaseStats {
 #[must_use]
 pub fn get_default_database_path() -> PathBuf {
     let home = std::env::var("HOME").unwrap_or_else(|_| "~".to_string());
-    PathBuf::from(format!(
-        "{home}/Library/Group Containers/JLMPQHK86H.com.culturedcode.ThingsMac/ThingsData-0Z0Z2/Things Database.thingsdatabase/main.sqlite"
-    ))
+    let group_container = PathBuf::from(&home).join(THINGS_GROUP_CONTAINER);
+
+    if let Some(found) = discover_things_database(&group_container) {
+        return found;
+    }
+
+    group_container
+        .join("ThingsData-0Z0Z2")
+        .join(THINGS_DB_RELATIVE)
+}
+
+/// Scan `group_container` for `ThingsData-*/Things Database.thingsdatabase/main.sqlite`
+/// and return the most-recently-modified candidate, if any.
+fn discover_things_database(group_container: &std::path::Path) -> Option<PathBuf> {
+    let entries = std::fs::read_dir(group_container).ok()?;
+
+    let mut best: Option<(PathBuf, std::time::SystemTime)> = None;
+    for entry in entries.flatten() {
+        let name = entry.file_name();
+        let Some(name_str) = name.to_str() else { continue };
+        if !name_str.starts_with("ThingsData-") {
+            continue;
+        }
+
+        let candidate = entry.path().join(THINGS_DB_RELATIVE);
+        let Ok(meta) = std::fs::metadata(&candidate) else { continue };
+        if !meta.is_file() {
+            continue;
+        }
+        let mtime = meta.modified().unwrap_or(std::time::UNIX_EPOCH);
+
+        match &best {
+            Some((_, best_mtime)) if mtime <= *best_mtime => {}
+            _ => best = Some((candidate, mtime)),
+        }
+    }
+
+    best.map(|(path, _)| path)
 }
 
 #[cfg(test)]
@@ -4126,6 +4109,63 @@ mod tests {
         assert!(path_str.contains("Things Database.thingsdatabase"));
         assert!(path_str.contains("main.sqlite"));
         assert!(path_str.contains("Library/Group Containers"));
+    }
+
+    #[test]
+    fn test_discover_things_database_picks_non_default_suffix() {
+        let group_container = TempDir::new().unwrap();
+        let things_dir = group_container.path().join("ThingsData-01AEF");
+        let db_dir = things_dir.join("Things Database.thingsdatabase");
+        std::fs::create_dir_all(&db_dir).unwrap();
+        let db_path = db_dir.join("main.sqlite");
+        std::fs::write(&db_path, b"").unwrap();
+
+        let found = discover_things_database(group_container.path()).unwrap();
+        assert_eq!(found, db_path);
+    }
+
+    #[test]
+    fn test_discover_things_database_prefers_most_recent() {
+        let group_container = TempDir::new().unwrap();
+
+        let make = |suffix: &str| {
+            let dir = group_container
+                .path()
+                .join(format!("ThingsData-{suffix}"))
+                .join("Things Database.thingsdatabase");
+            std::fs::create_dir_all(&dir).unwrap();
+            let db = dir.join("main.sqlite");
+            std::fs::write(&db, b"").unwrap();
+            db
+        };
+
+        let _older = make("OLDER");
+        // 10ms is well above any reasonable filesystem mtime resolution, so
+        // the second file is guaranteed to have a strictly later mtime.
+        std::thread::sleep(std::time::Duration::from_millis(10));
+        let newer = make("NEWER");
+
+        let found = discover_things_database(group_container.path()).unwrap();
+        assert_eq!(found, newer);
+    }
+
+    #[test]
+    fn test_discover_things_database_returns_none_when_empty() {
+        let group_container = TempDir::new().unwrap();
+        assert!(discover_things_database(group_container.path()).is_none());
+    }
+
+    #[test]
+    fn test_discover_things_database_skips_non_matching_dirs() {
+        let group_container = TempDir::new().unwrap();
+        std::fs::create_dir_all(group_container.path().join("SomethingElse")).unwrap();
+        std::fs::create_dir_all(
+            group_container
+                .path()
+                .join("ThingsData-EMPTY"), // no main.sqlite inside
+        )
+        .unwrap();
+        assert!(discover_things_database(group_container.path()).is_none());
     }
 
     #[tokio::test]

@@ -115,26 +115,20 @@ impl AppleScriptBackend {
         Ok(row.get("title"))
     }
 
-    /// Read a task's current tag-title list from the DB's `cachedTags` blob.
-    /// Returns an empty list if the task has no tags. Errors if the task
-    /// doesn't exist.
+    /// Read a task's current tag-title list by querying Things 3 via osascript.
+    /// Returns an empty list if the task has no tags.
     ///
-    /// CulturedCode-safe: read-only access.
+    /// We use osascript here (rather than reading `cachedTags` from SQLite)
+    /// because Things 3 writes `cachedTags` in a proprietary binary format
+    /// after any AppleScript mutation — not the JSON format we can parse.
     async fn read_task_tag_titles(&self, task_id: &ThingsId) -> ThingsResult<Vec<String>> {
-        let row = sqlx::query("SELECT cachedTags FROM TMTask WHERE uuid = ?")
-            .bind(task_id.as_str())
-            .fetch_optional(&self.db.pool)
-            .await
-            .map_err(|e| {
-                ThingsError::applescript(format!("failed to read tags for task {task_id}: {e}"))
-            })?;
-        let row =
-            row.ok_or_else(|| ThingsError::applescript(format!("task not found: {task_id}")))?;
-        let blob: Option<Vec<u8>> = row.get("cachedTags");
-        match blob {
-            None => Ok(Vec::new()),
-            Some(b) => crate::database::deserialize_tags_from_blob(&b),
+        let script = script::get_task_tag_names_script(task_id);
+        let output = runner::run_script(&script).await?;
+        let trimmed = output.trim();
+        if trimmed.is_empty() {
+            return Ok(Vec::new());
         }
+        Ok(trimmed.split(", ").map(str::to_string).collect())
     }
 
     /// List `(task_id, current_tag_titles)` for every non-trashed task whose
