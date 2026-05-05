@@ -28,6 +28,36 @@ The `things3` CLI must be installed and the MCP server must be configured in you
 
 **Things 3 must be running** on macOS for the MCP server to reach its database.
 
+## Mutation backend
+
+On macOS, all 24 write tools route through **AppleScript** by default — CulturedCode's documented scripting API. Reads continue to use direct SQLite. This is the safe-by-default configuration: the data-corruption risk that motivated CulturedCode's [warning against direct database writes](https://culturedcode.com/things/support/articles/5510170/) does not apply to AppleScript-mediated mutations.
+
+### One-time Automation permission
+
+The first write triggers a macOS prompt asking your terminal/host to control Things 3. Grant it once. If denied or later revoked, you will see:
+
+> macOS Automation permission denied. Grant access in System Settings → Privacy & Security → Automation, then retry.
+
+Re-enable in **System Settings → Privacy & Security → Automation**, then retry the call.
+
+### `--unsafe-direct-db` opt-in (discouraged)
+
+The deprecated direct-SQLite backend (`SqlxBackend`) can be re-enabled with `--unsafe-direct-db` or `THINGS_UNSAFE_DIRECT_DB=1`. CulturedCode warns that direct writes "can corrupt your data and break syncs." Use only when:
+
+- Running on non-macOS (Linux/CI), where AppleScript is unavailable.
+- You explicitly need `restore_database` (see below).
+
+This flag will be removed in a future release.
+
+### `restore_database` is gated
+
+`restore_database` overwrites the live SQLite file and is the highest-corruption operation the server exposes. It refuses to run unless **both** conditions hold:
+
+1. The server was launched with `--unsafe-direct-db` (or `THINGS_UNSAFE_DIRECT_DB=1`).
+2. Things 3 is **not** running. Quit Things 3 (Cmd-Q) before invoking.
+
+Without (1) you get a structured validation error pointing to the CulturedCode article. Without (2) you get a "refuses to run while Things 3 is open" error.
+
 ## When to use this skill
 
 - Reading inbox, today, or project task lists
@@ -161,7 +191,7 @@ The server also exposes four prompt templates: `task_review`, `project_planning`
 
 ## Notes
 
-- **Things 3 must be open** on macOS. The server reads directly from the SQLite database at `~/Library/Group Containers/JLMPQHK86H.com.culturedcode.ThingsMac/ThingsData-*/Containers/com.culturedcode.ThingsMac/Data/Library/Application Support/Cultured Code/Things 3/Things Database.thingsdatabase/main.sqlite`.
-- Override the path with `THINGS_DB_PATH` env var.
+- **Things 3 must be open** on macOS. The server reads directly from the SQLite database at `~/Library/Group Containers/JLMPQHK86H.com.culturedcode.ThingsMac/ThingsData-*/Containers/com.culturedcode.ThingsMac/Data/Library/Application Support/Cultured Code/Things 3/Things Database.thingsdatabase/main.sqlite`. Writes go through AppleScript — see [Mutation backend](#mutation-backend).
+- Override the read database path with `THINGS_DB_PATH` env var.
 - `delete_task` / `delete_project` are soft-deletes (move to Trash). There is no MCP tool to permanently purge or restore from Trash.
 - For full parameter schemas and advanced configuration, see [`docs/MCP_INTEGRATION.md`](../../docs/MCP_INTEGRATION.md).
