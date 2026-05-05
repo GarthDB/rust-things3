@@ -626,7 +626,6 @@ pub(crate) fn set_task_tag_names_script(task_id: &ThingsId, joined: &str) -> Str
 /// comma-separated text property; an untagged task returns an empty string.
 /// Used by `read_task_tag_titles` to avoid parsing the proprietary binary
 /// blob that Things 3 writes to `cachedTags` after an AppleScript mutation.
-#[allow(dead_code)] // Used by AppleScriptBackend
 pub(crate) fn get_task_tag_names_script(task_id: &ThingsId) -> String {
     wrap(&format!(
         "\t\treturn tag names of to do id \"{task_id}\"\n"
