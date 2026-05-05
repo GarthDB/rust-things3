@@ -27,7 +27,7 @@ async fn main() -> Result<()> {
     #[cfg(all(feature = "observability", not(feature = "mcp-server")))]
     let is_mcp_mode = false;
     #[cfg(not(feature = "observability"))]
-    let _is_mcp_mode = false;
+    let is_mcp_mode = false;
 
     // Initialize observability (skip entirely for MCP mode to ensure zero stderr output)
     #[cfg(feature = "observability")]
