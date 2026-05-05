@@ -132,6 +132,20 @@ async fn create_test_schema(db: &ThingsDatabase) -> Result<(), Box<dyn std::erro
     .bind(2) // todayIndex = 2 (appears in Today)
     .execute(pool).await?;
 
+    // Insert a heading task (type=2) inside the project
+    sqlx::query(
+        "INSERT INTO TMTask (uuid, title, type, status, project, creationDate, userModificationDate, trashed) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+    )
+    .bind(Uuid::new_v4().to_string())
+    .bind("Learn the basics")
+    .bind(2) // Heading type
+    .bind(0) // Incomplete
+    .bind(&project_uuid)
+    .bind(now_timestamp)
+    .bind(now_timestamp)
+    .bind(0) // Not trashed
+    .execute(pool).await?;
+
     Ok(())
 }
 
@@ -334,14 +348,14 @@ async fn test_database_with_mock_data_consistency() {
     // Verify task relationships (check all tasks, not just inbox)
     let all_tasks = db.search_tasks("").await.unwrap();
 
-    // Verify we have the expected number of total tasks
-    assert_eq!(all_tasks.len(), 2); // 1 inbox + 1 project task
+    // Verify we have the expected number of total tasks (1 inbox + 1 project task + 1 heading)
+    assert_eq!(all_tasks.len(), 3);
 
-    // Verify task-area relationships (projects have areas)
+    // Verify task-area relationships (the two Todo tasks have areas)
     assert_eq!(
         all_tasks.iter().filter(|t| t.area_uuid.is_some()).count(),
         2
-    ); // 2 projects have areas
+    );
 
     // Verify that we have the expected task types
     assert_eq!(
@@ -350,7 +364,14 @@ async fn test_database_with_mock_data_consistency() {
             .filter(|t| t.task_type == TaskType::Todo)
             .count(),
         2
-    ); // 2 todo tasks
+    );
+    assert_eq!(
+        all_tasks
+            .iter()
+            .filter(|t| t.task_type == TaskType::Heading)
+            .count(),
+        1
+    );
 }
 
 #[tokio::test]
@@ -542,9 +563,9 @@ async fn test_database_edge_cases() {
     // Create schema and insert test data
     create_test_schema(&db).await.unwrap();
 
-    // Test search with empty string - should return all tasks
+    // Test search with empty string - should return all tasks (2 todos + 1 heading)
     let empty_results = db.search_tasks("").await.unwrap();
-    assert_eq!(empty_results.len(), 2); // We have 2 tasks in our test data
+    assert_eq!(empty_results.len(), 3);
 
     // Test search with very long query
     let long_query = "a".repeat(1000);
@@ -950,4 +971,61 @@ async fn test_get_inbox_large_result_set() {
         10,
         "Should respect limit with large datasets"
     );
+}
+
+#[tokio::test]
+async fn test_search_tasks_includes_headings() {
+    let db = ThingsDatabase::from_connection_string("sqlite::memory:")
+        .await
+        .unwrap();
+
+    create_test_schema(&db).await.unwrap();
+
+    // "Learn the basics" is inserted as type=2 (Heading) by create_test_schema
+    let results = db.search_tasks("Learn the basics").await.unwrap();
+    assert!(
+        !results.is_empty(),
+        "search_tasks should include heading-type tasks"
+    );
+    let heading = results
+        .iter()
+        .find(|t| t.title == "Learn the basics")
+        .expect("heading task should be returned by search_tasks");
+    assert_eq!(heading.task_type, TaskType::Heading);
+}
+
+#[tokio::test]
+async fn test_get_inbox_includes_headings_without_project() {
+    let db = ThingsDatabase::from_connection_string("sqlite::memory:")
+        .await
+        .unwrap();
+    let pool = db.pool();
+
+    create_minimal_task_schema(pool).await;
+
+    let now = 1_700_000_000.0_f64;
+
+    // Heading with no project should appear in inbox
+    sqlx::query(
+        "INSERT INTO TMTask (uuid, title, type, status, creationDate, userModificationDate, project, trashed) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+    )
+    .bind("heading-inbox")
+    .bind("Phase 1")
+    .bind(2) // Heading type
+    .bind(0) // Incomplete
+    .bind(now)
+    .bind(now)
+    .bind(Option::<String>::None)
+    .bind(0)
+    .execute(pool)
+    .await
+    .unwrap();
+
+    let inbox = db.get_inbox(None).await.unwrap();
+    let heading = inbox.iter().find(|t| t.title == "Phase 1");
+    assert!(
+        heading.is_some(),
+        "get_inbox should include heading-type tasks without a project"
+    );
+    assert_eq!(heading.unwrap().task_type, TaskType::Heading);
 }

@@ -856,7 +856,7 @@ impl ThingsDatabase {
                 notes, cachedTags, 
                 creationDate, userModificationDate
             FROM TMTask
-            WHERE (title LIKE ? OR notes LIKE ?) AND trashed = 0 AND type = 0
+            WHERE (title LIKE ? OR notes LIKE ?) AND type IN (0, 2) AND trashed = 0
             ORDER BY creationDate DESC
             ",
         )
@@ -1099,6 +1099,8 @@ impl ThingsDatabase {
         let result_limit = limit.unwrap_or(50).min(500);
 
         // Build and execute query based on filters
+        // type = 0 (Todo) is intentional here: headings (type=2) have no stopDate and
+        // cannot appear in a stop-date-ordered logbook.
         let rows = if let Some(ref text) = search_text {
             let pattern = format!("%{text}%");
             let mut q = String::from(
@@ -1202,9 +1204,9 @@ impl ThingsDatabase {
     #[instrument(skip(self))]
     pub async fn get_inbox(&self, limit: Option<usize>) -> ThingsResult<Vec<Task>> {
         let query = if let Some(limit) = limit {
-            format!("SELECT uuid, title, type, status, notes, startDate, deadline, stopDate, creationDate, userModificationDate, project, area, heading, cachedTags FROM TMTask WHERE type = 0 AND status = 0 AND project IS NULL AND trashed = 0 ORDER BY creationDate DESC LIMIT {limit}")
+            format!("SELECT uuid, title, type, status, notes, startDate, deadline, stopDate, creationDate, userModificationDate, project, area, heading, cachedTags FROM TMTask WHERE type IN (0, 2) AND status = 0 AND project IS NULL AND trashed = 0 ORDER BY creationDate DESC LIMIT {limit}")
         } else {
-            "SELECT uuid, title, type, status, notes, startDate, deadline, stopDate, creationDate, userModificationDate, project, area, heading, cachedTags FROM TMTask WHERE type = 0 AND status = 0 AND project IS NULL AND trashed = 0 ORDER BY creationDate DESC"
+            "SELECT uuid, title, type, status, notes, startDate, deadline, stopDate, creationDate, userModificationDate, project, area, heading, cachedTags FROM TMTask WHERE type IN (0, 2) AND status = 0 AND project IS NULL AND trashed = 0 ORDER BY creationDate DESC"
                 .to_string()
         };
 

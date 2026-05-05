@@ -166,6 +166,22 @@ async fn insert_test_data(pool: &sqlx::SqlitePool) -> crate::Result<()> {
     .execute(pool).await
     .map_err(|e| crate::ThingsError::Database(format!("Failed to insert test task: {e}")))?;
 
+    // Insert a heading task (type=2) inside the project
+    let heading_uuid = ThingsId::new_v4().into_string();
+    sqlx::query(
+        "INSERT INTO TMTask (uuid, title, type, status, project, creationDate, userModificationDate, trashed) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+    )
+    .bind(&heading_uuid)
+    .bind("Learn the basics")
+    .bind(2) // Heading type
+    .bind(0) // Incomplete
+    .bind(&project_uuid)
+    .bind(now_timestamp)
+    .bind(now_timestamp)
+    .bind(0) // Not trashed
+    .execute(pool).await
+    .map_err(|e| crate::ThingsError::Database(format!("Failed to insert test heading: {e}")))?;
+
     Ok(())
 }
 
