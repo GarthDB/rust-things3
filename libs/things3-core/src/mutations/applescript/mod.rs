@@ -210,6 +210,10 @@ const MAX_BULK_BATCH_SIZE: usize = 1000;
 
 #[async_trait]
 impl MutationBackend for AppleScriptBackend {
+    fn kind(&self) -> &'static str {
+        "applescript"
+    }
+
     // ---- Tasks (Phase B — implemented) ----
 
     async fn create_task(&self, request: CreateTaskRequest) -> ThingsResult<ThingsId> {

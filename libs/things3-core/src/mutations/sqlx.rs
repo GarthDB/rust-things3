@@ -33,6 +33,10 @@ impl SqlxBackend {
 
 #[async_trait]
 impl MutationBackend for SqlxBackend {
+    fn kind(&self) -> &'static str {
+        "sqlx"
+    }
+
     // ---- Tasks ----
 
     async fn create_task(&self, request: CreateTaskRequest) -> ThingsResult<ThingsId> {

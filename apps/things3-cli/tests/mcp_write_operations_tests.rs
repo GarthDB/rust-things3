@@ -17,7 +17,7 @@ impl McpTestHarness {
         create_test_database(db_path).await.unwrap();
         let db = ThingsDatabase::new(db_path).await.unwrap();
         let config = ThingsConfig::default();
-        let server = ThingsMcpServer::new(std::sync::Arc::new(db), config);
+        let server = ThingsMcpServer::new(std::sync::Arc::new(db), config, true);
 
         Self {
             server,

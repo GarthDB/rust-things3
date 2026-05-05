@@ -44,6 +44,11 @@ pub use applescript::AppleScriptBackend;
 /// async tasks via `Arc<dyn MutationBackend>`.
 #[async_trait]
 pub trait MutationBackend: Send + Sync {
+    /// Static identifier for the backend implementation. Used by the MCP server
+    /// to expose which backend is in use (`"sqlx"` direct-DB vs. `"applescript"`
+    /// CulturedCode-supported) without an `Any` downcast.
+    fn kind(&self) -> &'static str;
+
     // ---- Tasks ----
 
     async fn create_task(&self, request: CreateTaskRequest) -> ThingsResult<ThingsId>;

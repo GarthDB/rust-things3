@@ -119,7 +119,7 @@ async fn test_mcp_server_integration() {
     let db = ThingsDatabase::new(&config.database_path).await.unwrap();
 
     // Test MCP server creation
-    let server = things3_cli::mcp::ThingsMcpServer::new(db.into(), config);
+    let server = things3_cli::mcp::ThingsMcpServer::new(db.into(), config, true);
 
     // Test tool listing
     let tools = server.list_tools().unwrap();
