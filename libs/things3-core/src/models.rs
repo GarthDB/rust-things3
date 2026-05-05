@@ -484,10 +484,6 @@ pub struct Tag {
     pub shortcut: Option<String>,
     /// Parent tag UUID (for nested tags)
     pub parent_uuid: Option<ThingsId>,
-    /// Creation timestamp
-    pub created: DateTime<Utc>,
-    /// Last modification timestamp
-    pub modified: DateTime<Utc>,
     /// How many tasks use this tag
     pub usage_count: u32,
     /// Last time this tag was used
@@ -1098,8 +1094,6 @@ mod tests {
             title: "work".to_string(),
             shortcut: Some("w".to_string()),
             parent_uuid: Some(parent_uuid.clone()),
-            created: now,
-            modified: now,
             usage_count: 5,
             last_used: Some(now),
         };
@@ -1115,15 +1109,12 @@ mod tests {
     #[test]
     fn test_tag_serialization() {
         let uuid = ThingsId::new_v4();
-        let now = Utc::now();
 
         let tag = Tag {
             uuid: uuid.clone(),
             title: "test".to_string(),
             shortcut: None,
             parent_uuid: None,
-            created: now,
-            modified: now,
             usage_count: 0,
             last_used: None,
         };

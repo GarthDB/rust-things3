@@ -4434,6 +4434,7 @@ dependencies = [
  "serde_json",
  "syn 2.0.117",
  "tempfile",
+ "things3-core",
  "thiserror 1.0.69",
  "walkdir",
 ]

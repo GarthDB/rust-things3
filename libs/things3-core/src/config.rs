@@ -64,13 +64,13 @@ impl ThingsConfig {
         )))
     }
 
-    /// Get the default Things 3 database path
+    /// Get the default Things 3 database path.
+    ///
+    /// Delegates to [`crate::database::get_default_database_path`], which
+    /// auto-discovers the per-install `ThingsData-XXXXX` suffix.
     #[must_use]
     pub fn get_default_database_path() -> PathBuf {
-        let home = std::env::var("HOME").unwrap_or_else(|_| "~".to_string());
-        PathBuf::from(format!(
-            "{home}/Library/Group Containers/JLMPQHK86H.com.culturedcode.ThingsMac/ThingsData-0Z0Z2/Things Database.thingsdatabase/main.sqlite"
-        ))
+        crate::database::get_default_database_path()
     }
 
     /// Create configuration from environment variables
@@ -674,15 +674,16 @@ mod tests {
 
     #[test]
     fn test_get_default_database_path_format() {
-        // Test that the default path has the expected format
+        // Test that the default path has the expected format. The 4-char
+        // suffix on `ThingsData-XXXXX` varies per install, so we only assert
+        // structure — never the literal `ThingsData-0Z0Z2`.
         let default_path = ThingsConfig::get_default_database_path();
         let path_str = default_path.to_string_lossy();
 
-        // Should contain the expected macOS Things 3 path components
         assert!(path_str.contains("Library"));
         assert!(path_str.contains("Group Containers"));
         assert!(path_str.contains("JLMPQHK86H.com.culturedcode.ThingsMac"));
-        assert!(path_str.contains("ThingsData-0Z0Z2"));
+        assert!(path_str.contains("ThingsData-"));
         assert!(path_str.contains("Things Database.thingsdatabase"));
         assert!(path_str.contains("main.sqlite"));
     }
@@ -913,14 +914,13 @@ mod tests {
         let path = ThingsConfig::get_default_database_path();
         let path_str = path.to_string_lossy();
 
-        // Test the specific format of the path
         assert!(
             path_str.contains("JLMPQHK86H.com.culturedcode.ThingsMac"),
             "Should contain the correct container identifier"
         );
         assert!(
-            path_str.contains("ThingsData-0Z0Z2"),
-            "Should contain the correct data directory"
+            path_str.contains("ThingsData-"),
+            "Should contain a ThingsData-* data directory"
         );
         assert!(
             path_str.contains("Things Database.thingsdatabase"),

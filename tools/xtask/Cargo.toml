@@ -15,6 +15,9 @@ path = "src/main.rs"
 # CLI
 clap.workspace = true
 
+# Things 3 path discovery
+things3-core = { path = "../../libs/things3-core" }
+
 # Error handling
 anyhow.workspace = true
 thiserror.workspace = true

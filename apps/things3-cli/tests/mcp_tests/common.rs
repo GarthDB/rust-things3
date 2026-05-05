@@ -70,18 +70,17 @@ async fn create_test_schema(db: &ThingsDatabase) -> Result<(), Box<dyn std::erro
     .execute(pool)
     .await?;
 
-    // Create TMTag table
+    // Create TMTag table — schema mirrors real Things 3 (no creationDate/userModificationDate).
     sqlx::query(
         r"
         CREATE TABLE IF NOT EXISTS TMTag (
             uuid TEXT PRIMARY KEY,
-            title TEXT NOT NULL,
+            title TEXT,
             shortcut TEXT,
-            parent TEXT,
-            creationDate REAL NOT NULL,
-            userModificationDate REAL NOT NULL,
             usedDate REAL,
-            'index' INTEGER NOT NULL DEFAULT 0
+            parent TEXT,
+            'index' INTEGER,
+            experimental BLOB
         )
         ",
     )

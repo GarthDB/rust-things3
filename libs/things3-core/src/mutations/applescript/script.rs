@@ -622,6 +622,14 @@ pub(crate) fn set_task_tag_names_script(task_id: &ThingsId, joined: &str) -> Str
     ))
 }
 
+/// Return the `tag names` string for a task. Things 3 stores tag names as a
+/// comma-separated text property; an untagged task returns an empty string.
+/// Used by `read_task_tag_titles` to avoid parsing the proprietary binary
+/// blob that Things 3 writes to `cachedTags` after an AppleScript mutation.
+pub(crate) fn get_task_tag_names_script(task_id: &ThingsId) -> String {
+    wrap(&format!("\t\treturn tag names of to do id \"{task_id}\"\n"))
+}
+
 /// Bulk variant of [`set_task_tag_names_script`] — one osascript invocation
 /// rewrites tag names for many tasks. Each item runs in its own try block
 /// via [`bulk_wrap`]. Used by `merge_tags` and `delete_tag(remove_from_tasks=true)`.
