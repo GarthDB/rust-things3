@@ -62,14 +62,10 @@ async fn main() -> Result<()> {
     };
 
     // Loud opt-in warning when the user re-enables direct-DB writes. MCP mode
-    // intentionally skips this — stderr must stay empty for JSON-RPC purity
-    // (the user already typed --unsafe-direct-db, so the silence is fine).
-    #[cfg(feature = "observability")]
-    let emit_unsafe_warning = !is_mcp_mode && cli.unsafe_direct_db;
-    #[cfg(not(feature = "observability"))]
-    let emit_unsafe_warning = cli.unsafe_direct_db;
-    if emit_unsafe_warning {
-        let banner = "\
+    // intentionally skips this — stderr must stay empty for JSON-RPC purity.
+    if !is_mcp_mode && cli.unsafe_direct_db {
+        eprintln!(
+            "\
 ================================================================================
 WARNING: --unsafe-direct-db / THINGS_UNSAFE_DIRECT_DB is set.
 Mutations write directly to the Things 3 SQLite database, bypassing the
@@ -77,9 +73,8 @@ safe AppleScript path. CulturedCode warns this can corrupt your data and
 break syncs:
   https://culturedcode.com/things/support/articles/5510170/
 This flag exists for emergency recovery only and will be removed.
-================================================================================";
-        tracing::warn!("{banner}");
-        eprintln!("{banner}");
+================================================================================"
+        );
     }
 
     // Create configuration

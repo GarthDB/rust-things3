@@ -4667,25 +4667,18 @@ impl ThingsMcpServer {
 #[cfg(test)]
 mod backend_selection_tests {
     use super::*;
-    use crate::mcp::test_harness::McpTestHarness;
 
-    /// Build a server backed by the test harness's in-memory DB, with the
-    /// given `unsafe_direct_db` flag. Mirrors `McpTestHarness::new_with_config`
-    /// but routes through `ThingsMcpServer::new` so the platform-aware default
-    /// backend selection runs.
+    /// Build a server with a fresh temp DB and the given `unsafe_direct_db` flag,
+    /// routing through `ThingsMcpServer::new` so platform-aware backend selection runs.
     fn build_server(unsafe_direct_db: bool) -> (ThingsMcpServer, tempfile::NamedTempFile) {
         let temp_file = tempfile::NamedTempFile::new().unwrap();
         let db_path = temp_file.path().to_path_buf();
         let db_path_clone = db_path.clone();
 
         let db = std::thread::spawn(move || {
-            tokio::runtime::Runtime::new().unwrap().block_on(async {
-                // Reuse the harness's schema-creation helper by going through
-                // `McpTestHarness` once to seed the file, then re-open it via
-                // the public `ThingsDatabase::new` path.
-                let _harness = McpTestHarness::new_with_config(MiddlewareConfig::default());
-                ThingsDatabase::new(&db_path_clone).await.unwrap()
-            })
+            tokio::runtime::Runtime::new()
+                .unwrap()
+                .block_on(async { ThingsDatabase::new(&db_path_clone).await.unwrap() })
         })
         .join()
         .unwrap();
