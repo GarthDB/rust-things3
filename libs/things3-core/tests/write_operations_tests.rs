@@ -108,8 +108,15 @@ async fn test_create_task_returns_valid_uuid() {
 
     let uuid = db.create_task(request).await.unwrap();
 
-    // Verify UUID is valid by checking it's a hyphenated UUID format
-    assert!(uuid.as_str().contains('-'), "Should be UUID v4 format");
+    // Created tasks now use Things-native 22-char Base62 IDs (#148) so the
+    // mutation can be referenced via AppleScript. The hyphenated UUID format
+    // would be rejected with `-1728` by Things 3's AppleScript dictionary.
+    let s = uuid.as_str();
+    assert_eq!(s.len(), 22, "expected 22-char Base62 native ID, got {s:?}");
+    assert!(
+        s.chars().all(|c| c.is_ascii_alphanumeric()),
+        "expected Base62 alphanumeric, got {s:?}"
+    );
 }
 
 #[tokio::test]

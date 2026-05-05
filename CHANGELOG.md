@@ -102,6 +102,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (`#[serde(transparent)]`). `FromStr` validates strictly at MCP/API boundaries; internal DB reads
   use `ThingsId::from_trusted` to avoid re-parsing values the DB already owns. Implements
   `Display`, `Hash`, `Eq`, `Ord`, `From<Uuid>`.
+- **`ThingsId::new_things_native()`** (#148) — generates a fresh 22-char Base62 ID derived from
+  a v4 UUID's 16 random bytes. Use this for any new entity that may be referenced via
+  AppleScript; Things 3's AppleScript dictionary only accepts this format in `to do id "..."`
+  references and rejects hyphenated UUIDs with the opaque `-1728` ("Can't get to do id ...").
+  All `ThingsDatabase::create_*` paths now use this constructor.
+
+### Fixed
+
+- **`AppleScriptBackend` rejects hyphenated UUIDs at the boundary** (#148) — every mutation
+  method that takes a `ThingsId` (directly or via request struct) now validates the format
+  *before* invoking `osascript`. Hyphenated UUIDs (which Things 3's AppleScript dictionary
+  cannot resolve) return a clear `Validation` error pointing at the recreate-the-entity
+  remediation, instead of forwarding the bad ID and surfacing the opaque AppleScript error
+  `-1728`. New entities created via `ThingsDatabase::create_task` / `create_project` /
+  `create_area` / `create_tag_*` now use 22-char Base62 IDs, so this affects only legacy rows
+  written by `SqlxBackend` on Linux/CI or with `--unsafe-direct-db`.
+
+### Known issue
+
+- **Legacy hyphenated-UUID entities cannot be mutated via AppleScript** (#148). Tasks,
+  projects, areas, and tags created by earlier versions on Linux/CI (or with
+  `--unsafe-direct-db`) may have hyphenated UUIDs persisted in `Things Database.thingsdatabase`.
+  These rows are unreachable from Things 3's AppleScript dictionary; they must be recreated in
+  Things 3 (which assigns a fresh native ID) or mutated via direct SQLite writes
+  (`THINGS_UNSAFE_DIRECT_DB=1`).
 
 ## [1.4.0] - 2026-04-28
 

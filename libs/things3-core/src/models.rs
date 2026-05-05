@@ -56,6 +56,19 @@ impl ThingsId {
         Self(Uuid::new_v4().to_string())
     }
 
+    /// Generate a fresh Things-native 22-char Base62 ID. Use this for any
+    /// new entity that may be referenced via AppleScript — Things 3's
+    /// AppleScript dictionary only accepts this format in `to do id "..."`
+    /// references, so a hyphenated UUID would fail with `-1728` (#148).
+    ///
+    /// Internally derived from a v4 UUID's 16 random bytes, base62-encoded
+    /// (a 16-byte / 128-bit value fits in 22 base62 characters).
+    #[must_use]
+    pub fn new_things_native() -> Self {
+        let bytes = *Uuid::new_v4().as_bytes();
+        Self(base62_encode_22(&bytes))
+    }
+
     /// Borrow the underlying string (for SQL parameter binding, AppleScript
     /// interpolation, logging, etc.).
     #[must_use]
@@ -81,6 +94,42 @@ impl ThingsId {
         let len = s.len();
         (len == 21 || len == 22) && s.chars().all(|c| c.is_ascii_alphanumeric())
     }
+
+    /// Borrow the underlying string if it's already in Things native format
+    /// (21–22-char Base62), or return a `Validation` error pointing the
+    /// caller at the recreate-the-entity remediation.
+    ///
+    /// AppleScript-driving call sites use this to fail fast with a useful
+    /// message instead of letting a hyphenated UUID reach `osascript`
+    /// (which returns the opaque error `-1728` "Can't get to do id ...").
+    pub(crate) fn as_things_native(&self) -> Result<&str, ThingsError> {
+        if Self::is_things_native(&self.0) {
+            Ok(&self.0)
+        } else {
+            Err(ThingsError::validation(format!(
+                "ID {:?} is not in Things native format (21–22-char Base62) \
+                 and cannot be referenced via AppleScript. This entity was \
+                 likely created on Linux/CI or with --unsafe-direct-db. \
+                 Recreate it in Things 3, or set THINGS_UNSAFE_DIRECT_DB=1 \
+                 to mutate via direct SQLite writes.",
+                self.0
+            )))
+        }
+    }
+}
+
+/// Encode 16 bytes into a fixed 22-char Base62 string (alphabet:
+/// `0-9A-Za-z`). 16 bytes = 128 bits; 22 base62 chars hold ~131 bits, so
+/// the encoding is fixed-length with leading-zero padding.
+fn base62_encode_22(bytes: &[u8; 16]) -> String {
+    const ALPHABET: &[u8; 62] = b"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
+    let mut n = u128::from_be_bytes(*bytes);
+    let mut out = [b'0'; 22];
+    for slot in out.iter_mut().rev() {
+        *slot = ALPHABET[(n % 62) as usize];
+        n /= 62;
+    }
+    String::from_utf8(out.to_vec()).expect("alphabet is ASCII")
 }
 
 impl fmt::Display for ThingsId {
@@ -134,6 +183,69 @@ mod things_id_tests {
         let s = id.as_str();
         assert_eq!(s.len(), 36);
         assert!(Uuid::parse_str(s).is_ok());
+    }
+
+    #[test]
+    fn new_things_native_produces_22_char_base62() {
+        let id = ThingsId::new_things_native();
+        let s = id.as_str();
+        assert_eq!(s.len(), 22);
+        assert!(s.chars().all(|c| c.is_ascii_alphanumeric()));
+        assert!(ThingsId::is_things_native(s));
+    }
+
+    #[test]
+    fn new_things_native_round_trips_through_from_str() {
+        let original = ThingsId::new_things_native();
+        let parsed: ThingsId = original.as_str().parse().unwrap();
+        assert_eq!(original, parsed);
+    }
+
+    #[test]
+    fn new_things_native_yields_unique_ids() {
+        use std::collections::HashSet;
+        let ids: HashSet<_> = (0..1000).map(|_| ThingsId::new_things_native()).collect();
+        assert_eq!(ids.len(), 1000);
+    }
+
+    #[test]
+    fn as_things_native_accepts_native_id() {
+        let id: ThingsId = "R4t2G8Q63aGZq4epMHNeCr".parse().unwrap();
+        assert_eq!(id.as_things_native().unwrap(), "R4t2G8Q63aGZq4epMHNeCr");
+    }
+
+    #[test]
+    fn as_things_native_accepts_21_char_native_id() {
+        let id: ThingsId = "19KLMeA2ULbixtvNbXsDK".parse().unwrap();
+        assert_eq!(id.as_things_native().unwrap(), "19KLMeA2ULbixtvNbXsDK");
+    }
+
+    #[test]
+    fn as_things_native_rejects_hyphenated_uuid() {
+        let id: ThingsId = "9d3f1e44-5c2a-4b8e-9c1f-7e2d8a4b3c5e".parse().unwrap();
+        let err = id.as_things_native().unwrap_err();
+        let msg = err.to_string();
+        assert!(
+            msg.contains("not in Things native format"),
+            "missing format hint, got: {msg}"
+        );
+        assert!(msg.contains("Recreate"), "missing remediation, got: {msg}");
+    }
+
+    #[test]
+    fn base62_encode_22_pads_zero_input() {
+        // All-zero input → 22 leading-zero alphabet chars (i.e. all '0').
+        let s = base62_encode_22(&[0u8; 16]);
+        assert_eq!(s, "0".repeat(22));
+    }
+
+    #[test]
+    fn base62_encode_22_handles_max_input() {
+        // All-0xFF input is the largest u128, which maps to "7n42DGM5Tflk9n8mt7Fhc7"
+        // (21 non-zero chars). Just verify length + alphabet, not the exact value.
+        let s = base62_encode_22(&[0xFFu8; 16]);
+        assert_eq!(s.len(), 22);
+        assert!(s.chars().all(|c| c.is_ascii_alphanumeric()));
     }
 
     #[test]
