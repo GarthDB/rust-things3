@@ -112,6 +112,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **CI: skills frontmatter validation** (#114) — new `.github/workflows/skills.yml` runs `agentskills validate` (PyPI `skills-ref==0.1.1`) on every `skills/*/` directory for PRs that touch `skills/**`. Fails the job if any skill is spec-invalid.
 
 ### Fixed
+- **MCP tool errors no longer drop the connection** (#148) — when a `tools/call`, `resources/read`, or `prompts/get` handler returned an error (e.g. AppleScriptBackend rejecting a malformed task ID with `-1728`), the request loop's `?` propagation terminated the loop, surfacing to the client as `MCP error -32000: Connection closed`. Tool/resource/prompt errors now flow through the existing `*_with_fallback` variants and come back as structured `isError: true` envelopes inside the JSON-RPC `result`; any remaining handler-level error is converted to a JSON-RPC error response (-32600) instead of killing the loop. The server stays up; subsequent requests are answered.
 - **MCP `Prompt.arguments` shape** (#119) — `Prompt.arguments` was a `serde_json::Value` holding a JSON Schema object, which is spec-invalid; the MCP 2025-11-25 spec requires `Vec<PromptArgument>`. Adds a `PromptArgument` struct (`name`, optional `description`, `required: bool`), rewrites the four `create_*_prompt()` helpers, and enables full `ListPromptsResult` schema validation in `test_prompts_list` (previously skipped because of this bug). Spec-strict clients like Claude Code 2.1+ now render prompt arguments correctly.
 
 ## [1.3.0] - 2026-04-27

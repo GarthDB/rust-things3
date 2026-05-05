@@ -563,6 +563,44 @@ pub struct ThingsMcpServer {
     middleware_chain: MiddlewareChain,
 }
 
+/// Build a JSON-RPC error response from a `ThingsError` produced inside the
+/// request loop.
+///
+/// This is the connection-survival path: if `handle_jsonrpc_request` returns
+/// `Err`, we convert it to a structured JSON-RPC error response instead of
+/// propagating with `?` (which would terminate the server loop and drop the
+/// connection — see issue #148).
+///
+/// Returns `None` when the request is a JSON-RPC notification (no `id` field):
+/// the spec forbids responses to notifications, so we silently drop the error.
+///
+/// Tool/resource/prompt errors are NOT routed here — those go through the
+/// `*_with_fallback` variants and surface as `isError: true` envelopes inside
+/// the result. Only protocol-level failures (missing method, malformed params)
+/// reach this helper.
+fn build_jsonrpc_error_response(
+    id: Option<serde_json::Value>,
+    err: &things3_core::ThingsError,
+) -> Option<serde_json::Value> {
+    use serde_json::json;
+
+    // Notifications (no `id`) must not receive a response per JSON-RPC 2.0.
+    let id = id?;
+
+    // -32601 (Method Not Found) is the most precise fit for the protocol-level
+    // failures that reach here: unknown method names, missing dispatch targets.
+    // Use -32603 (Internal Error) only if we ever distinguish structural/parse
+    // errors, which are caught earlier and already map to -32700 / -32600.
+    Some(json!({
+        "jsonrpc": "2.0",
+        "id": id,
+        "error": {
+            "code": -32601,
+            "message": err.to_string()
+        }
+    }))
+}
+
 #[allow(dead_code)]
 /// Start the MCP server
 ///
@@ -615,12 +653,20 @@ pub async fn start_mcp_server_generic<I: McpIo>(
             things3_core::ThingsError::unknown(format!("Failed to parse JSON-RPC request: {}", e))
         })?;
 
-        // Handle the request
+        // Handle the request. If the handler errors we MUST NOT propagate with
+        // `?` — that terminates the loop and drops the MCP connection (#148).
+        // Convert handler errors into JSON-RPC error responses instead.
+        // Extract `id` before consuming `request` so we can use it in the error
+        // path without cloning the entire request value on every hot-path call.
+        let request_id = request.get("id").cloned();
         let server_clone = Arc::clone(&server);
         let response_opt = {
             let server = server_clone.lock().await;
-            server.handle_jsonrpc_request(request).await
-        }?;
+            match server.handle_jsonrpc_request(request).await {
+                Ok(opt) => opt,
+                Err(e) => build_jsonrpc_error_response(request_id, &e),
+            }
+        };
 
         // Only write response if this is a request (not a notification)
         if let Some(response) = response_opt {
@@ -698,12 +744,18 @@ pub async fn start_mcp_server_with_config_generic<I: McpIo>(
             things3_core::ThingsError::unknown(format!("Failed to parse JSON-RPC request: {}", e))
         })?;
 
-        // Handle the request
+        // Handle the request. See note in `start_mcp_server_generic` — handler
+        // errors are converted to JSON-RPC error responses instead of being
+        // propagated with `?`, which would terminate the loop (#148).
+        let request_id = request.get("id").cloned();
         let server_clone = Arc::clone(&server);
         let response_opt = {
             let server = server_clone.lock().await;
-            server.handle_jsonrpc_request(request).await
-        }?;
+            match server.handle_jsonrpc_request(request).await {
+                Ok(opt) => opt,
+                Err(e) => build_jsonrpc_error_response(request_id, &e),
+            }
+        };
 
         // Only write response if this is a request (not a notification)
         if let Some(response) = response_opt {
@@ -4587,9 +4639,12 @@ impl ThingsMcpServer {
                     arguments: Some(arguments),
                 };
 
-                let call_result = self.call_tool(call_request).await.map_err(|e| {
-                    things3_core::ThingsError::unknown(format!("Failed to call tool: {}", e))
-                })?;
+                // Use the fallback variant so tool-level failures (e.g. an
+                // AppleScript backend error) come back as a structured
+                // `{"isError": true, "content": [...]}` envelope inside the
+                // JSON-RPC `result`, rather than propagating up as an `Err`
+                // and dropping the MCP connection (#148).
+                let call_result = self.call_tool_with_fallback(call_request).await;
 
                 json!(call_result)
             }
@@ -4609,9 +4664,8 @@ impl ThingsMcpServer {
                     .to_string();
 
                 let read_request = ReadResourceRequest { uri };
-                let read_result = self.read_resource(read_request).await.map_err(|e| {
-                    things3_core::ThingsError::unknown(format!("Failed to read resource: {}", e))
-                })?;
+                // Same envelope pattern as `tools/call` above (#148).
+                let read_result = self.read_resource_with_fallback(read_request).await;
 
                 json!(read_result)
             }
@@ -4638,9 +4692,8 @@ impl ThingsMcpServer {
                     arguments,
                 };
 
-                let get_result = self.get_prompt(get_request).await.map_err(|e| {
-                    things3_core::ThingsError::unknown(format!("Failed to get prompt: {}", e))
-                })?;
+                // Same envelope pattern as `tools/call` above (#148).
+                let get_result = self.get_prompt_with_fallback(get_request).await;
 
                 json!(get_result)
             }

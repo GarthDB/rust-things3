@@ -9,7 +9,7 @@ use std::collections::HashMap;
 use std::sync::{Arc, OnceLock};
 use tempfile::NamedTempFile;
 use things3_cli::mcp::io_wrapper::{McpIo, MockIo};
-use things3_cli::mcp::start_mcp_server_generic;
+use things3_cli::mcp::{start_mcp_server_generic, start_mcp_server_with_config_generic};
 use things3_core::{ThingsConfig, ThingsDatabase};
 use tokio::time::{timeout, Duration};
 
@@ -420,48 +420,283 @@ async fn test_content_block_serialization() {
 
 #[tokio::test]
 async fn test_tools_call_nonexistent_tool() {
+    // Tripwire for #148: a tool-level error (here, `tools/call` with an
+    // unknown tool name) must surface as a JSON-RPC `result` containing an
+    // `isError: true` envelope — NOT propagate up the request loop and
+    // drop the MCP connection. Earlier behavior was "disconnect or
+    // envelope, either is fine"; that masked a connection-killing bug.
     let (_temp, db) = create_test_db().await;
     let config = ThingsConfig::default();
 
     let (server_io, mut client_io) = MockIo::create_pair(4096);
 
-    let server_handle =
-        tokio::spawn(async move { start_mcp_server_generic(db, config, server_io, true).await });
+    tokio::spawn(async move { start_mcp_server_generic(db, config, server_io, true).await });
 
-    let tools_call_request = json!({
-        "jsonrpc": "2.0",
-        "id": 5,
-        "method": "tools/call",
-        "params": {
-            "name": "nonexistent_tool",
-            "arguments": {}
-        }
+    let response = send_request_read_response(
+        &mut client_io,
+        json!({
+            "jsonrpc": "2.0",
+            "id": 5,
+            "method": "tools/call",
+            "params": {
+                "name": "nonexistent_tool",
+                "arguments": {}
+            }
+        }),
+    )
+    .await;
+
+    assert_eq!(response["jsonrpc"], "2.0");
+    assert_eq!(response["id"], 5);
+    let is_error = response["result"]["isError"].as_bool().unwrap_or(false);
+    assert!(
+        is_error,
+        "Expected isError envelope inside result for unknown tool; got {response}"
+    );
+    let content = response["result"]["content"]
+        .as_array()
+        .expect("CallToolResult.content must be an array even on error");
+    let text = content
+        .first()
+        .and_then(|c| c.get("text"))
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
+    assert!(
+        text.to_lowercase().contains("not found"),
+        "Error envelope text should mention the tool was not found; got {text:?}"
+    );
+}
+
+/// Regression test for issue #148: when a single request triggers a handler
+/// error, the MCP server loop must keep running and answer subsequent
+/// requests. Previously the `?` propagation in the request loop terminated
+/// the entire loop on first error, dropping the connection.
+#[tokio::test]
+async fn test_loop_continues_after_handler_error() {
+    let (_temp, db) = create_test_db().await;
+    let config = ThingsConfig::default();
+
+    let (server_io, mut client_io) = MockIo::create_pair(4096);
+
+    tokio::spawn(async move { start_mcp_server_generic(db, config, server_io, true).await });
+
+    // First request: triggers a tool-level error (unknown tool).
+    let bad_response = send_request_read_response(
+        &mut client_io,
+        json!({
+            "jsonrpc": "2.0",
+            "id": 100,
+            "method": "tools/call",
+            "params": { "name": "nonexistent_tool", "arguments": {} }
+        }),
+    )
+    .await;
+    assert_eq!(bad_response["id"], 100);
+    assert!(
+        bad_response["result"]["isError"].as_bool().unwrap_or(false),
+        "First request must come back as an isError envelope, not crash the loop"
+    );
+
+    // Second request: a normal tools/list. Must succeed because the loop
+    // survived the previous error.
+    let good_response = send_request_read_response(
+        &mut client_io,
+        json!({
+            "jsonrpc": "2.0",
+            "id": 101,
+            "method": "tools/list"
+        }),
+    )
+    .await;
+    assert_eq!(good_response["id"], 101);
+    assert!(
+        good_response["result"]["tools"].is_array(),
+        "Second request after a handler error must still be answered; got {good_response}"
+    );
+}
+
+/// Companion to `test_loop_continues_after_handler_error`: confirms that a
+/// resources/read with an unknown URI also returns a structured envelope
+/// instead of dropping the connection.
+#[tokio::test]
+async fn test_resources_read_unknown_uri_returns_envelope_not_disconnect() {
+    let (_temp, db) = create_test_db().await;
+    let config = ThingsConfig::default();
+
+    let (server_io, mut client_io) = MockIo::create_pair(4096);
+
+    tokio::spawn(async move { start_mcp_server_generic(db, config, server_io, true).await });
+
+    let response = send_request_read_response(
+        &mut client_io,
+        json!({
+            "jsonrpc": "2.0",
+            "id": 200,
+            "method": "resources/read",
+            "params": { "uri": "things3://does-not-exist" }
+        }),
+    )
+    .await;
+
+    assert_eq!(response["id"], 200);
+    // The fallback variant of read_resource emits a `ReadResourceResult` with
+    // an error message in its `contents`. The exact shape is up to
+    // `to_resource_result()`; we just assert the response arrived (no
+    // disconnect) and is well-formed JSON-RPC.
+    assert_eq!(response["jsonrpc"], "2.0");
+    assert!(
+        response["result"].is_object(),
+        "Expected a result envelope, got {response}"
+    );
+
+    // Server is still alive: a subsequent valid request gets answered.
+    let follow_up = send_request_read_response(
+        &mut client_io,
+        json!({
+            "jsonrpc": "2.0",
+            "id": 201,
+            "method": "resources/list"
+        }),
+    )
+    .await;
+    assert_eq!(follow_up["id"], 201);
+    assert!(follow_up["result"]["resources"].is_array());
+}
+
+/// Covers the prompts/get error path: an unknown prompt name must return a
+/// structured envelope instead of dropping the connection.
+#[tokio::test]
+async fn test_prompts_get_error_returns_envelope_not_disconnect() {
+    let (_temp, db) = create_test_db().await;
+    let config = ThingsConfig::default();
+
+    let (server_io, mut client_io) = MockIo::create_pair(4096);
+
+    tokio::spawn(async move { start_mcp_server_generic(db, config, server_io, true).await });
+
+    let response = send_request_read_response(
+        &mut client_io,
+        json!({
+            "jsonrpc": "2.0",
+            "id": 300,
+            "method": "prompts/get",
+            "params": { "name": "nonexistent_prompt" }
+        }),
+    )
+    .await;
+
+    assert_eq!(response["id"], 300);
+    assert_eq!(response["jsonrpc"], "2.0");
+    // Must come back as a well-formed response, not disconnect.
+    assert!(
+        response["result"].is_object() || response["error"].is_object(),
+        "Expected a result or error envelope, got {response}"
+    );
+
+    // Server still alive: a subsequent request is answered.
+    let follow_up = send_request_read_response(
+        &mut client_io,
+        json!({
+            "jsonrpc": "2.0",
+            "id": 301,
+            "method": "tools/list"
+        }),
+    )
+    .await;
+    assert_eq!(follow_up["id"], 301);
+    assert!(follow_up["result"]["tools"].is_array());
+}
+
+/// Covers `start_mcp_server_with_config_generic`: the same error-recovery fix
+/// is present in both server variants. Regression test so a future refactor
+/// can't break the config variant independently of the generic one.
+#[tokio::test]
+async fn test_config_variant_loop_continues_after_error() {
+    use things3_core::McpServerConfig;
+
+    let (_temp, db) = create_test_db().await;
+
+    let (server_io, mut client_io) = MockIo::create_pair(4096);
+
+    tokio::spawn(async move {
+        start_mcp_server_with_config_generic(db, McpServerConfig::default(), server_io, true).await
     });
 
-    // Send request
-    let request_str = serde_json::to_string(&tools_call_request).unwrap();
-    client_io.write_line(&request_str).await.unwrap();
+    // First request: unknown tool → error envelope.
+    let bad_response = send_request_read_response(
+        &mut client_io,
+        json!({
+            "jsonrpc": "2.0",
+            "id": 400,
+            "method": "tools/call",
+            "params": { "name": "nonexistent_tool", "arguments": {} }
+        }),
+    )
+    .await;
+    assert_eq!(bad_response["id"], 400);
+    assert!(
+        bad_response["result"]["isError"].as_bool().unwrap_or(false),
+        "Config variant must return isError envelope, not disconnect; got {bad_response}"
+    );
+
+    // Second request: must succeed — loop survived.
+    let good_response = send_request_read_response(
+        &mut client_io,
+        json!({
+            "jsonrpc": "2.0",
+            "id": 401,
+            "method": "tools/list"
+        }),
+    )
+    .await;
+    assert_eq!(good_response["id"], 401);
+    assert!(good_response["result"]["tools"].is_array());
+}
+
+/// Verifies `build_jsonrpc_error_response` notification path: when a
+/// JSON-RPC notification (no `id`) triggers a handler error, the server
+/// must stay silent — sending a response to a notification is a protocol
+/// violation.
+#[tokio::test]
+async fn test_notification_error_produces_no_response() {
+    let (_temp, db) = create_test_db().await;
+    let config = ThingsConfig::default();
+
+    let (server_io, mut client_io) = MockIo::create_pair(4096);
+
+    tokio::spawn(async move { start_mcp_server_generic(db, config, server_io, true).await });
+
+    // Send a notification (no `id`) with an unknown method. The server must
+    // not write any response for this — notifications are fire-and-forget.
+    client_io
+        .write_line(
+            &serde_json::to_string(&json!({
+                "jsonrpc": "2.0",
+                "method": "notifications/unknown_event",
+                "params": {}
+            }))
+            .unwrap(),
+        )
+        .await
+        .unwrap();
     client_io.flush().await.unwrap();
 
-    // Try to read response - server might error and close connection
-    let result = timeout(Duration::from_millis(500), client_io.read_line()).await;
-
-    if let Ok(Ok(Some(response_line))) = result {
-        let response: serde_json::Value = serde_json::from_str(&response_line).unwrap();
-        assert_eq!(response["jsonrpc"], "2.0");
-        assert_eq!(response["id"], 5);
-        // Should return error for nonexistent tool
-        let is_error = response["result"]["is_error"].as_bool().unwrap_or(false);
-        assert!(
-            is_error || response["error"].is_object(),
-            "Should indicate error for nonexistent tool"
-        );
-    } else {
-        // Server may have errored and closed - that's also acceptable behavior
-        // Just verify the server handle completed
-        drop(client_io);
-        let _ = timeout(Duration::from_secs(1), server_handle).await;
-    }
+    // Now send a real request immediately after. The first response we read
+    // must belong to this request, not to the notification above.
+    let response = send_request_read_response(
+        &mut client_io,
+        json!({
+            "jsonrpc": "2.0",
+            "id": 500,
+            "method": "tools/list"
+        }),
+    )
+    .await;
+    assert_eq!(
+        response["id"], 500,
+        "First response must be for id=500 (the tools/list), not a spurious notification reply"
+    );
+    assert!(response["result"]["tools"].is_array());
 }
 
 // ============================================================================
