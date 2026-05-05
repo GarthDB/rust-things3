@@ -9,7 +9,7 @@ use std::collections::HashMap;
 use std::sync::{Arc, OnceLock};
 use tempfile::NamedTempFile;
 use things3_cli::mcp::io_wrapper::{McpIo, MockIo};
-use things3_cli::mcp::start_mcp_server_generic;
+use things3_cli::mcp::{start_mcp_server_generic, start_mcp_server_with_config_generic};
 use things3_core::{ThingsConfig, ThingsDatabase};
 use tokio::time::{timeout, Duration};
 
@@ -561,6 +561,142 @@ async fn test_resources_read_unknown_uri_returns_envelope_not_disconnect() {
     .await;
     assert_eq!(follow_up["id"], 201);
     assert!(follow_up["result"]["resources"].is_array());
+}
+
+/// Covers the prompts/get error path: an unknown prompt name must return a
+/// structured envelope instead of dropping the connection.
+#[tokio::test]
+async fn test_prompts_get_error_returns_envelope_not_disconnect() {
+    let (_temp, db) = create_test_db().await;
+    let config = ThingsConfig::default();
+
+    let (server_io, mut client_io) = MockIo::create_pair(4096);
+
+    tokio::spawn(async move { start_mcp_server_generic(db, config, server_io, true).await });
+
+    let response = send_request_read_response(
+        &mut client_io,
+        json!({
+            "jsonrpc": "2.0",
+            "id": 300,
+            "method": "prompts/get",
+            "params": { "name": "nonexistent_prompt" }
+        }),
+    )
+    .await;
+
+    assert_eq!(response["id"], 300);
+    assert_eq!(response["jsonrpc"], "2.0");
+    // Must come back as a well-formed response, not disconnect.
+    assert!(
+        response["result"].is_object() || response["error"].is_object(),
+        "Expected a result or error envelope, got {response}"
+    );
+
+    // Server still alive: a subsequent request is answered.
+    let follow_up = send_request_read_response(
+        &mut client_io,
+        json!({
+            "jsonrpc": "2.0",
+            "id": 301,
+            "method": "tools/list"
+        }),
+    )
+    .await;
+    assert_eq!(follow_up["id"], 301);
+    assert!(follow_up["result"]["tools"].is_array());
+}
+
+/// Covers `start_mcp_server_with_config_generic`: the same error-recovery fix
+/// is present in both server variants. Regression test so a future refactor
+/// can't break the config variant independently of the generic one.
+#[tokio::test]
+async fn test_config_variant_loop_continues_after_error() {
+    use things3_core::McpServerConfig;
+
+    let (_temp, db) = create_test_db().await;
+
+    let (server_io, mut client_io) = MockIo::create_pair(4096);
+
+    tokio::spawn(async move {
+        start_mcp_server_with_config_generic(db, McpServerConfig::default(), server_io, true).await
+    });
+
+    // First request: unknown tool → error envelope.
+    let bad_response = send_request_read_response(
+        &mut client_io,
+        json!({
+            "jsonrpc": "2.0",
+            "id": 400,
+            "method": "tools/call",
+            "params": { "name": "nonexistent_tool", "arguments": {} }
+        }),
+    )
+    .await;
+    assert_eq!(bad_response["id"], 400);
+    assert!(
+        bad_response["result"]["isError"].as_bool().unwrap_or(false),
+        "Config variant must return isError envelope, not disconnect; got {bad_response}"
+    );
+
+    // Second request: must succeed — loop survived.
+    let good_response = send_request_read_response(
+        &mut client_io,
+        json!({
+            "jsonrpc": "2.0",
+            "id": 401,
+            "method": "tools/list"
+        }),
+    )
+    .await;
+    assert_eq!(good_response["id"], 401);
+    assert!(good_response["result"]["tools"].is_array());
+}
+
+/// Verifies `build_jsonrpc_error_response` notification path: when a
+/// JSON-RPC notification (no `id`) triggers a handler error, the server
+/// must stay silent — sending a response to a notification is a protocol
+/// violation.
+#[tokio::test]
+async fn test_notification_error_produces_no_response() {
+    let (_temp, db) = create_test_db().await;
+    let config = ThingsConfig::default();
+
+    let (server_io, mut client_io) = MockIo::create_pair(4096);
+
+    tokio::spawn(async move { start_mcp_server_generic(db, config, server_io, true).await });
+
+    // Send a notification (no `id`) with an unknown method. The server must
+    // not write any response for this — notifications are fire-and-forget.
+    client_io
+        .write_line(
+            &serde_json::to_string(&json!({
+                "jsonrpc": "2.0",
+                "method": "notifications/unknown_event",
+                "params": {}
+            }))
+            .unwrap(),
+        )
+        .await
+        .unwrap();
+    client_io.flush().await.unwrap();
+
+    // Now send a real request immediately after. The first response we read
+    // must belong to this request, not to the notification above.
+    let response = send_request_read_response(
+        &mut client_io,
+        json!({
+            "jsonrpc": "2.0",
+            "id": 500,
+            "method": "tools/list"
+        }),
+    )
+    .await;
+    assert_eq!(
+        response["id"], 500,
+        "First response must be for id=500 (the tools/list), not a spurious notification reply"
+    );
+    assert!(response["result"]["tools"].is_array());
 }
 
 // ============================================================================

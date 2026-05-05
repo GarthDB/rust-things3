@@ -579,23 +579,23 @@ pub struct ThingsMcpServer {
 /// the result. Only protocol-level failures (missing method, malformed params)
 /// reach this helper.
 fn build_jsonrpc_error_response(
-    request: &serde_json::Value,
+    id: Option<serde_json::Value>,
     err: &things3_core::ThingsError,
 ) -> Option<serde_json::Value> {
     use serde_json::json;
 
-    // Notifications don't get responses, even on error.
-    let id = request.get("id")?.clone();
+    // Notifications (no `id`) must not receive a response per JSON-RPC 2.0.
+    let id = id?;
 
-    // -32600 (Invalid Request) covers the protocol-shape errors that can
-    // currently bubble up: missing `method`, missing tool/resource/prompt
-    // name, etc. Wider catch-all than -32603 because in practice these are
-    // all "your request was malformed" rather than "the server is broken".
+    // -32601 (Method Not Found) is the most precise fit for the protocol-level
+    // failures that reach here: unknown method names, missing dispatch targets.
+    // Use -32603 (Internal Error) only if we ever distinguish structural/parse
+    // errors, which are caught earlier and already map to -32700 / -32600.
     Some(json!({
         "jsonrpc": "2.0",
         "id": id,
         "error": {
-            "code": -32600,
+            "code": -32601,
             "message": err.to_string()
         }
     }))
@@ -656,12 +656,15 @@ pub async fn start_mcp_server_generic<I: McpIo>(
         // Handle the request. If the handler errors we MUST NOT propagate with
         // `?` — that terminates the loop and drops the MCP connection (#148).
         // Convert handler errors into JSON-RPC error responses instead.
+        // Extract `id` before consuming `request` so we can use it in the error
+        // path without cloning the entire request value on every hot-path call.
+        let request_id = request.get("id").cloned();
         let server_clone = Arc::clone(&server);
         let response_opt = {
             let server = server_clone.lock().await;
-            match server.handle_jsonrpc_request(request.clone()).await {
+            match server.handle_jsonrpc_request(request).await {
                 Ok(opt) => opt,
-                Err(e) => build_jsonrpc_error_response(&request, &e),
+                Err(e) => build_jsonrpc_error_response(request_id, &e),
             }
         };
 
@@ -744,12 +747,13 @@ pub async fn start_mcp_server_with_config_generic<I: McpIo>(
         // Handle the request. See note in `start_mcp_server_generic` — handler
         // errors are converted to JSON-RPC error responses instead of being
         // propagated with `?`, which would terminate the loop (#148).
+        let request_id = request.get("id").cloned();
         let server_clone = Arc::clone(&server);
         let response_opt = {
             let server = server_clone.lock().await;
-            match server.handle_jsonrpc_request(request.clone()).await {
+            match server.handle_jsonrpc_request(request).await {
                 Ok(opt) => opt,
-                Err(e) => build_jsonrpc_error_response(&request, &e),
+                Err(e) => build_jsonrpc_error_response(request_id, &e),
             }
         };
 
