@@ -8,6 +8,7 @@ Reusable skill files for driving Things 3 from AI agents via the rust-things3 MC
 |-------|-------------|
 | [`things3`](things3/SKILL.md) | Foundational skill — MCP setup and full tool catalog. Use this first; other skills depend on it for setup. |
 | [`things3-daily-review`](things3-daily-review/SKILL.md) | Read-only daily review workflow. Pulls today's tasks, inbox, and recent work; produces a structured Markdown summary grouped by area and project with overdue items flagged. |
+| [`things3-inbox-triage`](things3-inbox-triage/SKILL.md) | GTD-style inbox triage. Walks each inbox item, classifies it (do-now / schedule / delegate / archive / delete), and applies the user's choice via MCP write tools. Confirms before destructive ops. |
 
 ## Install instructions
 
@@ -16,15 +17,16 @@ Skills are loaded from a local directory that your AI host watches. The steps be
 ### Claude Code
 
 ```bash
-# Copy both skills to your Claude Code skills directory
+# Copy all skills to your Claude Code skills directory
 cp -r skills/things3 ~/.claude/skills/things3
 cp -r skills/things3-daily-review ~/.claude/skills/things3-daily-review
+cp -r skills/things3-inbox-triage ~/.claude/skills/things3-inbox-triage
 ```
 
 Then add `trigger` keys so the skills are available as slash commands:
 
 ```bash
-for skill in things3 things3-daily-review; do
+for skill in things3 things3-daily-review things3-inbox-triage; do
   python3 -c "
 import pathlib, re
 p = pathlib.Path('~/.claude/skills/$skill/SKILL.md').expanduser()
@@ -33,7 +35,7 @@ p.write_text(re.sub(r'(?m)^---$(?=\n\n)', 'trigger: /$skill\n---', p.read_text()
 done
 ```
 
-Use with `/things3` and `/things3-daily-review` in Claude Code.
+Use with `/things3`, `/things3-daily-review`, and `/things3-inbox-triage` in Claude Code.
 
 ### Claude Desktop, Cursor, Zed
 
@@ -42,6 +44,7 @@ Check your host's documentation for the skills directory path, then copy the ski
 ```bash
 cp -r skills/things3 /path/to/host/skills/things3
 cp -r skills/things3-daily-review /path/to/host/skills/things3-daily-review
+cp -r skills/things3-inbox-triage /path/to/host/skills/things3-inbox-triage
 ```
 
 ## Spec compliance
@@ -52,6 +55,7 @@ Skills are validated with [`skills-ref`](https://pypi.org/project/skills-ref/) (
 pip install skills-ref
 agentskills validate skills/things3
 agentskills validate skills/things3-daily-review
+agentskills validate skills/things3-inbox-triage
 ```
 
 CI runs this automatically on every PR that touches `skills/`.

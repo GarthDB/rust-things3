@@ -134,5 +134,5 @@ Flag overdue items in both the **Today** and **Recent** sections wherever they a
 
 ## Notes
 
-- This skill is read-only — it makes no mutations. For processing inbox items, see the companion `things3-inbox-triage` skill (coming soon).
+- This skill is read-only — it makes no mutations. For processing inbox items, see the companion [`things3-inbox-triage`](../things3-inbox-triage/SKILL.md) skill.
 - Things 3 must be running on macOS for the MCP server to reach its database.

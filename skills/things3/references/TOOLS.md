@@ -61,6 +61,8 @@ All fields optional. `limit` max 500, default 50.
 
 ---
 
+> **Mutation backend.** All write tools below (Task / Project / Area / Bulk / Tag CRUD / Tag assignment) route through **AppleScript** by default on macOS — CulturedCode-supported, no data-corruption risk. First call may trigger a macOS Automation permission prompt. To re-enable the deprecated direct-SQLite backend (e.g. on Linux/CI), launch with `--unsafe-direct-db` or `THINGS_UNSAFE_DIRECT_DB=1`. See [SKILL.md → Mutation backend](../SKILL.md#mutation-backend) for full details.
+
 ## Task mutations
 
 ### `create_task`
@@ -195,7 +197,10 @@ Soft-delete a project.
 
 ---
 
-## Bulk operations (all transactional — all-or-nothing)
+## Bulk operations
+
+Each bulk call processes its items in a single AppleScript invocation with per-item try/catch. The result reports `success: true` only when every item succeeded; partial failures surface via the response message and `processed_count`. (Pre-AppleScript, these were SQL transactions — all-or-nothing — but the database is no longer written to directly.)
+
 
 ### `bulk_move`
 Move multiple tasks to a project or area.
@@ -352,9 +357,17 @@ Full data export. No parameters.
 Create a database backup. No parameters.
 
 ### `restore_database`
-Restore from backup. No parameters in the current MCP API — the backup path cannot be specified via this tool. If you have multiple backups (see `list_backups`), you will need to restore the desired file to the default backup location before calling this tool, or restore manually outside the MCP server.
+Restore from a specific backup file. Overwrites the live Things 3 SQLite file directly.
+```json
+{ "backup_path": "/path/to/backup.sqlite" }
+```
+`backup_path` required.
 
-> **Known gap**: `list_backups` accepts a `backup_dir` and implies multiple backups may exist, but `restore_database` provides no way to select among them. Tracked in #126.
+> **Gated.** This tool refuses to run unless **both** are true:
+> 1. The server was launched with `--unsafe-direct-db` (or `THINGS_UNSAFE_DIRECT_DB=1`). Without this flag the call returns a validation error referencing the [CulturedCode warning](https://culturedcode.com/things/support/articles/5510170/).
+> 2. Things 3 is not running. Quit Things 3 (Cmd-Q) first.
+>
+> See [SKILL.md → Mutation backend](../SKILL.md#mutation-backend) for the rationale.
 
 ### `list_backups`
 ```json
