@@ -53,7 +53,7 @@ impl ThingsId {
     /// entities.
     #[must_use]
     #[cfg_attr(
-        not(test),
+        not(any(test, feature = "test-utils")),
         deprecated(
             since = "1.5.0",
             note = "Use `new_things_native()` for entities that may be referenced via AppleScript"
