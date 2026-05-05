@@ -102,6 +102,7 @@ impl ThingsId {
     /// AppleScript-driving call sites use this to fail fast with a useful
     /// message instead of letting a hyphenated UUID reach `osascript`
     /// (which returns the opaque error `-1728` "Can't get to do id ...").
+    #[cfg(target_os = "macos")]
     pub(crate) fn as_things_native(&self) -> Result<&str, ThingsError> {
         if Self::is_things_native(&self.0) {
             Ok(&self.0)
@@ -208,18 +209,21 @@ mod things_id_tests {
         assert_eq!(ids.len(), 1000);
     }
 
+    #[cfg(target_os = "macos")]
     #[test]
     fn as_things_native_accepts_native_id() {
         let id: ThingsId = "R4t2G8Q63aGZq4epMHNeCr".parse().unwrap();
         assert_eq!(id.as_things_native().unwrap(), "R4t2G8Q63aGZq4epMHNeCr");
     }
 
+    #[cfg(target_os = "macos")]
     #[test]
     fn as_things_native_accepts_21_char_native_id() {
         let id: ThingsId = "19KLMeA2ULbixtvNbXsDK".parse().unwrap();
         assert_eq!(id.as_things_native().unwrap(), "19KLMeA2ULbixtvNbXsDK");
     }
 
+    #[cfg(target_os = "macos")]
     #[test]
     fn as_things_native_rejects_hyphenated_uuid() {
         let id: ThingsId = "9d3f1e44-5c2a-4b8e-9c1f-7e2d8a4b3c5e".parse().unwrap();
