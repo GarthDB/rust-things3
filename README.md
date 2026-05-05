@@ -412,6 +412,34 @@ cargo llvm-cov --workspace --all-features --html
 open target/llvm-cov/html/index.html
 ```
 
+### Running live AppleScript tests (macOS only)
+
+The `AppleScriptBackend` integration tests drive a real Things 3 install
+through `osascript`. They are gated and ignored by default — `cargo test`
+on CI / Linux / a Mac without Things 3 will not run them.
+
+Prerequisites:
+- macOS with [Things 3](https://culturedcode.com/things/) installed.
+- The first invocation triggers the macOS Automation permission prompt
+  ("rust-things3 wants to control Things3"). Grant it via System Settings →
+  Privacy & Security → Automation, or the tests will fail with a clear
+  permission-denied error.
+
+Run with:
+
+```bash
+THINGS3_LIVE_TESTS=1 cargo test -p things3-core --test applescript_live \
+    -- --ignored --test-threads=1
+```
+
+`--test-threads=1` is required: every test mutates the single shared
+Things 3 instance, and concurrent runs would race. Each test creates
+entities with a unique `rust-things3 e2e {ts}-{uuid}`-style title and
+deletes them on completion (a Drop guard ensures cleanup even on panic).
+For background on why the project uses AppleScript instead of writing the
+SQLite database directly, see [CulturedCode's safety
+article](https://culturedcode.com/things/support/articles/5510170/).
+
 See [Development Guide](docs/DEVELOPMENT.md) for more testing details.
 
 ## Development

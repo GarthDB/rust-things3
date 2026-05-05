@@ -31,6 +31,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **AppleScriptBackend Phase E: live integration tests + docs** (#137) — closes #124. New
+  `libs/things3-core/tests/applescript_live.rs` with `THINGS3_LIVE_TESTS=1`-gated lifecycle
+  tests for tasks, projects, areas, and tags (one per domain). Each test creates uniquely-named
+  entities, exercises the canonical create→update→…→delete flow through the `MutationBackend`
+  trait surface, and removes them on completion. A `Drop` guard runs the deletion on a
+  freshly-spawned single-threaded tokio runtime so cleanup still fires if a test panics. The
+  README's `## Testing` section gains a "Running live AppleScript tests" subsection covering
+  prerequisites (Things 3 install, Automation TCC grant) and the required `--test-threads=1`
+  flag. The previous in-module `task_lifecycle_round_trip` was migrated verbatim into the new
+  file. The production default-switch and the `--unsafe-direct-db` opt-out remain in #125.
 - **AppleScriptBackend Phase D: tag operations** (#136) — implements the remaining 7
   `MutationBackend` stubs in `AppleScriptBackend`: `create_tag` (with `force` flag, smart-flow
   read via `find_tag_by_normalized_title` + `find_similar_tags` ≥0.8 before any AS write),
@@ -43,7 +53,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `SimilarFound` before any AS spawn, while only the unambiguous-write path routes through
   osascript. Things AppleScript does not expose `shortcut` or `parent` properties on `tag`, so
   `CreateTagRequest::shortcut` / `parent_uuid` and the equivalents on `UpdateTagRequest` are
-  silently dropped with a `tracing::debug!` log. Closes #124 once Phase E (#137) lands.
+  silently dropped with a `tracing::debug!` log. Closes #124 (with #137).
 - **AppleScriptBackend Phase C: projects, areas, bulk operations** (#135) — implements 12 of the 16
   remaining `MutationBackend` stubs in `AppleScriptBackend`: `create_project`, `update_project`,
   `complete_project`, `delete_project` (all three `ProjectChildHandling` modes — Error, Cascade,
