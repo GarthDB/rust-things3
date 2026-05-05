@@ -52,6 +52,13 @@ impl ThingsId {
     /// Generate a fresh hyphenated UUID, suitable for `SqlxBackend`-created
     /// entities.
     #[must_use]
+    #[cfg_attr(
+        not(test),
+        deprecated(
+            since = "1.5.0",
+            note = "Use `new_things_native()` for entities that may be referenced via AppleScript"
+        )
+    )]
     pub fn new_v4() -> Self {
         Self(Uuid::new_v4().to_string())
     }
@@ -123,6 +130,9 @@ impl ThingsId {
 /// `0-9A-Za-z`). 16 bytes = 128 bits; 22 base62 chars hold ~131 bits, so
 /// the encoding is fixed-length with leading-zero padding.
 fn base62_encode_22(bytes: &[u8; 16]) -> String {
+    // Alphabet is 0-9A-Za-z (digits, uppercase, lowercase). Arbitrary but
+    // stable — Things 3's native-ID check only requires length 21-22 and
+    // ASCII alphanumeric, not a specific ordering.
     const ALPHABET: &[u8; 62] = b"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
     let mut n = u128::from_be_bytes(*bytes);
     let mut out = [b'0'; 22];
