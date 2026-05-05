@@ -52,13 +52,6 @@ impl ThingsId {
     /// Generate a fresh hyphenated UUID, suitable for `SqlxBackend`-created
     /// entities.
     #[must_use]
-    #[cfg_attr(
-        not(any(test, feature = "test-utils")),
-        deprecated(
-            since = "1.5.0",
-            note = "Use `new_things_native()` for entities that may be referenced via AppleScript"
-        )
-    )]
     pub fn new_v4() -> Self {
         Self(Uuid::new_v4().to_string())
     }
