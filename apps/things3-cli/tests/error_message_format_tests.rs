@@ -14,7 +14,7 @@ async fn create_invalid_mcp_server() -> ThingsMcpServer {
         .unwrap();
 
     let config = ThingsConfig::for_testing().unwrap();
-    ThingsMcpServer::new(db.into(), config)
+    ThingsMcpServer::new(db.into(), config, true)
 }
 
 #[tokio::test]

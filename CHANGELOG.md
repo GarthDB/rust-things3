@@ -29,6 +29,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`MutationBackend` trait** — all 21 method signatures updated to use `ThingsId` for entity
   IDs. Existing impls of `MutationBackend` must update their method signatures to match.
 
+### Changed
+
+- **Default mutation backend on macOS is now `AppleScriptBackend`** (#125). All MCP write
+  tools route through the Things 3 app via osascript per CulturedCode's safety guidance
+  (https://culturedcode.com/things/support/articles/5510170/), eliminating the
+  data-corruption risk of direct SQLite writes. Linux/CI continues to use `SqlxBackend` as
+  the default (no Things 3 install to corrupt). **Closes #120.**
+
+### Deprecated
+
+- **`SqlxBackend` (direct SQLite writes) is gated behind `--unsafe-direct-db`** /
+  `THINGS_UNSAFE_DIRECT_DB=1`. Setting the flag emits a loud multi-line startup banner
+  (suppressed in MCP mode for JSON-RPC purity). The flag will be removed in a future
+  release; integrations writing directly to the database should migrate to AppleScript.
+- **`restore_database` MCP tool now requires both `--unsafe-direct-db` AND that Things 3 is
+  not running** (`pgrep -x Things3` returns nothing). The argument-parse error
+  (`backup_path` missing) still fires before the gate so client error handling stays
+  unchanged for that case. **Closes #126.**
+
 ### Added
 
 - **AppleScriptBackend Phase E: live integration tests + docs** (#137) — closes #124. New

@@ -159,7 +159,7 @@ async fn run_initialize_handshake_for(
     let (server_io, mut client_io) = MockIo::create_pair(4096);
 
     let server_handle =
-        tokio::spawn(async move { start_mcp_server_generic(db, config, server_io).await });
+        tokio::spawn(async move { start_mcp_server_generic(db, config, server_io, true).await });
 
     let initialize_request = json!({
         "jsonrpc": "2.0",
@@ -235,7 +235,7 @@ async fn test_initialize_response_structure() {
 
     let (server_io, mut client_io) = MockIo::create_pair(4096);
 
-    tokio::spawn(async move { start_mcp_server_generic(db, config, server_io).await });
+    tokio::spawn(async move { start_mcp_server_generic(db, config, server_io, true).await });
 
     let initialize_request = json!({
         "jsonrpc": "2.0",
@@ -269,7 +269,7 @@ async fn test_tools_list() {
 
     let (server_io, mut client_io) = MockIo::create_pair(4096);
 
-    tokio::spawn(async move { start_mcp_server_generic(db, config, server_io).await });
+    tokio::spawn(async move { start_mcp_server_generic(db, config, server_io, true).await });
 
     let tools_list_request = json!({
         "jsonrpc": "2.0",
@@ -306,7 +306,7 @@ async fn test_tools_call_get_today() {
 
     let (server_io, mut client_io) = MockIo::create_pair(4096);
 
-    tokio::spawn(async move { start_mcp_server_generic(db, config, server_io).await });
+    tokio::spawn(async move { start_mcp_server_generic(db, config, server_io, true).await });
 
     let tools_call_request = json!({
         "jsonrpc": "2.0",
@@ -338,7 +338,7 @@ async fn test_tools_call_get_inbox() {
 
     let (server_io, mut client_io) = MockIo::create_pair(4096);
 
-    tokio::spawn(async move { start_mcp_server_generic(db, config, server_io).await });
+    tokio::spawn(async move { start_mcp_server_generic(db, config, server_io, true).await });
 
     let tools_call_request = json!({
         "jsonrpc": "2.0",
@@ -376,7 +376,7 @@ async fn test_content_block_serialization() {
 
     let (server_io, mut client_io) = MockIo::create_pair(4096);
 
-    tokio::spawn(async move { start_mcp_server_generic(db, config, server_io).await });
+    tokio::spawn(async move { start_mcp_server_generic(db, config, server_io, true).await });
 
     let response = send_request_read_response(
         &mut client_io,
@@ -426,7 +426,7 @@ async fn test_tools_call_nonexistent_tool() {
     let (server_io, mut client_io) = MockIo::create_pair(4096);
 
     let server_handle =
-        tokio::spawn(async move { start_mcp_server_generic(db, config, server_io).await });
+        tokio::spawn(async move { start_mcp_server_generic(db, config, server_io, true).await });
 
     let tools_call_request = json!({
         "jsonrpc": "2.0",
@@ -475,7 +475,7 @@ async fn test_resources_list() {
 
     let (server_io, mut client_io) = MockIo::create_pair(4096);
 
-    tokio::spawn(async move { start_mcp_server_generic(db, config, server_io).await });
+    tokio::spawn(async move { start_mcp_server_generic(db, config, server_io, true).await });
 
     let resources_list_request = json!({
         "jsonrpc": "2.0",
@@ -504,7 +504,7 @@ async fn test_resources_read() {
     let (server_io, mut client_io) = MockIo::create_pair(4096);
 
     let server_handle =
-        tokio::spawn(async move { start_mcp_server_generic(db, config, server_io).await });
+        tokio::spawn(async move { start_mcp_server_generic(db, config, server_io, true).await });
 
     let resources_read_request = json!({
         "jsonrpc": "2.0",
@@ -547,7 +547,7 @@ async fn test_prompts_list() {
 
     let (server_io, mut client_io) = MockIo::create_pair(4096);
 
-    tokio::spawn(async move { start_mcp_server_generic(db, config, server_io).await });
+    tokio::spawn(async move { start_mcp_server_generic(db, config, server_io, true).await });
 
     let prompts_list_request = json!({
         "jsonrpc": "2.0",
@@ -570,7 +570,7 @@ async fn test_prompts_get() {
     let (server_io, mut client_io) = MockIo::create_pair(4096);
 
     let server_handle =
-        tokio::spawn(async move { start_mcp_server_generic(db, config, server_io).await });
+        tokio::spawn(async move { start_mcp_server_generic(db, config, server_io, true).await });
 
     let prompts_get_request = json!({
         "jsonrpc": "2.0",
@@ -615,7 +615,7 @@ async fn test_malformed_json() {
     let (server_io, mut client_io) = MockIo::create_pair(4096);
 
     let server_handle =
-        tokio::spawn(async move { start_mcp_server_generic(db, config, server_io).await });
+        tokio::spawn(async move { start_mcp_server_generic(db, config, server_io, true).await });
 
     // Send malformed JSON
     client_io.write_line("{invalid json}").await.unwrap();
@@ -637,7 +637,7 @@ async fn test_missing_method() {
 
     let (server_io, mut client_io) = MockIo::create_pair(4096);
 
-    tokio::spawn(async move { start_mcp_server_generic(db, config, server_io).await });
+    tokio::spawn(async move { start_mcp_server_generic(db, config, server_io, true).await });
 
     let request_without_method = json!({
         "jsonrpc": "2.0",
@@ -664,7 +664,7 @@ async fn test_unknown_method() {
 
     let (server_io, mut client_io) = MockIo::create_pair(4096);
 
-    tokio::spawn(async move { start_mcp_server_generic(db, config, server_io).await });
+    tokio::spawn(async move { start_mcp_server_generic(db, config, server_io, true).await });
 
     let unknown_method_request = json!({
         "jsonrpc": "2.0",
@@ -688,7 +688,7 @@ async fn test_empty_line_handling() {
 
     let (server_io, mut client_io) = MockIo::create_pair(4096);
 
-    tokio::spawn(async move { start_mcp_server_generic(db, config, server_io).await });
+    tokio::spawn(async move { start_mcp_server_generic(db, config, server_io, true).await });
 
     // Send empty lines (should be ignored)
     client_io.write_line("").await.unwrap();
@@ -721,7 +721,7 @@ async fn test_multiple_sequential_requests() {
 
     let (server_io, mut client_io) = MockIo::create_pair(8192);
 
-    tokio::spawn(async move { start_mcp_server_generic(db, config, server_io).await });
+    tokio::spawn(async move { start_mcp_server_generic(db, config, server_io, true).await });
 
     // Send multiple requests
     for i in 1..=5 {
@@ -747,7 +747,7 @@ async fn test_notification_no_response() {
 
     let (server_io, mut client_io) = MockIo::create_pair(4096);
 
-    tokio::spawn(async move { start_mcp_server_generic(db, config, server_io).await });
+    tokio::spawn(async move { start_mcp_server_generic(db, config, server_io, true).await });
 
     // Send notification (no id field)
     let notification = json!({
@@ -788,9 +788,9 @@ async fn test_start_mcp_server_with_config() {
 
     let (server_io, mut client_io) = MockIo::create_pair(4096);
 
-    tokio::spawn(
-        async move { start_mcp_server_with_config_generic(db, mcp_config, server_io).await },
-    );
+    tokio::spawn(async move {
+        start_mcp_server_with_config_generic(db, mcp_config, server_io, true).await
+    });
 
     // Test that server works with config
     let initialize_request = json!({
@@ -817,9 +817,9 @@ async fn test_start_mcp_server_with_config_tools() {
 
     let (server_io, mut client_io) = MockIo::create_pair(4096);
 
-    tokio::spawn(
-        async move { start_mcp_server_with_config_generic(db, mcp_config, server_io).await },
-    );
+    tokio::spawn(async move {
+        start_mcp_server_with_config_generic(db, mcp_config, server_io, true).await
+    });
 
     // Test tools/call with config
     let tools_call_request = json!({
@@ -847,7 +847,7 @@ async fn test_io_error_handling() {
     let (server_io, client_io) = MockIo::create_pair(4096);
 
     let server_handle =
-        tokio::spawn(async move { start_mcp_server_generic(db, config, server_io).await });
+        tokio::spawn(async move { start_mcp_server_generic(db, config, server_io, true).await });
 
     // Drop client immediately to trigger EOF
     drop(client_io);
@@ -869,7 +869,7 @@ async fn test_json_serialization_coverage() {
 
     let (server_io, mut client_io) = MockIo::create_pair(4096);
 
-    tokio::spawn(async move { start_mcp_server_generic(db, config, server_io).await });
+    tokio::spawn(async move { start_mcp_server_generic(db, config, server_io, true).await });
 
     // Test various request types to cover more code paths
     let requests = vec![
@@ -892,7 +892,7 @@ async fn test_mixed_requests_and_notifications() {
 
     let (server_io, mut client_io) = MockIo::create_pair(4096);
 
-    tokio::spawn(async move { start_mcp_server_generic(db, config, server_io).await });
+    tokio::spawn(async move { start_mcp_server_generic(db, config, server_io, true).await });
 
     // Send a mix of requests and notifications
     let notification = json!({
@@ -923,7 +923,7 @@ async fn test_all_available_tools() {
 
     let (server_io, mut client_io) = MockIo::create_pair(8192);
 
-    tokio::spawn(async move { start_mcp_server_generic(db, config, server_io).await });
+    tokio::spawn(async move { start_mcp_server_generic(db, config, server_io, true).await });
 
     // Get list of tools
     let tools_list_request = json!({
@@ -964,7 +964,7 @@ async fn test_large_response_handling() {
 
     let (server_io, mut client_io) = MockIo::create_pair(65536); // Large buffer
 
-    tokio::spawn(async move { start_mcp_server_generic(db, config, server_io).await });
+    tokio::spawn(async move { start_mcp_server_generic(db, config, server_io, true).await });
 
     // Request that might return large data
     let request = json!({
@@ -989,7 +989,7 @@ async fn test_sequential_initialize_calls() {
 
     let (server_io, mut client_io) = MockIo::create_pair(4096);
 
-    tokio::spawn(async move { start_mcp_server_generic(db, config, server_io).await });
+    tokio::spawn(async move { start_mcp_server_generic(db, config, server_io, true).await });
 
     // Call initialize multiple times (should handle gracefully)
     for i in 1..=3 {
@@ -1017,9 +1017,9 @@ async fn test_config_with_empty_lines() {
 
     let (server_io, mut client_io) = MockIo::create_pair(4096);
 
-    tokio::spawn(
-        async move { start_mcp_server_with_config_generic(db, mcp_config, server_io).await },
-    );
+    tokio::spawn(async move {
+        start_mcp_server_with_config_generic(db, mcp_config, server_io, true).await
+    });
 
     // Send empty lines (should be skipped)
     client_io.write_line("").await.unwrap();
@@ -1046,7 +1046,7 @@ async fn test_rapid_requests() {
 
     let (server_io, mut client_io) = MockIo::create_pair(32768); // Extra large buffer
 
-    tokio::spawn(async move { start_mcp_server_generic(db, config, server_io).await });
+    tokio::spawn(async move { start_mcp_server_generic(db, config, server_io, true).await });
 
     // Send many requests rapidly
     for i in 1..=20 {

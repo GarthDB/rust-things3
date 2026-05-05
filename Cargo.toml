@@ -45,7 +45,7 @@ futures-core = "0.3"
 futures-util = "0.3"
 
 # CLI
-clap = { version = "4.0", features = ["derive"] }
+clap = { version = "4.0", features = ["derive", "env"] }
 
 # MCP
 mcp = "0.1"

@@ -26,7 +26,7 @@ async fn create_test_mcp_server() -> ThingsMcpServer {
     create_test_schema(&db).await.unwrap();
 
     let config = ThingsConfig::for_testing().unwrap();
-    ThingsMcpServer::new(db.into(), config)
+    ThingsMcpServer::new(db.into(), config, true)
 }
 
 /// Create the test database schema
@@ -824,7 +824,10 @@ async fn test_list_backups_tool_missing_backup_dir() {
 
 #[tokio::test]
 async fn test_restore_database_tool() {
-    let server = create_test_mcp_server().await;
+    let mut server = create_test_mcp_server().await;
+    // Bypass the "is Things 3 running" gate (#126); we want to exercise the
+    // BackupManager path, not the safety precondition.
+    server.set_process_check_for_test(|| false);
     let temp_file = tempfile::NamedTempFile::new().unwrap();
     let backup_path = temp_file.path().to_str().unwrap();
 
@@ -2640,7 +2643,7 @@ async fn test_mcp_server_with_custom_middleware() {
     let config = ThingsConfig::new(db_path, false);
     let middleware_config = MiddlewareConfig::default();
 
-    let server = ThingsMcpServer::with_middleware_config(db, config, middleware_config);
+    let server = ThingsMcpServer::with_middleware_config(db, config, middleware_config, true);
     assert!(!server.middleware_chain().is_empty());
 }
 

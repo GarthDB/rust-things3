@@ -51,6 +51,15 @@ pub struct Cli {
     #[arg(long, short)]
     pub verbose: bool,
 
+    /// Use the deprecated direct-SQLite mutation backend instead of AppleScript.
+    ///
+    /// CulturedCode warns against direct database writes
+    /// (https://culturedcode.com/things/support/articles/5510170/). This flag
+    /// re-enables the deprecated SqlxBackend and is required to use
+    /// `restore_database`. Will be removed in a future release.
+    #[arg(long, env = "THINGS_UNSAFE_DIRECT_DB")]
+    pub unsafe_direct_db: bool,
+
     #[command(subcommand)]
     pub command: Commands,
 }
@@ -425,7 +434,7 @@ mod tests {
 
         // Note: We can't actually run start_mcp_server in a test because it's an infinite
         // loop that reads from stdin. Instead, we verify the server can be created.
-        let _server = crate::mcp::ThingsMcpServer::new(db.into(), config);
+        let _server = crate::mcp::ThingsMcpServer::new(db.into(), config, true);
         // Server created successfully
     }
 

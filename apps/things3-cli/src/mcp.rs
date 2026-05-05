@@ -4,6 +4,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::str::FromStr;
 use std::sync::Arc;
+#[cfg(target_os = "macos")]
+use things3_core::AppleScriptBackend;
 use things3_core::{
     models::ThingsId, BackupManager, DataExporter, DeleteChildHandling, McpServerConfig,
     MutationBackend, PerformanceMonitor, SqlxBackend, ThingsCache, ThingsConfig, ThingsDatabase,
@@ -538,10 +540,17 @@ pub struct ThingsMcpServer {
     pub db: Arc<ThingsDatabase>,
     /// Mutation backend used for all write operations.
     ///
-    /// Defaults to `SqlxBackend` (direct DB writes — current behavior). Production
-    /// will switch to `AppleScriptBackend` once #124/#125 land; tests and the
-    /// `--unsafe-direct-db` opt-in continue to use `SqlxBackend`.
+    /// On macOS the default is `AppleScriptBackend` (CulturedCode-supported);
+    /// `--unsafe-direct-db` falls back to `SqlxBackend`. On non-macOS the
+    /// default is always `SqlxBackend` (no Things 3 install to corrupt).
     mutations: Arc<dyn MutationBackend>,
+    /// Whether the user opted into the deprecated direct-DB path. Required to
+    /// run `restore_database` — see `handle_restore_database` for the gate.
+    unsafe_direct_db: bool,
+    /// Stub-able predicate for "is Things 3 currently running?". Defaults to
+    /// `is_things3_running`; tests inject a constant function instead of
+    /// shelling out to `pgrep`.
+    process_check: fn() -> bool,
     #[allow(dead_code)]
     cache: Arc<Mutex<ThingsCache>>,
     #[allow(dead_code)]
@@ -562,9 +571,10 @@ pub struct ThingsMcpServer {
 pub async fn start_mcp_server(
     db: Arc<ThingsDatabase>,
     config: ThingsConfig,
+    unsafe_direct_db: bool,
 ) -> things3_core::Result<()> {
     let io = StdIo::new();
-    start_mcp_server_generic(db, config, io).await
+    start_mcp_server_generic(db, config, io, unsafe_direct_db).await
 }
 
 /// Generic MCP server implementation that works with any I/O implementation
@@ -575,8 +585,13 @@ pub async fn start_mcp_server_generic<I: McpIo>(
     db: Arc<ThingsDatabase>,
     config: ThingsConfig,
     mut io: I,
+    unsafe_direct_db: bool,
 ) -> things3_core::Result<()> {
-    let server = Arc::new(tokio::sync::Mutex::new(ThingsMcpServer::new(db, config)));
+    let server = Arc::new(tokio::sync::Mutex::new(ThingsMcpServer::new(
+        db,
+        config,
+        unsafe_direct_db,
+    )));
 
     // Read JSON-RPC requests line by line
     loop {
@@ -638,9 +653,10 @@ pub async fn start_mcp_server_generic<I: McpIo>(
 pub async fn start_mcp_server_with_config(
     db: Arc<ThingsDatabase>,
     mcp_config: McpServerConfig,
+    unsafe_direct_db: bool,
 ) -> things3_core::Result<()> {
     let io = StdIo::new();
-    start_mcp_server_with_config_generic(db, mcp_config, io).await
+    start_mcp_server_with_config_generic(db, mcp_config, io, unsafe_direct_db).await
 }
 
 /// Generic MCP server with config implementation that works with any I/O implementation
@@ -648,6 +664,7 @@ pub async fn start_mcp_server_with_config_generic<I: McpIo>(
     db: Arc<ThingsDatabase>,
     mcp_config: McpServerConfig,
     mut io: I,
+    unsafe_direct_db: bool,
 ) -> things3_core::Result<()> {
     // Convert McpServerConfig to ThingsConfig for backward compatibility
     let things_config = ThingsConfig::new(
@@ -656,7 +673,7 @@ pub async fn start_mcp_server_with_config_generic<I: McpIo>(
     );
 
     let server = Arc::new(tokio::sync::Mutex::new(
-        ThingsMcpServer::new_with_mcp_config(db, things_config, mcp_config),
+        ThingsMcpServer::new_with_mcp_config(db, things_config, mcp_config, unsafe_direct_db),
     ));
 
     // Read JSON-RPC requests line by line
@@ -708,17 +725,68 @@ pub async fn start_mcp_server_with_config_generic<I: McpIo>(
     Ok(())
 }
 
+/// Pick the default `MutationBackend` for a server invocation.
+///
+/// On macOS the safe default is `AppleScriptBackend`. `--unsafe-direct-db` /
+/// `THINGS_UNSAFE_DIRECT_DB=1` falls back to the deprecated `SqlxBackend`.
+/// On non-macOS the default is always `SqlxBackend` — there's no Things 3
+/// install to corrupt, and `AppleScriptBackend` is platform-gated.
+fn select_default_backend(
+    db: Arc<ThingsDatabase>,
+    unsafe_direct_db: bool,
+) -> Arc<dyn MutationBackend> {
+    #[cfg(target_os = "macos")]
+    {
+        if unsafe_direct_db {
+            Arc::new(SqlxBackend::new(db))
+        } else {
+            Arc::new(AppleScriptBackend::new(db))
+        }
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = unsafe_direct_db;
+        Arc::new(SqlxBackend::new(db))
+    }
+}
+
+/// Returns `true` if Things 3 is currently running (macOS only).
+///
+/// Used as a precondition for `restore_database` — overwriting the live
+/// SQLite file under a running Things 3 process is the highest-corruption
+/// scenario CulturedCode warns about. On non-macOS we always return `false`
+/// because there is no Things 3 process to detect.
+fn is_things3_running() -> bool {
+    #[cfg(target_os = "macos")]
+    {
+        std::process::Command::new("pgrep")
+            .args(["-x", "Things3"])
+            .status()
+            .map(|s| s.success())
+            .unwrap_or(false)
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        false
+    }
+}
+
 impl ThingsMcpServer {
     #[must_use]
-    pub fn new(db: Arc<ThingsDatabase>, config: ThingsConfig) -> Self {
-        let mutations: Arc<dyn MutationBackend> = Arc::new(SqlxBackend::new(Arc::clone(&db)));
-        Self::with_mutation_backend(db, mutations, config)
+    pub fn new(db: Arc<ThingsDatabase>, config: ThingsConfig, unsafe_direct_db: bool) -> Self {
+        let mutations = select_default_backend(Arc::clone(&db), unsafe_direct_db);
+        let mut server = Self::with_mutation_backend(db, mutations, config);
+        server.unsafe_direct_db = unsafe_direct_db;
+        server
     }
 
     /// Create a new MCP server with a caller-provided mutation backend.
     ///
     /// Use this to inject `AppleScriptBackend` (issue #124) or a test double
-    /// without taking the default `SqlxBackend`.
+    /// without taking the default `SqlxBackend`. The `unsafe_direct_db` flag
+    /// defaults to `false`; callers gating `restore_database` should use
+    /// [`Self::new`] or set it after construction via the test-only
+    /// `set_unsafe_direct_db` helper.
     #[must_use]
     pub fn with_mutation_backend(
         db: Arc<ThingsDatabase>,
@@ -737,6 +805,8 @@ impl ThingsMcpServer {
         Self {
             db,
             mutations,
+            unsafe_direct_db: false,
+            process_check: is_things3_running,
             cache: Arc::new(Mutex::new(cache)),
             performance_monitor: Arc::new(Mutex::new(performance_monitor)),
             exporter,
@@ -751,9 +821,10 @@ impl ThingsMcpServer {
         db: ThingsDatabase,
         config: ThingsConfig,
         middleware_config: MiddlewareConfig,
+        unsafe_direct_db: bool,
     ) -> Self {
         let db = Arc::new(db);
-        let mutations: Arc<dyn MutationBackend> = Arc::new(SqlxBackend::new(Arc::clone(&db)));
+        let mutations = select_default_backend(Arc::clone(&db), unsafe_direct_db);
         let cache = ThingsCache::new_default();
         let performance_monitor = PerformanceMonitor::new_default();
         let exporter = DataExporter::new_default();
@@ -763,6 +834,8 @@ impl ThingsMcpServer {
         Self {
             db,
             mutations,
+            unsafe_direct_db,
+            process_check: is_things3_running,
             cache: Arc::new(Mutex::new(cache)),
             performance_monitor: Arc::new(Mutex::new(performance_monitor)),
             exporter,
@@ -777,8 +850,9 @@ impl ThingsMcpServer {
         db: Arc<ThingsDatabase>,
         config: ThingsConfig,
         mcp_config: McpServerConfig,
+        unsafe_direct_db: bool,
     ) -> Self {
-        let mutations: Arc<dyn MutationBackend> = Arc::new(SqlxBackend::new(Arc::clone(&db)));
+        let mutations = select_default_backend(Arc::clone(&db), unsafe_direct_db);
         let cache = ThingsCache::new_default();
         let performance_monitor = PerformanceMonitor::new_default();
         let exporter = DataExporter::new_default();
@@ -842,6 +916,8 @@ impl ThingsMcpServer {
         Self {
             db,
             mutations,
+            unsafe_direct_db,
+            process_check: is_things3_running,
             cache: Arc::new(Mutex::new(cache)),
             performance_monitor: Arc::new(Mutex::new(performance_monitor)),
             exporter,
@@ -854,6 +930,22 @@ impl ThingsMcpServer {
     #[must_use]
     pub fn middleware_chain(&self) -> &MiddlewareChain {
         &self.middleware_chain
+    }
+
+    /// The mutation backend's static identifier — `"applescript"` (safe
+    /// default on macOS) or `"sqlx"` (direct DB writes; deprecated). Used by
+    /// tests and operators to confirm which path is active.
+    #[must_use]
+    pub fn backend_kind(&self) -> &'static str {
+        self.mutations.kind()
+    }
+
+    /// Override the Things 3 process check used by `restore_database`.
+    ///
+    /// Tests use this to bypass the live `pgrep -x Things3` call. Production
+    /// code should never need it — the default predicate is correct.
+    pub fn set_process_check_for_test(&mut self, check: fn() -> bool) {
+        self.process_check = check;
     }
 
     /// List available MCP tools
@@ -3175,10 +3267,31 @@ impl ThingsMcpServer {
     }
 
     async fn handle_restore_database(&self, args: Value) -> McpResult<CallToolResult> {
+        // Argument validation runs first so missing-parameter errors keep
+        // their existing semantics regardless of the safety gate below.
         let backup_path = args
             .get("backup_path")
             .and_then(|v| v.as_str())
             .ok_or_else(|| McpError::missing_parameter("backup_path"))?;
+
+        // restore_database overwrites the live Things 3 SQLite file directly —
+        // CulturedCode-unsupported and the highest-corruption scenario rust-things3
+        // exposes. Decision per #126: keep the tool but gate it on (1) explicit
+        // --unsafe-direct-db opt-in AND (2) Things 3 must not be running.
+        if !self.unsafe_direct_db {
+            return Err(McpError::validation_error(
+                "restore_database is gated. Re-launch with --unsafe-direct-db \
+                 (or THINGS_UNSAFE_DIRECT_DB=1). It overwrites the live Things 3 \
+                 database directly — see https://culturedcode.com/things/support/articles/5510170/",
+            ));
+        }
+        if (self.process_check)() {
+            return Err(McpError::validation_error(
+                "restore_database refuses to run while Things 3 is open: \
+                 overwriting the database file under a running app corrupts it. \
+                 Quit Things 3 (Cmd-Q) and retry.",
+            ));
+        }
 
         let backup_file = std::path::Path::new(backup_path);
         self.backup_manager
@@ -4548,5 +4661,72 @@ impl ThingsMcpServer {
             "id": id,
             "result": result
         })))
+    }
+}
+
+#[cfg(test)]
+mod backend_selection_tests {
+    use super::*;
+
+    /// Build a server with a fresh temp DB and the given `unsafe_direct_db` flag,
+    /// routing through `ThingsMcpServer::new` so platform-aware backend selection runs.
+    fn build_server(unsafe_direct_db: bool) -> (ThingsMcpServer, tempfile::NamedTempFile) {
+        let temp_file = tempfile::NamedTempFile::new().unwrap();
+        let db_path = temp_file.path().to_path_buf();
+        let db_path_clone = db_path.clone();
+
+        let db = std::thread::spawn(move || {
+            tokio::runtime::Runtime::new()
+                .unwrap()
+                .block_on(async { ThingsDatabase::new(&db_path_clone).await.unwrap() })
+        })
+        .join()
+        .unwrap();
+
+        let config = ThingsConfig::new(&db_path, false);
+        let server = ThingsMcpServer::new(Arc::new(db), config, unsafe_direct_db);
+        (server, temp_file)
+    }
+
+    #[cfg(target_os = "macos")]
+    #[tokio::test]
+    async fn defaults_to_applescript_on_macos() {
+        let (server, _tmp) = build_server(false);
+        assert_eq!(server.backend_kind(), "applescript");
+    }
+
+    #[tokio::test]
+    async fn unsafe_flag_selects_sqlx() {
+        let (server, _tmp) = build_server(true);
+        assert_eq!(server.backend_kind(), "sqlx");
+    }
+
+    #[tokio::test]
+    async fn restore_database_refuses_without_flag() {
+        let (server, _tmp) = build_server(false);
+        let err = server
+            .handle_restore_database(serde_json::json!({"backup_path": "/tmp/x"}))
+            .await
+            .expect_err("must refuse when --unsafe-direct-db is not set");
+        let msg = err.to_string();
+        assert!(
+            msg.contains("--unsafe-direct-db"),
+            "error should name the flag, got: {msg}"
+        );
+    }
+
+    #[tokio::test]
+    async fn restore_database_refuses_when_things3_running() {
+        let (mut server, _tmp) = build_server(true);
+        server.set_process_check_for_test(|| true);
+        let err = server
+            .handle_restore_database(serde_json::json!({"backup_path": "/tmp/x"}))
+            .await
+            .expect_err("must refuse while Things 3 is running");
+        let msg = err.to_string();
+        assert!(
+            msg.contains("Things 3"),
+            "error should mention Things 3, got: {msg}"
+        );
     }
 }

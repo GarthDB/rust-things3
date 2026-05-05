@@ -27,7 +27,7 @@ async fn main() -> Result<()> {
     #[cfg(all(feature = "observability", not(feature = "mcp-server")))]
     let is_mcp_mode = false;
     #[cfg(not(feature = "observability"))]
-    let _is_mcp_mode = false;
+    let is_mcp_mode = false;
 
     // Initialize observability (skip entirely for MCP mode to ensure zero stderr output)
     #[cfg(feature = "observability")]
@@ -60,6 +60,22 @@ async fn main() -> Result<()> {
         info!("Things 3 CLI starting up");
         Some(Arc::new(obs))
     };
+
+    // Loud opt-in warning when the user re-enables direct-DB writes. MCP mode
+    // intentionally skips this — stderr must stay empty for JSON-RPC purity.
+    if !is_mcp_mode && cli.unsafe_direct_db {
+        eprintln!(
+            "\
+================================================================================
+WARNING: --unsafe-direct-db / THINGS_UNSAFE_DIRECT_DB is set.
+Mutations write directly to the Things 3 SQLite database, bypassing the
+safe AppleScript path. CulturedCode warns this can corrupt your data and
+break syncs:
+  https://culturedcode.com/things/support/articles/5510170/
+This flag exists for emergency recovery only and will be removed.
+================================================================================"
+        );
+    }
 
     // Create configuration
     let config = if let Some(db_path) = cli.database {
@@ -115,16 +131,17 @@ async fn main() -> Result<()> {
             #[cfg(feature = "observability")]
             match load_config() {
                 Ok(mcp_config) => {
-                    start_mcp_server_with_config(Arc::clone(&db), mcp_config).await?;
+                    start_mcp_server_with_config(Arc::clone(&db), mcp_config, cli.unsafe_direct_db)
+                        .await?;
                 }
                 Err(_e) => {
                     // Silently fall back to basic config - no logging in MCP mode
-                    start_mcp_server(Arc::clone(&db), config).await?;
+                    start_mcp_server(Arc::clone(&db), config, cli.unsafe_direct_db).await?;
                 }
             }
             #[cfg(not(feature = "observability"))]
             {
-                start_mcp_server(Arc::clone(&db), config).await?;
+                start_mcp_server(Arc::clone(&db), config, cli.unsafe_direct_db).await?;
             }
         }
         Commands::Health => {
@@ -348,7 +365,7 @@ mod tests {
             Commands::Mcp => {
                 // Note: This test doesn't actually run the server loop since stdin would block
                 // In a real test, you'd need to provide mock stdin/stdout or test the handler directly
-                let _server = things3_cli::mcp::ThingsMcpServer::new(db.into(), config);
+                let _server = things3_cli::mcp::ThingsMcpServer::new(db.into(), config, true);
                 // Server created successfully
             }
             _ => panic!("Expected MCP command"),

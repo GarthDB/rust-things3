@@ -17,7 +17,7 @@ pub(crate) async fn create_test_mcp_server() -> ThingsMcpServer {
     create_test_schema(&db).await.unwrap();
 
     let config = ThingsConfig::for_testing().unwrap();
-    ThingsMcpServer::new(db.into(), config)
+    ThingsMcpServer::new(db.into(), config, true)
 }
 
 /// Create the test database schema
