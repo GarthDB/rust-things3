@@ -361,6 +361,8 @@ pub enum TaskStatus {
     Completed,
     #[serde(rename = "canceled")]
     Canceled,
+    /// Filter-input only. Trashed tasks are surfaced by the `trashed` column predicate,
+    /// not by a status value — this variant is never returned from any read path.
     #[serde(rename = "trashed")]
     Trashed,
 }

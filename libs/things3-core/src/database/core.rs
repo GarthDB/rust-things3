@@ -95,9 +95,8 @@ impl TaskStatus {
     fn from_i32(value: i32) -> Option<Self> {
         match value {
             0 => Some(TaskStatus::Incomplete),
-            1 => Some(TaskStatus::Completed),
             2 => Some(TaskStatus::Canceled),
-            3 => Some(TaskStatus::Trashed),
+            3 => Some(TaskStatus::Completed),
             _ => None,
         }
     }
@@ -924,8 +923,8 @@ impl ThingsDatabase {
         if let Some(status) = filters.status {
             let n = match status {
                 TaskStatus::Incomplete => Some(0),
-                TaskStatus::Completed => Some(1),
                 TaskStatus::Canceled => Some(2),
+                TaskStatus::Completed => Some(3),
                 TaskStatus::Trashed => None, // handled via trashed = 1 above
             };
             if let Some(n) = n {
@@ -1103,7 +1102,7 @@ impl ThingsDatabase {
         let rows = if let Some(ref text) = search_text {
             let pattern = format!("%{text}%");
             let mut q = String::from(
-                "SELECT uuid, title, status, type, startDate, deadline, stopDate, project, area, heading, notes, cachedTags, creationDate, userModificationDate FROM TMTask WHERE status = 1 AND trashed = 0 AND type = 0",
+                "SELECT uuid, title, status, type, startDate, deadline, stopDate, project, area, heading, notes, cachedTags, creationDate, userModificationDate FROM TMTask WHERE status = 3 AND trashed = 0 AND type = 0",
             );
             q.push_str(" AND (title LIKE ? OR notes LIKE ?)");
 
@@ -1140,7 +1139,7 @@ impl ThingsDatabase {
                 .map_err(|e| ThingsError::unknown(format!("Failed to search logbook: {e}")))?
         } else {
             let mut q = String::from(
-                "SELECT uuid, title, status, type, startDate, deadline, stopDate, project, area, heading, notes, cachedTags, creationDate, userModificationDate FROM TMTask WHERE status = 1 AND trashed = 0 AND type = 0",
+                "SELECT uuid, title, status, type, startDate, deadline, stopDate, project, area, heading, notes, cachedTags, creationDate, userModificationDate FROM TMTask WHERE status = 3 AND trashed = 0 AND type = 0",
             );
 
             if let Some(date) = from_date {
@@ -1728,7 +1727,7 @@ impl ThingsDatabase {
         let now = Utc::now().timestamp() as f64;
 
         sqlx::query(
-            "UPDATE TMTask SET status = 1, stopDate = ?, userModificationDate = ? WHERE uuid = ?",
+            "UPDATE TMTask SET status = 3, stopDate = ?, userModificationDate = ? WHERE uuid = ?",
         )
         .bind(now)
         .bind(now)
@@ -1806,7 +1805,7 @@ impl ThingsDatabase {
             crate::models::ProjectChildHandling::Cascade => {
                 // Complete all child tasks
                 sqlx::query(
-                    "UPDATE TMTask SET status = 1, stopDate = ?, userModificationDate = ? WHERE project = ? AND trashed = 0",
+                    "UPDATE TMTask SET status = 3, stopDate = ?, userModificationDate = ? WHERE project = ? AND trashed = 0",
                 )
                 .bind(now)
                 .bind(now)
@@ -1830,7 +1829,7 @@ impl ThingsDatabase {
 
         // Complete the project
         sqlx::query(
-            "UPDATE TMTask SET status = 1, stopDate = ?, userModificationDate = ? WHERE uuid = ?",
+            "UPDATE TMTask SET status = 3, stopDate = ?, userModificationDate = ? WHERE uuid = ?",
         )
         .bind(now)
         .bind(now)
@@ -3536,7 +3535,7 @@ impl ThingsDatabase {
             .collect::<Vec<_>>()
             .join(",");
         let query_str = format!(
-            "UPDATE TMTask SET status = 1, stopDate = ?, userModificationDate = ? WHERE uuid IN ({})",
+            "UPDATE TMTask SET status = 3, stopDate = ?, userModificationDate = ? WHERE uuid IN ({})",
             placeholders
         );
 
@@ -3790,9 +3789,9 @@ mod tests {
     #[test]
     fn test_task_status_from_i32() {
         assert_eq!(TaskStatus::from_i32(0), Some(TaskStatus::Incomplete));
-        assert_eq!(TaskStatus::from_i32(1), Some(TaskStatus::Completed));
+        assert_eq!(TaskStatus::from_i32(1), None); // unused in real Things 3
         assert_eq!(TaskStatus::from_i32(2), Some(TaskStatus::Canceled));
-        assert_eq!(TaskStatus::from_i32(3), Some(TaskStatus::Trashed));
+        assert_eq!(TaskStatus::from_i32(3), Some(TaskStatus::Completed));
         assert_eq!(TaskStatus::from_i32(4), None);
         assert_eq!(TaskStatus::from_i32(-1), None);
     }
@@ -3964,9 +3963,9 @@ mod tests {
     #[test]
     fn test_task_status_from_i32_all_variants() {
         assert_eq!(TaskStatus::from_i32(0), Some(TaskStatus::Incomplete));
-        assert_eq!(TaskStatus::from_i32(1), Some(TaskStatus::Completed));
+        assert_eq!(TaskStatus::from_i32(1), None); // unused in real Things 3
         assert_eq!(TaskStatus::from_i32(2), Some(TaskStatus::Canceled));
-        assert_eq!(TaskStatus::from_i32(3), Some(TaskStatus::Trashed));
+        assert_eq!(TaskStatus::from_i32(3), Some(TaskStatus::Completed));
         assert_eq!(TaskStatus::from_i32(999), None);
         assert_eq!(TaskStatus::from_i32(-1), None);
     }
@@ -4864,8 +4863,8 @@ mod tests {
             let blob = serialize_tags_to_blob(&Vec::<String>::new()).unwrap();
             let status_n: i64 = match status {
                 TaskStatus::Incomplete => 0,
-                TaskStatus::Completed => 1,
                 TaskStatus::Canceled => 2,
+                TaskStatus::Completed => 3,
                 TaskStatus::Trashed => 0,
             };
             sqlx::query(

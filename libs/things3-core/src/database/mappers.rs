@@ -42,10 +42,9 @@ pub fn map_task_row(row: &SqliteRow) -> ThingsResult<Task> {
 
     let status_i32: i32 = row.get("status");
     let status = match status_i32 {
-        1 => TaskStatus::Completed,
         2 => TaskStatus::Canceled,
-        3 => TaskStatus::Trashed,
-        _ => TaskStatus::Incomplete,
+        3 => TaskStatus::Completed,
+        _ => TaskStatus::Incomplete, // 0 = Incomplete; Trashed is filtered via trashed column, never a status value
     };
 
     let type_i32: i32 = row.get("type");
