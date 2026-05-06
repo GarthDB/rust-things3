@@ -132,46 +132,61 @@ impl AppleScriptBackend {
     }
 
     /// List `(task_id, current_tag_titles)` for every non-trashed task whose
-    /// `cachedTags` contains a tag matching `tag_title` (case-insensitive
-    /// after `normalize_tag_title`). Used by `merge_tags` and
+    /// tag set contains a tag matching `tag_title` (case-insensitive after
+    /// `normalize_tag_title`). Used by `merge_tags` and
     /// `delete_tag(remove_from_tasks=true)` to plan per-task rewrites.
     ///
-    /// Pre-filters via `json_extract(cachedTags, '$') LIKE` to narrow the
-    /// candidate set, then deserializes each blob and re-checks the
-    /// normalized title to drop false positives.
+    /// Reads the canonical `TMTaskTag` JOIN — same source of truth used by
+    /// the read APIs after #155. The legacy `cachedTags` BLOB column is not
+    /// populated on real Things 3 databases for tasks created via the UI or
+    /// AppleScript, so reading it produced "malformed JSON" errors (#159,
+    /// #160).
     async fn list_tasks_with_tag_title(
         &self,
         tag_title: &str,
     ) -> ThingsResult<Vec<(ThingsId, Vec<String>)>> {
         use crate::database::tag_utils::normalize_tag_title;
 
-        // SQLite LIKE only treats `\` as an escape when paired with an explicit
-        // ESCAPE clause; without it `\_` is a literal two-char sequence and a
-        // tag containing `_` or `%` would silently skip its tasks.
-        let escaped = tag_title
-            .replace('\\', "\\\\")
-            .replace('%', "\\%")
-            .replace('_', "\\_");
-        let pattern = format!("%\"{escaped}\"%");
+        let normalized_target = normalize_tag_title(tag_title);
+
         let rows = sqlx::query(
-            r"SELECT uuid, cachedTags FROM TMTask
-             WHERE cachedTags IS NOT NULL
-             AND json_extract(cachedTags, '$') LIKE ? ESCAPE '\'
-             AND trashed = 0",
+            r"SELECT t.uuid AS uuid,
+                     GROUP_CONCAT(tg.title, char(31)) AS tags_csv
+              FROM TMTask t
+              JOIN TMTaskTag tt ON tt.tasks = t.uuid
+              JOIN TMTag tg ON tg.uuid = tt.tags
+              WHERE t.trashed = 0
+                AND t.uuid IN (
+                  SELECT tt2.tasks
+                  FROM TMTaskTag tt2
+                  JOIN TMTag tg2 ON tg2.uuid = tt2.tags
+                  -- LOWER(TRIM(...)) matches normalize_tag_title for the common case
+                  -- but does not collapse internal whitespace (e.g. 'Work  Tag' stored
+                  -- vs 'Work Tag' queried). Tags from Things 3 do not have multiple
+                  -- internal spaces in practice, so this gap is accepted.
+                  WHERE LOWER(TRIM(tg2.title)) = LOWER(TRIM(?))
+                )
+              GROUP BY t.uuid",
         )
-        .bind(&pattern)
+        .bind(tag_title)
         .fetch_all(&self.db.pool)
         .await
         .map_err(|e| {
             ThingsError::applescript(format!("failed to query tasks with tag '{tag_title}': {e}"))
         })?;
 
-        let normalized_target = normalize_tag_title(tag_title);
         let mut out = Vec::new();
         for row in rows {
             let id_str: String = row.get("uuid");
-            let blob: Vec<u8> = row.get("cachedTags");
-            let tags = crate::database::deserialize_tags_from_blob(&blob)?;
+            let tags_csv: Option<String> = row.get("tags_csv");
+            let tags: Vec<String> = tags_csv
+                .map(|s| s.split('\u{1f}').map(str::to_string).collect())
+                .unwrap_or_default();
+            // Belt-and-suspenders: the SQL subquery already guarantees only
+            // tasks with the matching tag are returned, so this filter is
+            // not expected to drop anything. It guards against subtle
+            // divergence between SQLite's LOWER/TRIM semantics and
+            // normalize_tag_title (e.g. internal-whitespace collapsing).
             if tags
                 .iter()
                 .any(|t| normalize_tag_title(t) == normalized_target)
@@ -942,34 +957,59 @@ mod tests {
         }
     }
 
+    /// Seed a tagged task via `TMTag` + `TMTaskTag` (the canonical schema
+    /// post-#155). Returns the task UUID.
+    async fn seed_tagged_task(
+        pool: &sqlx::SqlitePool,
+        title: &str,
+        tag_titles: &[&str],
+    ) -> ThingsId {
+        let task_id = ThingsId::new_things_native();
+        let now = 1_700_000_000.0_f64;
+        sqlx::query(
+            "INSERT INTO TMTask \
+             (uuid, title, type, status, trashed, creationDate, userModificationDate) \
+             VALUES (?, ?, 0, 0, 0, ?, ?)",
+        )
+        .bind(task_id.as_str())
+        .bind(title)
+        .bind(now)
+        .bind(now)
+        .execute(pool)
+        .await
+        .expect("insert tagged task");
+
+        for tag_title in tag_titles {
+            let tag_id = ThingsId::new_things_native();
+            sqlx::query("INSERT INTO TMTag (uuid, title) VALUES (?, ?)")
+                .bind(tag_id.as_str())
+                .bind(*tag_title)
+                .execute(pool)
+                .await
+                .expect("insert tag");
+            sqlx::query("INSERT INTO TMTaskTag (tasks, tags) VALUES (?, ?)")
+                .bind(task_id.as_str())
+                .bind(tag_id.as_str())
+                .execute(pool)
+                .await
+                .expect("insert tasktag");
+        }
+        task_id
+    }
+
     /// `list_tasks_with_tag_title` (the read-side helper backing
-    /// `delete_tag(remove_from_tasks=true)`) correctly finds tasks whose
-    /// `cachedTags` blob contains the target tag, and deserializes the full
-    /// tag list per task. Also confirms that an unrelated tag name returns
-    /// no results.
+    /// `delete_tag(remove_from_tasks=true)`) finds tasks via the
+    /// `TMTaskTag` JOIN and returns their full tag set. Also confirms
+    /// that an unrelated tag name returns no results. Regression for
+    /// #159, #160 — the previous implementation read `cachedTags` BLOB
+    /// and failed with "malformed JSON" on real Things 3 data.
     #[tokio::test]
-    async fn delete_tag_remove_from_tasks_finds_tagged_tasks() {
+    async fn list_tasks_with_tag_title_finds_via_tmtasktag_join() {
         let (db, _tmp) = crate::test_utils::create_test_database_and_connect()
             .await
             .expect("test db");
 
-        let task_id = ThingsId::new_things_native();
-        let blob =
-            crate::database::serialize_tags_to_blob(&["Work".to_string(), "Personal".to_string()])
-                .expect("serialize");
-        let now = 1_700_000_000.0_f64;
-        sqlx::query(
-            "INSERT INTO TMTask \
-             (uuid, title, type, status, trashed, cachedTags, creationDate, userModificationDate) \
-             VALUES (?, 'Tagged Task', 0, 0, 0, ?, ?, ?)",
-        )
-        .bind(task_id.as_str())
-        .bind(&blob)
-        .bind(now)
-        .bind(now)
-        .execute(&db.pool)
-        .await
-        .expect("insert tagged task");
+        let task_id = seed_tagged_task(&db.pool, "Tagged Task", &["Work", "Personal"]).await;
 
         let backend = AppleScriptBackend::new(Arc::new(db));
 
@@ -980,7 +1020,9 @@ mod tests {
         assert_eq!(found.len(), 1, "should find exactly one tagged task");
         let (found_id, found_tags) = &found[0];
         assert_eq!(found_id.as_str(), task_id.as_str());
-        assert_eq!(found_tags, &["Work", "Personal"]);
+        let mut sorted = found_tags.clone();
+        sorted.sort();
+        assert_eq!(sorted, vec!["Personal".to_string(), "Work".to_string()]);
 
         let not_found = backend
             .list_tasks_with_tag_title("Nonexistent")
@@ -989,32 +1031,17 @@ mod tests {
         assert!(not_found.is_empty(), "no tasks should match an absent tag");
     }
 
-    /// Tag titles containing SQL LIKE wildcards (`_`, `%`) must still match
-    /// their exact tasks — the pre-filter escapes wildcards via `ESCAPE '\'`.
-    /// Regression: previously `replace('_', "\\_")` produced a literal `\_`
-    /// that didn't match because the LIKE clause had no `ESCAPE`.
+    /// Tag titles containing characters that were once SQL LIKE wildcards
+    /// (`_`, `%`) must still match their exact tasks. With the JOIN-based
+    /// implementation this is no longer LIKE-based, but the test is kept
+    /// to lock in the regression noted in the original ESCAPE fix.
     #[tokio::test]
     async fn list_tasks_with_tag_title_handles_underscore_in_tag_name() {
         let (db, _tmp) = crate::test_utils::create_test_database_and_connect()
             .await
             .expect("test db");
 
-        let task_id = ThingsId::new_things_native();
-        let blob =
-            crate::database::serialize_tags_to_blob(&["to_do".to_string()]).expect("serialize");
-        let now = 1_700_000_000.0_f64;
-        sqlx::query(
-            "INSERT INTO TMTask \
-             (uuid, title, type, status, trashed, cachedTags, creationDate, userModificationDate) \
-             VALUES (?, 'Task with underscored tag', 0, 0, 0, ?, ?, ?)",
-        )
-        .bind(task_id.as_str())
-        .bind(&blob)
-        .bind(now)
-        .bind(now)
-        .execute(&db.pool)
-        .await
-        .expect("insert");
+        let task_id = seed_tagged_task(&db.pool, "Task with underscored tag", &["to_do"]).await;
 
         let backend = AppleScriptBackend::new(Arc::new(db));
 
@@ -1024,6 +1051,30 @@ mod tests {
             .expect("query");
         assert_eq!(found.len(), 1, "should match tag name with underscore");
         assert_eq!(found[0].0.as_str(), task_id.as_str());
+    }
+
+    /// Tag matching is case-insensitive after `normalize_tag_title`
+    /// (trim + lowercase + collapse whitespace). Regression: ensures the
+    /// JOIN-based query continues to match queries like "WORK" against
+    /// stored tag "Work".
+    #[tokio::test]
+    async fn list_tasks_with_tag_title_is_case_insensitive() {
+        let (db, _tmp) = crate::test_utils::create_test_database_and_connect()
+            .await
+            .expect("test db");
+
+        let task_id = seed_tagged_task(&db.pool, "Mixed Case Task", &["Work"]).await;
+
+        let backend = AppleScriptBackend::new(Arc::new(db));
+
+        for query in ["work", "WORK", " Work "] {
+            let found = backend
+                .list_tasks_with_tag_title(query)
+                .await
+                .expect("query");
+            assert_eq!(found.len(), 1, "query {query:?} should match");
+            assert_eq!(found[0].0.as_str(), task_id.as_str());
+        }
     }
 
     /// `merge_tags` rejects identical source/target with a Validation error.

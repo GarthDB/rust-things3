@@ -555,6 +555,39 @@ async fn test_get_tag_completions_tool() {
     let request = CallToolRequest {
         name: "get_tag_completions".to_string(),
         arguments: Some(json!({
+            "prefix": "wo",
+            "limit": 5
+        })),
+    };
+
+    let result = server.call_tool(request).await.unwrap();
+    let text = match &result.content[0] {
+        things3_cli::mcp::Content::Text { text } => text,
+    };
+    let response: serde_json::Value = serde_json::from_str(text).unwrap();
+
+    assert!(response.is_array());
+    assert!(!response.as_array().unwrap().is_empty());
+}
+
+/// Backward-compat alias: callers passing `partial_input` (the old parameter
+/// name) must still receive completions rather than a "Missing 'prefix'" error.
+#[tokio::test]
+async fn test_get_tag_completions_accepts_legacy_partial_input() {
+    let server = create_test_mcp_server().await;
+
+    for title in &["work", "working"] {
+        let request = things3_core::models::CreateTagRequest {
+            title: title.to_string(),
+            shortcut: None,
+            parent_uuid: None,
+        };
+        server.db.create_tag_force(request).await.unwrap();
+    }
+
+    let request = CallToolRequest {
+        name: "get_tag_completions".to_string(),
+        arguments: Some(json!({
             "partial_input": "wo",
             "limit": 5
         })),
