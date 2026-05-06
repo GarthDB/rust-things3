@@ -160,6 +160,10 @@ impl AppleScriptBackend {
                   SELECT tt2.tasks
                   FROM TMTaskTag tt2
                   JOIN TMTag tg2 ON tg2.uuid = tt2.tags
+                  -- LOWER(TRIM(...)) matches normalize_tag_title for the common case
+                  -- but does not collapse internal whitespace (e.g. 'Work  Tag' stored
+                  -- vs 'Work Tag' queried). Tags from Things 3 do not have multiple
+                  -- internal spaces in practice, so this gap is accepted.
                   WHERE LOWER(TRIM(tg2.title)) = LOWER(TRIM(?))
                 )
               GROUP BY t.uuid",
@@ -178,6 +182,11 @@ impl AppleScriptBackend {
             let tags: Vec<String> = tags_csv
                 .map(|s| s.split('\u{1f}').map(str::to_string).collect())
                 .unwrap_or_default();
+            // Belt-and-suspenders: the SQL subquery already guarantees only
+            // tasks with the matching tag are returned, so this filter is
+            // not expected to drop anything. It guards against subtle
+            // divergence between SQLite's LOWER/TRIM semantics and
+            // normalize_tag_title (e.g. internal-whitespace collapsing).
             if tags
                 .iter()
                 .any(|t| normalize_tag_title(t) == normalized_target)
