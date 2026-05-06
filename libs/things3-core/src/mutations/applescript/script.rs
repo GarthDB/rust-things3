@@ -431,8 +431,12 @@ fn bulk_wrap(per_item: &[String]) -> String {
 }
 
 /// Render the property-list + post-statements for a single `make new to do`
-/// inside a bulk script. Indented one extra level (`\t\t\t`) to sit inside
-/// the `try` block emitted by [`bulk_wrap`].
+/// inside the atomic bulk-create script. Indented one extra level (`\t\t\t`)
+/// to sit inside the single outer `try` block.
+///
+/// The caller is responsible for initialising `createdTasks` before the first
+/// snippet runs; each snippet appends `newTask` to that list so the outer
+/// `on error` handler can delete them all on rollback.
 fn create_task_snippet(req: &CreateTaskRequest) -> String {
     let mut props = vec![format!("name:{}", as_applescript_string(&req.title))];
     if let Some(notes) = &req.notes {
@@ -446,7 +450,8 @@ fn create_task_snippet(req: &CreateTaskRequest) -> String {
     }
 
     let mut snippet = format!(
-        "\t\t\tset newTask to make new to do with properties {{{}}}\n",
+        "\t\t\tset newTask to make new to do with properties {{{}}}\n\
+         \t\t\tset end of createdTasks to newTask\n",
         props.join(", "),
     );
 
@@ -460,11 +465,17 @@ fn create_task_snippet(req: &CreateTaskRequest) -> String {
     }
 
     if let Some(uuid) = &req.project_uuid {
-        snippet.push_str(&format!("\t\t\tmove newTask to project id \"{uuid}\"\n"));
+        snippet.push_str(&format!(
+            "\t\t\tset project of newTask to project id \"{uuid}\"\n"
+        ));
     } else if let Some(uuid) = &req.area_uuid {
-        snippet.push_str(&format!("\t\t\tmove newTask to area id \"{uuid}\"\n"));
+        snippet.push_str(&format!(
+            "\t\t\tset area of newTask to area id \"{uuid}\"\n"
+        ));
     } else if let Some(uuid) = &req.parent_uuid {
-        snippet.push_str(&format!("\t\t\tmove newTask to to do id \"{uuid}\"\n"));
+        snippet.push_str(&format!(
+            "\t\t\tset parent task of newTask to to do id \"{uuid}\"\n"
+        ));
     }
 
     if let Some(status) = req.status {
@@ -494,8 +505,25 @@ fn assign_date_var_indented(var: &str, date: NaiveDate, level: usize) -> String 
 
 #[allow(dead_code)] // Used by AppleScriptBackend, added in #135.
 pub(crate) fn bulk_create_tasks_script(req: &BulkCreateTasksRequest) -> String {
-    let snippets: Vec<String> = req.tasks.iter().map(create_task_snippet).collect();
-    bulk_wrap(&snippets)
+    // All tasks are created inside a single try block. If any step fails the
+    // on-error handler deletes every task already added to `createdTasks` and
+    // returns a "ROLLBACK: <msg>" sentinel so the caller knows nothing was left
+    // behind. This prevents orphaned inbox tasks when e.g. a project_uuid is
+    // invalid. Parsed by [`super::parse::parse_atomic_bulk_create_result`].
+    let mut body = String::from("\t\tset createdTasks to {}\n\t\ttry\n");
+    for snippet in req.tasks.iter().map(create_task_snippet) {
+        body.push_str(&snippet);
+    }
+    body.push_str("\t\t\treturn \"OK \" & (count of createdTasks)\n");
+    body.push_str("\t\ton error errMsg\n");
+    body.push_str("\t\t\trepeat with t in createdTasks\n");
+    body.push_str("\t\t\t\ttry\n");
+    body.push_str("\t\t\t\t\tdelete t\n");
+    body.push_str("\t\t\t\tend try\n");
+    body.push_str("\t\t\tend repeat\n");
+    body.push_str("\t\t\treturn \"ROLLBACK: \" & errMsg\n");
+    body.push_str("\t\tend try\n");
+    wrap(&body)
 }
 
 #[allow(dead_code)] // Used by AppleScriptBackend, added in #135.
@@ -1125,26 +1153,33 @@ mod tests {
     }
 
     #[test]
-    fn bulk_create_tasks_wraps_each_in_try_block() {
+    fn bulk_create_tasks_is_atomic_with_rollback() {
         let req = BulkCreateTasksRequest {
             tasks: vec![task("a"), task("b")],
         };
         let script = bulk_create_tasks_script(&req);
-        // Each item gets its own try block. Match "\t\ttry\n" specifically so we
-        // don't double-count the "try\n" suffix of "end try\n".
-        assert_eq!(script.matches("\t\ttry\n").count(), 2);
-        assert_eq!(script.matches("on error errMsg").count(), 2);
-        assert_eq!(script.matches("end try").count(), 2);
-        // Per-item error tagging.
-        assert!(script.contains("\"item 0: \" & errMsg"));
-        assert!(script.contains("\"item 1: \" & errMsg"));
-        // Counter + result formatting.
-        assert!(script.contains("set okCount to 0"));
-        assert!(script.contains("set errorList to {}"));
-        assert!(script.contains("return \"OK \" & okCount"));
+        // Single outer try/on-error — NOT per-item try blocks.
+        // Use "\n\t\ttry\n" to anchor at line start (prevents matching inside
+        // "\t\t\t\ttry\n" inside the rollback repeat).
+        assert_eq!(script.matches("\n\t\ttry\n").count(), 1);
+        assert_eq!(script.matches("on error errMsg").count(), 1);
+        // createdTasks list is initialised and each task is appended.
+        assert!(script.contains("set createdTasks to {}"));
+        assert_eq!(
+            script.matches("set end of createdTasks to newTask").count(),
+            2
+        );
+        // On success: return "OK <count>".
+        assert!(script.contains("return \"OK \" & (count of createdTasks)"));
+        // On error: rollback loop, then return ROLLBACK sentinel.
+        assert!(script.contains("repeat with t in createdTasks"));
+        assert!(script.contains("delete t"));
+        assert!(script.contains("return \"ROLLBACK: \" & errMsg"));
         // Both task names present.
         assert!(script.contains("name:\"a\""));
         assert!(script.contains("name:\"b\""));
+        // Container assignment uses set-property, not move (#158).
+        assert!(!script.contains("move newTask"));
     }
 
     #[test]

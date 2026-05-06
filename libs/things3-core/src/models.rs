@@ -827,8 +827,8 @@ pub struct BulkDeleteRequest {
 
 /// Request to create multiple tasks in one call.
 ///
-/// Bulk creation is best-effort and non-atomic — each task is attempted
-/// independently and per-item failures are surfaced via `BulkOperationResult`.
+/// Bulk creation is atomic — if any task fails, all tasks created so far are
+/// rolled back and the caller receives an error with no partial state left.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BulkCreateTasksRequest {
     /// Tasks to create

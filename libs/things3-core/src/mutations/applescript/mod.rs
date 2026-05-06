@@ -299,10 +299,9 @@ impl MutationBackend for AppleScriptBackend {
                 request.tasks.len(),
             )));
         }
-        let total = request.tasks.len();
         let script = script::bulk_create_tasks_script(&request);
         let stdout = runner::run_script(&script).await?;
-        parse::parse_bulk_result(&stdout, total)
+        parse::parse_atomic_bulk_create_result(&stdout)
     }
 
     async fn bulk_delete(&self, request: BulkDeleteRequest) -> ThingsResult<BulkOperationResult> {
