@@ -2767,7 +2767,9 @@ impl ThingsDatabase {
             .bind(task_id.as_str())
             .execute(&self.pool)
             .await
-            .map_err(|e| ThingsError::unknown(format!("Failed to update modification date: {e}")))?;
+            .map_err(|e| {
+                ThingsError::unknown(format!("Failed to update modification date: {e}"))
+            })?;
 
         // 8. Update tag's usedDate
         sqlx::query("UPDATE TMTag SET usedDate = ? WHERE uuid = ?")
@@ -2820,7 +2822,9 @@ impl ThingsDatabase {
                 .bind(task_id.as_str())
                 .execute(&self.pool)
                 .await
-                .map_err(|e| ThingsError::unknown(format!("Failed to update modification date: {e}")))?;
+                .map_err(|e| {
+                    ThingsError::unknown(format!("Failed to update modification date: {e}"))
+                })?;
 
             info!("Removed tag '{}' from task {}", tag_title, task_id);
         }
@@ -2913,7 +2917,9 @@ impl ThingsDatabase {
             .bind(task_id.as_str())
             .execute(&self.pool)
             .await
-            .map_err(|e| ThingsError::unknown(format!("Failed to update modification date: {e}")))?;
+            .map_err(|e| {
+                ThingsError::unknown(format!("Failed to update modification date: {e}"))
+            })?;
 
         // 6. Update usedDate for all tags
         for title in &resolved_tags {
@@ -4581,8 +4587,7 @@ mod tests {
             // Insert tags via TMTaskTag
             for tag_title in tags {
                 // Find or create the tag
-                let normalized =
-                    crate::database::tag_utils::normalize_tag_title(tag_title);
+                let normalized = crate::database::tag_utils::normalize_tag_title(tag_title);
                 let tag = if let Some(existing) =
                     db.find_tag_by_normalized_title(&normalized).await.unwrap()
                 {
@@ -4606,14 +4611,12 @@ mod tests {
                             last_used: None,
                         })
                 };
-                sqlx::query(
-                    "INSERT OR IGNORE INTO TMTaskTag (tasks, tags) VALUES (?, ?)",
-                )
-                .bind(task_id.as_str())
-                .bind(tag.uuid.as_str())
-                .execute(&db.pool)
-                .await
-                .unwrap();
+                sqlx::query("INSERT OR IGNORE INTO TMTaskTag (tasks, tags) VALUES (?, ?)")
+                    .bind(task_id.as_str())
+                    .bind(tag.uuid.as_str())
+                    .execute(&db.pool)
+                    .await
+                    .unwrap();
             }
 
             task_id

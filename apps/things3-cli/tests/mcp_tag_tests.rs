@@ -555,7 +555,7 @@ async fn test_get_tag_completions_tool() {
     let request = CallToolRequest {
         name: "get_tag_completions".to_string(),
         arguments: Some(json!({
-            "partial_input": "wo",
+            "prefix": "wo",
             "limit": 5
         })),
     };

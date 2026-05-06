@@ -2119,16 +2119,16 @@ impl ThingsMcpServer {
                 input_schema: serde_json::json!({
                     "type": "object",
                     "properties": {
-                        "partial_input": {
+                        "prefix": {
                             "type": "string",
-                            "description": "Partial tag input (required)"
+                            "description": "Partial tag input to complete (required)"
                         },
                         "limit": {
                             "type": "integer",
                             "description": "Maximum completions to return (default: 10)"
                         }
                     },
-                    "required": ["partial_input"]
+                    "required": ["prefix"]
                 }),
             },
         ]
@@ -3960,19 +3960,18 @@ impl ThingsMcpServer {
     }
 
     async fn handle_get_tag_completions(&self, args: Value) -> McpResult<CallToolResult> {
-        let partial_input: String = args
-            .get("partial_input")
+        let prefix: String = args
+            .get("prefix")
+            .or_else(|| args.get("partial_input"))
             .and_then(|v| v.as_str())
-            .ok_or_else(|| {
-                McpError::invalid_parameter("partial_input", "Missing 'partial_input' parameter")
-            })?
+            .ok_or_else(|| McpError::invalid_parameter("prefix", "Missing 'prefix' parameter"))?
             .to_string();
 
         let limit = args.get("limit").and_then(|v| v.as_u64()).unwrap_or(10) as usize;
 
         let completions = self
             .db
-            .get_tag_completions(&partial_input, limit)
+            .get_tag_completions(&prefix, limit)
             .await
             .map_err(|e| McpError::database_operation_failed("get_tag_completions", e))?;
 
