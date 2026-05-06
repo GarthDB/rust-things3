@@ -168,13 +168,27 @@ async fn test_get_popular_tags() {
 async fn test_get_recent_tags() {
     let server = create_test_mcp_server().await;
 
-    // Create a tag
-    let request = things3_core::models::CreateTagRequest {
+    // Create a tag and a task, then link them so the TMTaskTag JOIN returns data.
+    let tag_req = things3_core::models::CreateTagRequest {
         title: "work".to_string(),
         shortcut: None,
         parent_uuid: None,
     };
-    server.db.create_tag_force(request).await.unwrap();
+    server.db.create_tag_force(tag_req).await.unwrap();
+
+    let task_req = things3_core::models::CreateTaskRequest {
+        title: "Tagged task".to_string(),
+        task_type: None,
+        notes: None,
+        start_date: None,
+        deadline: None,
+        project_uuid: None,
+        area_uuid: None,
+        parent_uuid: None,
+        tags: Some(vec!["work".to_string()]),
+        status: None,
+    };
+    server.db.create_task(task_req).await.unwrap();
 
     let request = CallToolRequest {
         name: "get_recent_tags".to_string(),
@@ -190,7 +204,10 @@ async fn test_get_recent_tags() {
     let response: serde_json::Value = serde_json::from_str(text).unwrap();
 
     assert!(response.is_array());
-    // Will be empty since usedDate is NULL initially
+    // The "work" tag is now linked to a task via TMTaskTag, so it should appear.
+    assert!(!response.as_array().unwrap().is_empty());
+    let first = &response.as_array().unwrap()[0];
+    assert_eq!(first["title"].as_str().unwrap(), "work");
 }
 
 // ========================================================================
