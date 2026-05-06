@@ -381,6 +381,36 @@ impl McpTestHarness {
         .await
         .unwrap();
 
+        sqlx::query(
+            r"
+            CREATE TABLE IF NOT EXISTS TMTag (
+                uuid TEXT PRIMARY KEY,
+                title TEXT,
+                shortcut TEXT,
+                usedDate REAL,
+                parent TEXT,
+                'index' INTEGER,
+                experimental BLOB
+            )
+            ",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        sqlx::query(
+            r"
+            CREATE TABLE IF NOT EXISTS TMTaskTag (
+                tasks TEXT NOT NULL,
+                tags  TEXT NOT NULL,
+                PRIMARY KEY (tasks, tags)
+            )
+            ",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+
         // Insert test data
         // Use a safe conversion for timestamp to avoid precision loss
         let timestamp_i64 = chrono::Utc::now().timestamp();
