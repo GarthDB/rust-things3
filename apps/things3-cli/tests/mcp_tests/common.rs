@@ -87,6 +87,18 @@ async fn create_test_schema(db: &ThingsDatabase) -> Result<(), Box<dyn std::erro
     .execute(pool)
     .await?;
 
+    sqlx::query(
+        r"
+        CREATE TABLE IF NOT EXISTS TMTaskTag (
+            tasks TEXT NOT NULL,
+            tags  TEXT NOT NULL,
+            PRIMARY KEY (tasks, tags)
+        )
+        ",
+    )
+    .execute(pool)
+    .await?;
+
     // Insert test data
     insert_test_data(pool).await?;
 
