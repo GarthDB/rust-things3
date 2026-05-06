@@ -378,3 +378,153 @@ async fn tag_lifecycle_round_trip() {
         .expect("delete_tag should succeed");
     tag_guard.dismiss();
 }
+
+/// `delete_tag(remove_from_tasks=true)` against a tag that is currently
+/// applied to a task. Regression for #160: previously failed with
+/// "malformed JSON" because the helper queried `cachedTags` BLOB. Now
+/// reads via `TMTaskTag` JOIN.
+#[tokio::test]
+#[ignore = "requires Things 3 + Automation permission; set THINGS3_LIVE_TESTS=1"]
+async fn delete_tag_remove_from_tasks_lifecycle() {
+    if !live_tests_enabled() {
+        return;
+    }
+    let backend = live_backend().await;
+    let suffix = unique_suffix();
+    let tag_title = format!("rust-things3-e2e-rmtag-{suffix}");
+    let task_title = format!("rust-things3 e2e rmtag-host {suffix}");
+
+    let tag_id = match backend
+        .create_tag(
+            CreateTagRequest {
+                title: tag_title.clone(),
+                shortcut: None,
+                parent_uuid: None,
+            },
+            true,
+        )
+        .await
+        .expect("create_tag should succeed")
+    {
+        things3_core::TagCreationResult::Created { uuid, .. } => uuid,
+        other => panic!("expected Created, got {other:?}"),
+    };
+    let mut tag_guard = Guard::new(Arc::clone(&backend), tag_id.clone(), Kind::Tag);
+
+    let task_id = backend
+        .create_task(CreateTaskRequest {
+            title: task_title,
+            task_type: None,
+            notes: None,
+            start_date: None,
+            deadline: None,
+            project_uuid: None,
+            area_uuid: None,
+            parent_uuid: None,
+            tags: Some(vec![tag_title.clone()]),
+            status: None,
+        })
+        .await
+        .expect("create_task with tag should succeed");
+    let mut task_guard = Guard::new(Arc::clone(&backend), task_id.clone(), Kind::Task);
+
+    // The fix under test — must not error with "malformed JSON".
+    backend
+        .delete_tag(&tag_id, true)
+        .await
+        .expect("delete_tag(remove_from_tasks=true) should succeed");
+    tag_guard.dismiss();
+
+    backend
+        .delete_task(&task_id, DeleteChildHandling::Error)
+        .await
+        .expect("delete_task (rmtag-host) should succeed");
+    task_guard.dismiss();
+}
+
+/// `merge_tags` source → target across a tagged task. Regression for
+/// #159: previously failed with "malformed JSON" via the same residual
+/// `cachedTags` read path that affected `delete_tag(remove_from_tasks=true)`.
+#[tokio::test]
+#[ignore = "requires Things 3 + Automation permission; set THINGS3_LIVE_TESTS=1"]
+async fn merge_tags_lifecycle() {
+    if !live_tests_enabled() {
+        return;
+    }
+    let backend = live_backend().await;
+    let suffix = unique_suffix();
+    let source_title = format!("rust-things3-e2e-merge-src-{suffix}");
+    let target_title = format!("rust-things3-e2e-merge-tgt-{suffix}");
+    let task_title = format!("rust-things3 e2e merge-host {suffix}");
+
+    let source_id = match backend
+        .create_tag(
+            CreateTagRequest {
+                title: source_title.clone(),
+                shortcut: None,
+                parent_uuid: None,
+            },
+            true,
+        )
+        .await
+        .expect("create source tag")
+    {
+        things3_core::TagCreationResult::Created { uuid, .. } => uuid,
+        other => panic!("expected Created, got {other:?}"),
+    };
+    let mut source_guard = Guard::new(Arc::clone(&backend), source_id.clone(), Kind::Tag);
+
+    let target_id = match backend
+        .create_tag(
+            CreateTagRequest {
+                title: target_title.clone(),
+                shortcut: None,
+                parent_uuid: None,
+            },
+            true,
+        )
+        .await
+        .expect("create target tag")
+    {
+        things3_core::TagCreationResult::Created { uuid, .. } => uuid,
+        other => panic!("expected Created, got {other:?}"),
+    };
+    let mut target_guard = Guard::new(Arc::clone(&backend), target_id.clone(), Kind::Tag);
+
+    let task_id = backend
+        .create_task(CreateTaskRequest {
+            title: task_title,
+            task_type: None,
+            notes: None,
+            start_date: None,
+            deadline: None,
+            project_uuid: None,
+            area_uuid: None,
+            parent_uuid: None,
+            tags: Some(vec![source_title.clone()]),
+            status: None,
+        })
+        .await
+        .expect("create_task with source tag should succeed");
+    let mut task_guard = Guard::new(Arc::clone(&backend), task_id.clone(), Kind::Task);
+
+    // The fix under test — must not error with "malformed JSON".
+    backend
+        .merge_tags(&source_id, &target_id)
+        .await
+        .expect("merge_tags should succeed");
+    // merge_tags deletes the source on success.
+    source_guard.dismiss();
+
+    backend
+        .delete_task(&task_id, DeleteChildHandling::Error)
+        .await
+        .expect("delete_task (merge-host) should succeed");
+    task_guard.dismiss();
+
+    backend
+        .delete_tag(&target_id, false)
+        .await
+        .expect("delete_tag (target) should succeed");
+    target_guard.dismiss();
+}
