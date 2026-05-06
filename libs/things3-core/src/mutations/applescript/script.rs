@@ -107,12 +107,18 @@ pub(crate) fn create_task_script(req: &CreateTaskRequest) -> String {
     }
 
     // Container precedence matches the sqlx backend: project > area > parent.
+    // `set project/area of` avoids error 301 ("Cannot move to-do") that the
+    // `move` command produces on a freshly-created task (#158).
     if let Some(uuid) = &req.project_uuid {
-        body.push_str(&format!("\t\tmove newTask to project id \"{uuid}\"\n"));
+        body.push_str(&format!(
+            "\t\tset project of newTask to project id \"{uuid}\"\n"
+        ));
     } else if let Some(uuid) = &req.area_uuid {
-        body.push_str(&format!("\t\tmove newTask to area id \"{uuid}\"\n"));
+        body.push_str(&format!("\t\tset area of newTask to area id \"{uuid}\"\n"));
     } else if let Some(uuid) = &req.parent_uuid {
-        body.push_str(&format!("\t\tmove newTask to to do id \"{uuid}\"\n"));
+        body.push_str(&format!(
+            "\t\tset parent task of newTask to to do id \"{uuid}\"\n"
+        ));
     }
 
     if let Some(status) = req.status {
@@ -190,7 +196,13 @@ pub(crate) fn uncomplete_task_script(id: &ThingsId) -> String {
 
 #[allow(dead_code)] // Used by AppleScriptBackend, added in #134.
 pub(crate) fn delete_task_script(id: &ThingsId) -> String {
-    wrap(&format!("\t\tdelete to do id \"{id}\"\n"))
+    // `to do id "<id>"` cannot look up completed (logbook) tasks — they are no
+    // longer in the default scope. The `whose id =` clause searches all lists
+    // including the logbook, fixing error -1728 on completed tasks (#162).
+    wrap(&format!(
+        "\t\tset _matches to (every to do whose id = \"{id}\")\n\
+         \t\tif (count of _matches) > 0 then delete (item 1 of _matches)\n"
+    ))
 }
 
 // =====================================================================
@@ -500,10 +512,16 @@ pub(crate) fn bulk_create_tasks_script(req: &BulkCreateTasksRequest) -> String {
 
 #[allow(dead_code)] // Used by AppleScriptBackend, added in #135.
 pub(crate) fn bulk_delete_script(req: &BulkDeleteRequest) -> String {
+    // Use `whose id =` so completed (logbook) items are also reachable (#162).
     let snippets: Vec<String> = req
         .task_uuids
         .iter()
-        .map(|id| format!("\t\t\tdelete to do id \"{id}\"\n"))
+        .map(|id| {
+            format!(
+                "\t\t\tset _m to (every to do whose id = \"{id}\")\n\
+                 \t\t\tif (count of _m) > 0 then delete (item 1 of _m)\n"
+            )
+        })
         .collect();
     bulk_wrap(&snippets)
 }
@@ -775,7 +793,7 @@ mod tests {
     }
 
     #[test]
-    fn create_task_with_project_emits_move() {
+    fn create_task_with_project_emits_set_project() {
         let req = CreateTaskRequest {
             title: "x".into(),
             task_type: None,
@@ -790,9 +808,10 @@ mod tests {
         };
         let script = create_task_script(&req);
         assert!(script.contains(&format!(
-            "move newTask to project id \"{}\"",
+            "set project of newTask to project id \"{}\"",
             project_uuid()
         )));
+        assert!(!script.contains("move newTask"));
     }
 
     #[test]
@@ -810,8 +829,9 @@ mod tests {
             status: None,
         };
         let script = create_task_script(&req);
-        assert!(script.contains("move newTask to project id"));
-        assert!(!script.contains("move newTask to area id"));
+        assert!(script.contains("set project of newTask to project id"));
+        assert!(!script.contains("set area of newTask to area id"));
+        assert!(!script.contains("move newTask"));
     }
 
     #[test]
@@ -913,8 +933,12 @@ mod tests {
 
     #[test]
     fn delete_task_script_shape() {
-        let script = delete_task_script(&sample_uuid());
-        assert!(script.contains(&format!("delete to do id \"{}\"", sample_uuid())));
+        let id = sample_uuid();
+        let script = delete_task_script(&id);
+        // Uses `whose id =` so logbook (completed) tasks are reachable (#162).
+        assert!(script.contains(&format!("every to do whose id = \"{}\"", id)));
+        assert!(script.contains("delete (item 1 of _matches)"));
+        assert!(!script.contains(&format!("delete to do id \"{}\"", id)));
     }
 
     #[test]
@@ -1153,8 +1177,10 @@ mod tests {
             task_uuids: vec![sample_uuid(), project_uuid()],
         };
         let script = bulk_delete_script(&req);
-        assert!(script.contains(&format!("delete to do id \"{}\"", sample_uuid())));
-        assert!(script.contains(&format!("delete to do id \"{}\"", project_uuid())));
+        // Uses `whose id =` so logbook items are reachable (#162).
+        assert!(script.contains(&format!("every to do whose id = \"{}\"", sample_uuid())));
+        assert!(script.contains(&format!("every to do whose id = \"{}\"", project_uuid())));
+        assert!(!script.contains(&format!("delete to do id \"{}\"", sample_uuid())));
         assert_eq!(script.matches("\t\ttry\n").count(), 2);
         assert_eq!(script.matches("on error errMsg").count(), 2);
     }

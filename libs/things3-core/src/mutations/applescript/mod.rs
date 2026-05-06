@@ -211,6 +211,27 @@ impl MutationBackend for AppleScriptBackend {
     // ---- Tasks (Phase B — implemented) ----
 
     async fn create_task(&self, request: CreateTaskRequest) -> ThingsResult<ThingsId> {
+        use crate::models::TaskType;
+        match request.task_type {
+            Some(TaskType::Heading) => {
+                return Err(ThingsError::validation(
+                    "Heading creation via AppleScript is not supported: Things 3 does not \
+                     expose heading creation in its AppleScript dictionary. Use the Things 3 \
+                     UI to create headings (#161).",
+                ));
+            }
+            Some(TaskType::Project) => {
+                return Err(ThingsError::validation(
+                    "Use create_project to create a project, not create_task.",
+                ));
+            }
+            Some(TaskType::Area) => {
+                return Err(ThingsError::validation(
+                    "Use create_area to create an area, not create_task.",
+                ));
+            }
+            Some(TaskType::Todo) | None => {}
+        }
         let script = script::create_task_script(&request);
         let stdout = runner::run_script(&script).await?;
         parse::extract_id(&stdout)
