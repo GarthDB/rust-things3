@@ -13,6 +13,7 @@ use things3_core::{
 };
 use thiserror::Error;
 use tokio::sync::Mutex;
+use tracing::warn;
 
 pub mod io_wrapper;
 pub mod middleware;
@@ -2121,13 +2122,15 @@ impl ThingsMcpServer {
                     "properties": {
                         "prefix": {
                             "type": "string",
-                            "description": "Partial tag input to complete (required)"
+                            "description": "Partial tag input to complete"
                         },
                         "limit": {
                             "type": "integer",
                             "description": "Maximum completions to return (default: 10)"
                         }
                     },
+                    // "partial_input" is accepted as a hidden backward-compat alias
+                    // but is not advertised here. Use "prefix" for all new callers.
                     "required": ["prefix"]
                 }),
             },
@@ -3960,12 +3963,17 @@ impl ThingsMcpServer {
     }
 
     async fn handle_get_tag_completions(&self, args: Value) -> McpResult<CallToolResult> {
-        let prefix: String = args
-            .get("prefix")
-            .or_else(|| args.get("partial_input"))
-            .and_then(|v| v.as_str())
-            .ok_or_else(|| McpError::invalid_parameter("prefix", "Missing 'prefix' parameter"))?
-            .to_string();
+        let prefix: String = if let Some(v) = args.get("prefix").and_then(|v| v.as_str()) {
+            v.to_string()
+        } else if let Some(v) = args.get("partial_input").and_then(|v| v.as_str()) {
+            warn!("get_tag_completions: 'partial_input' is deprecated, use 'prefix' instead");
+            v.to_string()
+        } else {
+            return Err(McpError::invalid_parameter(
+                "prefix",
+                "Missing 'prefix' parameter",
+            ));
+        };
 
         let limit = args.get("limit").and_then(|v| v.as_u64()).unwrap_or(10) as usize;
 
