@@ -1232,6 +1232,65 @@ mod tests {
         assert_native_format_validation(err);
     }
 
+    // ============================================================================
+    // create_task task_type validation (#161) — heading/project/area types must
+    // be rejected with a Validation error before osascript is invoked.
+    // ============================================================================
+
+    fn minimal_create_request(task_type: crate::models::TaskType) -> CreateTaskRequest {
+        CreateTaskRequest {
+            title: "test".into(),
+            task_type: Some(task_type),
+            notes: None,
+            start_date: None,
+            deadline: None,
+            project_uuid: None,
+            area_uuid: None,
+            parent_uuid: None,
+            tags: None,
+            status: None,
+        }
+    }
+
+    #[tokio::test]
+    async fn create_task_rejects_heading_type() {
+        let backend = guard_test_backend().await;
+        let err = backend
+            .create_task(minimal_create_request(crate::models::TaskType::Heading))
+            .await
+            .expect_err("heading should be rejected");
+        assert!(
+            matches!(err, ThingsError::Validation { .. }),
+            "expected Validation, got {err:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn create_task_rejects_project_type() {
+        let backend = guard_test_backend().await;
+        let err = backend
+            .create_task(minimal_create_request(crate::models::TaskType::Project))
+            .await
+            .expect_err("project type should be rejected");
+        assert!(
+            matches!(err, ThingsError::Validation { .. }),
+            "expected Validation, got {err:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn create_task_rejects_area_type() {
+        let backend = guard_test_backend().await;
+        let err = backend
+            .create_task(minimal_create_request(crate::models::TaskType::Area))
+            .await
+            .expect_err("area type should be rejected");
+        assert!(
+            matches!(err, ThingsError::Validation { .. }),
+            "expected Validation, got {err:?}"
+        );
+    }
+
     // Live lifecycle tests live in `libs/things3-core/tests/applescript_live.rs`
     // (Phase E, #137). They are gated by `THINGS3_LIVE_TESTS=1` and run with
     // `--test-threads=1`.
