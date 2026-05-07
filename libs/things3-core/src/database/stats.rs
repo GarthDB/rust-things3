@@ -37,22 +37,4 @@ mod tests {
         };
         assert_eq!(empty_stats.total_items(), 0);
     }
-
-    #[test]
-    fn test_database_stats_total_items_calculation() {
-        let stats = DatabaseStats {
-            task_count: 10,
-            project_count: 5,
-            area_count: 3,
-        };
-        assert_eq!(stats.total_items(), 18); // 10 + 5 + 3
-
-        // Test with zero values
-        let empty_stats = DatabaseStats {
-            task_count: 0,
-            project_count: 0,
-            area_count: 0,
-        };
-        assert_eq!(empty_stats.total_items(), 0);
-    }
 }

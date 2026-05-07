@@ -396,11 +396,8 @@ impl ThingsDatabase {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::models::{
-        Area, BulkCompleteRequest, BulkDeleteRequest, BulkMoveRequest, BulkUpdateDatesRequest,
-        CreateProjectRequest, CreateTaskRequest, DeleteChildHandling, TaskStatus, TaskType,
-        ThingsId, UpdateTaskRequest,
-    };
+    #[cfg(feature = "advanced-queries")]
+    use crate::models::{TaskStatus, ThingsId};
     use std::time::Duration;
     use tempfile::{NamedTempFile, TempDir};
 

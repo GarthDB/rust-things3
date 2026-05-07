@@ -1,15 +1,15 @@
 //! Database module - organized submodules for better maintainability
 
-pub mod conversions;
+pub(crate) mod conversions;
 mod core;
 pub mod date_utils;
 pub mod mappers;
 mod mutations;
-pub mod path_discovery;
-pub mod pool;
+pub(crate) mod path_discovery;
+pub(crate) mod pool;
 mod queries;
 pub mod query_builders;
-pub mod stats;
+pub(crate) mod stats;
 pub mod tag_utils;
 pub mod validators;
 
