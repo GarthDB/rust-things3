@@ -92,6 +92,34 @@ pub(crate) fn parse_bulk_result(stdout: &str, total: usize) -> Result<BulkOperat
     })
 }
 
+/// Parse the output of the atomic [`super::script::bulk_create_tasks_script`].
+///
+/// Expected output shapes:
+/// - `"OK <count>"` — all tasks created successfully
+/// - `"ROLLBACK: <msg>"` — creation failed; the script already deleted any
+///   partial creates, so the caller should surface the error as-is
+pub(crate) fn parse_atomic_bulk_create_result(stdout: &str) -> Result<BulkOperationResult> {
+    let trimmed = stdout.trim();
+    if let Some(msg) = trimmed.strip_prefix("ROLLBACK: ") {
+        return Err(ThingsError::applescript(format!(
+            "bulk_create_tasks rolled back after partial failure: {msg}"
+        )));
+    }
+    let processed: usize = trimmed
+        .strip_prefix("OK ")
+        .and_then(|s| s.trim().parse().ok())
+        .ok_or_else(|| {
+            ThingsError::applescript(format!(
+                "bulk_create_tasks returned unexpected output: {trimmed:?}"
+            ))
+        })?;
+    Ok(BulkOperationResult {
+        success: true,
+        processed_count: processed,
+        message: format!("Successfully created {processed} task(s)"),
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -214,6 +242,46 @@ mod tests {
     #[test]
     fn parse_bulk_rejects_garbage_header() {
         let err = parse_bulk_result("garbage", 1).unwrap_err();
+        match err {
+            ThingsError::AppleScript { message } => {
+                assert!(message.contains("unexpected output"));
+            }
+            _ => panic!("expected AppleScript error, got {err:?}"),
+        }
+    }
+
+    #[test]
+    fn parse_atomic_bulk_create_zero() {
+        let res = parse_atomic_bulk_create_result("OK 0").unwrap();
+        assert!(res.success);
+        assert_eq!(res.processed_count, 0);
+    }
+
+    #[test]
+    fn parse_atomic_bulk_create_success() {
+        let res = parse_atomic_bulk_create_result("OK 3").unwrap();
+        assert!(res.success);
+        assert_eq!(res.processed_count, 3);
+        assert!(res.message.contains("Successfully created 3"));
+    }
+
+    #[test]
+    fn parse_atomic_bulk_create_rollback_returns_err() {
+        let err =
+            parse_atomic_bulk_create_result("ROLLBACK: project id \"bad-uuid\" doesn't exist")
+                .unwrap_err();
+        match err {
+            ThingsError::AppleScript { message } => {
+                assert!(message.contains("rolled back"));
+                assert!(message.contains("bad-uuid"));
+            }
+            _ => panic!("expected AppleScript error, got {err:?}"),
+        }
+    }
+
+    #[test]
+    fn parse_atomic_bulk_create_rejects_garbage() {
+        let err = parse_atomic_bulk_create_result("garbage").unwrap_err();
         match err {
             ThingsError::AppleScript { message } => {
                 assert!(message.contains("unexpected output"));
