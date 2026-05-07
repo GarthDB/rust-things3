@@ -63,7 +63,7 @@ async fn test_get_inbox_tool() {
     match &result.content[0] {
         Content::Text { text } => {
             // Should be valid JSON
-            let parsed: serde_json::Value = serde_json::from_str(&text).unwrap();
+            let parsed: serde_json::Value = serde_json::from_str(text).unwrap();
             assert!(parsed.is_array());
             // Should have some tasks
             let tasks = parsed.as_array().unwrap();
@@ -99,7 +99,7 @@ async fn test_get_today_tool() {
 
     match &result.content[0] {
         Content::Text { text } => {
-            let parsed: serde_json::Value = serde_json::from_str(&text).unwrap();
+            let parsed: serde_json::Value = serde_json::from_str(text).unwrap();
             assert!(parsed.is_array());
         }
     }
@@ -119,7 +119,7 @@ async fn test_get_projects_tool() {
 
     match &result.content[0] {
         Content::Text { text } => {
-            let parsed: serde_json::Value = serde_json::from_str(&text).unwrap();
+            let parsed: serde_json::Value = serde_json::from_str(text).unwrap();
             assert!(parsed.is_array());
         }
     }
@@ -152,7 +152,7 @@ async fn test_get_areas_tool() {
 
     match &result.content[0] {
         Content::Text { text } => {
-            let parsed: serde_json::Value = serde_json::from_str(&text).unwrap();
+            let parsed: serde_json::Value = serde_json::from_str(text).unwrap();
             assert!(parsed.is_array());
         }
     }
@@ -172,7 +172,7 @@ async fn test_search_tasks_tool() {
 
     match &result.content[0] {
         Content::Text { text } => {
-            let parsed: serde_json::Value = serde_json::from_str(&text).unwrap();
+            let parsed: serde_json::Value = serde_json::from_str(text).unwrap();
             assert!(parsed.is_array());
         }
     }
@@ -213,7 +213,7 @@ async fn test_create_task_tool() {
 
     match &result.content[0] {
         Content::Text { text } => {
-            let parsed: serde_json::Value = serde_json::from_str(&text).unwrap();
+            let parsed: serde_json::Value = serde_json::from_str(text).unwrap();
             assert!(parsed.get("uuid").is_some(), "Response should contain UUID");
             assert_eq!(parsed["message"], "Task created successfully");
         }
@@ -269,7 +269,7 @@ async fn test_update_task_tool() {
 
     match &result.content[0] {
         Content::Text { text } => {
-            let parsed: serde_json::Value = serde_json::from_str(&text).unwrap();
+            let parsed: serde_json::Value = serde_json::from_str(text).unwrap();
             assert_eq!(parsed["message"], "Task updated successfully");
         }
     }
@@ -304,7 +304,7 @@ async fn test_get_productivity_metrics_tool() {
 
     match &result.content[0] {
         Content::Text { text } => {
-            let parsed: serde_json::Value = serde_json::from_str(&text).unwrap();
+            let parsed: serde_json::Value = serde_json::from_str(text).unwrap();
             assert_eq!(parsed["period_days"], 7);
             assert!(parsed["inbox_tasks_count"].is_number());
             assert!(parsed["today_tasks_count"].is_number());
@@ -328,7 +328,7 @@ async fn test_get_productivity_metrics_tool_default_days() {
 
     match &result.content[0] {
         Content::Text { text } => {
-            let parsed: serde_json::Value = serde_json::from_str(&text).unwrap();
+            let parsed: serde_json::Value = serde_json::from_str(text).unwrap();
             assert_eq!(parsed["period_days"], 7); // Default value
         }
     }
@@ -351,7 +351,7 @@ async fn test_export_data_tool_json() {
 
     match &result.content[0] {
         Content::Text { text } => {
-            let parsed: serde_json::Value = serde_json::from_str(&text).unwrap();
+            let parsed: serde_json::Value = serde_json::from_str(text).unwrap();
             assert!(parsed["inbox"].is_array());
             assert!(parsed["today"].is_array());
         }
@@ -375,7 +375,7 @@ async fn test_export_data_tool_all_data() {
 
     match &result.content[0] {
         Content::Text { text } => {
-            let parsed: serde_json::Value = serde_json::from_str(&text).unwrap();
+            let parsed: serde_json::Value = serde_json::from_str(text).unwrap();
             assert!(parsed["inbox"].is_array());
             assert!(parsed["today"].is_array());
             assert!(parsed["projects"].is_array());
@@ -595,7 +595,7 @@ async fn test_export_data_output_path_writes_file() {
 
     match &result.content[0] {
         Content::Text { text } => {
-            let parsed: serde_json::Value = serde_json::from_str(&text).unwrap();
+            let parsed: serde_json::Value = serde_json::from_str(text).unwrap();
             assert_eq!(parsed["path"].as_str().unwrap(), path);
             assert_eq!(parsed["format"].as_str().unwrap(), "json");
             assert_eq!(parsed["data_type"].as_str().unwrap(), "tasks");
@@ -631,7 +631,7 @@ async fn test_export_data_output_path_csv() {
 
     match &result.content[0] {
         Content::Text { text } => {
-            let parsed: serde_json::Value = serde_json::from_str(&text).unwrap();
+            let parsed: serde_json::Value = serde_json::from_str(text).unwrap();
             assert_eq!(parsed["format"].as_str().unwrap(), "csv");
             assert_eq!(parsed["data_type"].as_str().unwrap(), "tasks");
             assert!(parsed["bytes_written"].as_u64().unwrap() > 0);
@@ -665,7 +665,7 @@ async fn test_bulk_create_tasks_tool() {
 
     match &result.content[0] {
         Content::Text { text } => {
-            let parsed: serde_json::Value = serde_json::from_str(&text).unwrap();
+            let parsed: serde_json::Value = serde_json::from_str(text).unwrap();
             assert_eq!(parsed["success"], true);
             assert_eq!(parsed["processed_count"], 2);
         }
@@ -704,7 +704,7 @@ async fn test_get_recent_tasks_tool() {
 
     match &result.content[0] {
         Content::Text { text } => {
-            let parsed: serde_json::Value = serde_json::from_str(&text).unwrap();
+            let parsed: serde_json::Value = serde_json::from_str(text).unwrap();
             assert_eq!(parsed["hours_lookback"], 24);
             assert!(parsed["tasks"].is_array());
         }
@@ -725,7 +725,7 @@ async fn test_get_recent_tasks_tool_default_hours() {
 
     match &result.content[0] {
         Content::Text { text } => {
-            let parsed: serde_json::Value = serde_json::from_str(&text).unwrap();
+            let parsed: serde_json::Value = serde_json::from_str(text).unwrap();
             assert_eq!(parsed["hours_lookback"], 24); // Default value
         }
     }
@@ -745,7 +745,7 @@ async fn test_get_performance_stats_tool() {
 
     match &result.content[0] {
         Content::Text { text } => {
-            let parsed: serde_json::Value = serde_json::from_str(&text).unwrap();
+            let parsed: serde_json::Value = serde_json::from_str(text).unwrap();
             assert!(parsed["summary"].is_object());
             assert!(parsed["operation_stats"].is_object());
         }
@@ -766,7 +766,7 @@ async fn test_get_system_metrics_tool() {
 
     match &result.content[0] {
         Content::Text { text } => {
-            let parsed: serde_json::Value = serde_json::from_str(&text).unwrap();
+            let parsed: serde_json::Value = serde_json::from_str(text).unwrap();
             assert!(parsed.is_object());
         }
     }
@@ -786,7 +786,7 @@ async fn test_get_cache_stats_tool() {
 
     match &result.content[0] {
         Content::Text { text } => {
-            let parsed: serde_json::Value = serde_json::from_str(&text).unwrap();
+            let parsed: serde_json::Value = serde_json::from_str(text).unwrap();
             assert!(parsed.is_object());
         }
     }
@@ -875,7 +875,7 @@ async fn test_list_backups_tool() {
 
     match &result.content[0] {
         Content::Text { text } => {
-            let parsed: serde_json::Value = serde_json::from_str(&text).unwrap();
+            let parsed: serde_json::Value = serde_json::from_str(text).unwrap();
             assert!(parsed["backups"].is_array());
             assert!(parsed["count"].is_number());
         }
