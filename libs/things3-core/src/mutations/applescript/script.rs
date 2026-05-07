@@ -434,9 +434,9 @@ fn bulk_wrap(per_item: &[String]) -> String {
 /// inside the atomic bulk-create script. Indented one extra level (`\t\t\t`)
 /// to sit inside the single outer `try` block.
 ///
-/// The caller is responsible for initialising `createdTasks` before the first
-/// snippet runs; each snippet appends `newTask` to that list so the outer
-/// `on error` handler can delete them all on rollback.
+/// Caller contract: the caller must declare `set createdTasks to {}` before
+/// the first snippet runs; each snippet appends `newTask` to that list so the
+/// outer `on error` handler can delete them all on rollback.
 fn create_task_snippet(req: &CreateTaskRequest) -> String {
     let mut props = vec![format!("name:{}", as_applescript_string(&req.title))];
     if let Some(notes) = &req.notes {
@@ -473,9 +473,7 @@ fn create_task_snippet(req: &CreateTaskRequest) -> String {
             "\t\t\tset area of newTask to area id \"{uuid}\"\n"
         ));
     } else if let Some(uuid) = &req.parent_uuid {
-        snippet.push_str(&format!(
-            "\t\t\tset parent task of newTask to to do id \"{uuid}\"\n"
-        ));
+        snippet.push_str(&format!("\t\t\tmove newTask to to do id \"{uuid}\"\n"));
     }
 
     if let Some(status) = req.status {

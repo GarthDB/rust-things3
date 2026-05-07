@@ -98,7 +98,6 @@ pub(crate) fn parse_bulk_result(stdout: &str, total: usize) -> Result<BulkOperat
 /// - `"OK <count>"` — all tasks created successfully
 /// - `"ROLLBACK: <msg>"` — creation failed; the script already deleted any
 ///   partial creates, so the caller should surface the error as-is
-#[allow(dead_code)] // Used by AppleScriptBackend, added in #157.
 pub(crate) fn parse_atomic_bulk_create_result(stdout: &str) -> Result<BulkOperationResult> {
     let trimmed = stdout.trim();
     if let Some(msg) = trimmed.strip_prefix("ROLLBACK: ") {
@@ -249,6 +248,13 @@ mod tests {
             }
             _ => panic!("expected AppleScript error, got {err:?}"),
         }
+    }
+
+    #[test]
+    fn parse_atomic_bulk_create_zero() {
+        let res = parse_atomic_bulk_create_result("OK 0").unwrap();
+        assert!(res.success);
+        assert_eq!(res.processed_count, 0);
     }
 
     #[test]
