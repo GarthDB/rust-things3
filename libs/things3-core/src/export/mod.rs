@@ -1,14 +1,15 @@
 //! Data export functionality for Things 3 data
 
-#[cfg(any(feature = "export-csv", feature = "export-taskpaper"))]
-use crate::models::TaskType;
-use crate::models::{Area, Project, Task, TaskStatus};
+mod csv;
+mod ical;
+mod markdown;
+mod opml;
+mod taskpaper;
+
+use crate::models::{Area, Project, Task};
 use anyhow::Result;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-#[cfg(feature = "export-opml")]
-use std::collections::HashMap;
-use std::fmt::Write;
 
 /// Export format enumeration
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -109,26 +110,26 @@ impl DataExporter {
         match format {
             ExportFormat::Json => Self::export_json(data),
             #[cfg(feature = "export-csv")]
-            ExportFormat::Csv => Ok(Self::export_csv(data)),
+            ExportFormat::Csv => Ok(csv::export_csv(data)),
             #[cfg(not(feature = "export-csv"))]
             ExportFormat::Csv => Err(anyhow::anyhow!(
                 "CSV export is not enabled. Enable the 'export-csv' feature."
             )),
             #[cfg(feature = "export-opml")]
-            ExportFormat::Opml => Ok(Self::export_opml(data)),
+            ExportFormat::Opml => Ok(opml::export_opml(data)),
             #[cfg(not(feature = "export-opml"))]
             ExportFormat::Opml => Err(anyhow::anyhow!(
                 "OPML export is not enabled. Enable the 'export-opml' feature."
             )),
-            ExportFormat::Markdown => Ok(Self::export_markdown(data)),
+            ExportFormat::Markdown => Ok(markdown::export_markdown(data)),
             #[cfg(feature = "export-taskpaper")]
-            ExportFormat::TaskPaper => Ok(Self::export_taskpaper(data)),
+            ExportFormat::TaskPaper => Ok(taskpaper::export_taskpaper(data)),
             #[cfg(not(feature = "export-taskpaper"))]
             ExportFormat::TaskPaper => Err(anyhow::anyhow!(
                 "TaskPaper export is not enabled. Enable the 'export-taskpaper' feature."
             )),
             #[cfg(feature = "export-ical")]
-            ExportFormat::ICalendar => Ok(Self::export_icalendar(data)),
+            ExportFormat::ICalendar => Ok(ical::export_icalendar(data)),
             #[cfg(not(feature = "export-ical"))]
             ExportFormat::ICalendar => Err(anyhow::anyhow!(
                 "iCalendar export is not enabled. Enable the 'export-ical' feature."
@@ -140,598 +141,6 @@ impl DataExporter {
     fn export_json(data: &ExportData) -> Result<String> {
         Ok(serde_json::to_string_pretty(data)?)
     }
-
-    /// Export as CSV
-    #[cfg(feature = "export-csv")]
-    fn export_csv(data: &ExportData) -> String {
-        let mut csv = String::new();
-
-        // Export tasks
-        if !data.tasks.is_empty() {
-            csv.push_str("Type,Title,Status,Notes,Start Date,Deadline,Created,Modified,Project,Area,Parent\n");
-            for task in &data.tasks {
-                writeln!(
-                    csv,
-                    "{},{},{},{},{},{},{},{},{},{},{}",
-                    format_task_type_csv(task.task_type),
-                    escape_csv(&task.title),
-                    format_task_status_csv(task.status),
-                    escape_csv(task.notes.as_deref().unwrap_or("")),
-                    format_date_csv(task.start_date),
-                    format_date_csv(task.deadline),
-                    format_datetime_csv(task.created),
-                    format_datetime_csv(task.modified),
-                    task.project_uuid
-                        .as_ref()
-                        .map(|u| u.to_string())
-                        .unwrap_or_default(),
-                    task.area_uuid
-                        .as_ref()
-                        .map(|u| u.to_string())
-                        .unwrap_or_default(),
-                    task.parent_uuid
-                        .as_ref()
-                        .map(|u| u.to_string())
-                        .unwrap_or_default(),
-                )
-                .unwrap();
-            }
-        }
-
-        // Export projects
-        if !data.projects.is_empty() {
-            csv.push_str("Title,Status,Notes,Start Date,Deadline,Created,Modified,Area\n");
-            for project in &data.projects {
-                writeln!(
-                    csv,
-                    "{},{},{},{},{},{},{},{}",
-                    escape_csv(&project.title),
-                    format_task_status_csv(project.status),
-                    escape_csv(project.notes.as_deref().unwrap_or("")),
-                    format_date_csv(project.start_date),
-                    format_date_csv(project.deadline),
-                    format_datetime_csv(project.created),
-                    format_datetime_csv(project.modified),
-                    project
-                        .area_uuid
-                        .as_ref()
-                        .map(|u| u.to_string())
-                        .unwrap_or_default(),
-                )
-                .unwrap();
-            }
-        }
-
-        // Export areas
-        if !data.areas.is_empty() {
-            csv.push_str("Title,Notes,Created,Modified\n");
-            for area in &data.areas {
-                writeln!(
-                    csv,
-                    "{},{},{},{}",
-                    escape_csv(&area.title),
-                    escape_csv(area.notes.as_deref().unwrap_or("")),
-                    format_datetime_csv(area.created),
-                    format_datetime_csv(area.modified),
-                )
-                .unwrap();
-            }
-        }
-
-        csv
-    }
-
-    /// Export as OPML
-    #[cfg(feature = "export-opml")]
-    fn export_opml(data: &ExportData) -> String {
-        let mut opml = String::new();
-        opml.push_str("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n");
-        opml.push_str("<opml version=\"2.0\">\n");
-        opml.push_str("  <head>\n");
-        writeln!(
-            opml,
-            "    <title>Things 3 Export - {}</title>",
-            data.exported_at.format("%Y-%m-%d %H:%M:%S")
-        )
-        .unwrap();
-        opml.push_str("  </head>\n");
-        opml.push_str("  <body>\n");
-
-        // Group by areas
-        let mut area_map: HashMap<Option<String>, Vec<&Project>> = HashMap::new();
-        for project in &data.projects {
-            area_map
-                .entry(project.area_uuid.as_ref().map(|u| u.to_string()))
-                .or_default()
-                .push(project);
-        }
-
-        for area in &data.areas {
-            writeln!(opml, "    <outline text=\"{}\">", escape_xml(&area.title)).unwrap();
-
-            if let Some(projects) = area_map.get(&Some(area.uuid.to_string())) {
-                for project in projects {
-                    writeln!(
-                        opml,
-                        "      <outline text=\"{}\" type=\"project\">",
-                        escape_xml(&project.title)
-                    )
-                    .unwrap();
-
-                    // Add tasks for this project
-                    for task in &data.tasks {
-                        if task.project_uuid.as_ref() == Some(&project.uuid) {
-                            writeln!(
-                                opml,
-                                "        <outline text=\"{}\" type=\"task\"/>",
-                                escape_xml(&task.title)
-                            )
-                            .unwrap();
-                        }
-                    }
-
-                    opml.push_str("      </outline>\n");
-                }
-            }
-
-            opml.push_str("    </outline>\n");
-        }
-
-        opml.push_str("  </body>\n");
-        opml.push_str("</opml>\n");
-        opml
-    }
-
-    /// Export as TaskPaper
-    #[cfg(feature = "export-taskpaper")]
-    fn export_taskpaper(data: &ExportData) -> String {
-        let mut out = String::new();
-
-        // --- Areas → their projects → tasks ---
-        for area in &data.areas {
-            let area_meta =
-                taskpaper_metadata(TaskStatus::Incomplete, None, None, None, &area.tags);
-            writeln!(out, "{}:{area_meta}", escape_taskpaper_title(&area.title)).unwrap();
-
-            let area_projects: Vec<&Project> = data
-                .projects
-                .iter()
-                .filter(|p| p.area_uuid.as_ref() == Some(&area.uuid))
-                .collect();
-
-            for project in &area_projects {
-                let meta = taskpaper_metadata(
-                    project.status,
-                    None,
-                    project.deadline,
-                    project.start_date,
-                    &project.tags,
-                );
-                writeln!(out, "\t{}:{meta}", escape_taskpaper_title(&project.title)).unwrap();
-                if let Some(notes) = &project.notes {
-                    write_taskpaper_notes(&mut out, notes, 2);
-                }
-                for task in data.tasks.iter().filter(|t| {
-                    t.project_uuid.as_ref() == Some(&project.uuid) && t.parent_uuid.is_none()
-                }) {
-                    write_taskpaper_task(&mut out, task, 2, &data.tasks);
-                }
-            }
-            writeln!(out).unwrap();
-        }
-
-        // --- Orphan projects (no area) ---
-        for project in data.projects.iter().filter(|p| p.area_uuid.is_none()) {
-            let meta = taskpaper_metadata(
-                project.status,
-                None,
-                project.deadline,
-                project.start_date,
-                &project.tags,
-            );
-            writeln!(out, "{}:{meta}", escape_taskpaper_title(&project.title)).unwrap();
-            if let Some(notes) = &project.notes {
-                write_taskpaper_notes(&mut out, notes, 1);
-            }
-            for task in data.tasks.iter().filter(|t| {
-                t.project_uuid.as_ref() == Some(&project.uuid) && t.parent_uuid.is_none()
-            }) {
-                write_taskpaper_task(&mut out, task, 1, &data.tasks);
-            }
-            writeln!(out).unwrap();
-        }
-
-        // --- Orphan tasks (no project, no area, no parent) ---
-        for task in data.tasks.iter().filter(|t| {
-            t.project_uuid.is_none() && t.area_uuid.is_none() && t.parent_uuid.is_none()
-        }) {
-            write_taskpaper_task(&mut out, task, 0, &data.tasks);
-        }
-
-        out
-    }
-
-    /// Export as Markdown
-    fn export_markdown(data: &ExportData) -> String {
-        let mut md = String::new();
-
-        md.push_str("# Things 3 Export\n\n");
-        writeln!(
-            md,
-            "**Exported:** {}",
-            data.exported_at.format("%Y-%m-%d %H:%M:%S UTC")
-        )
-        .unwrap();
-        writeln!(md, "**Total Items:** {}\n", data.total_items).unwrap();
-
-        // Export areas
-        if !data.areas.is_empty() {
-            md.push_str("## Areas\n\n");
-            for area in &data.areas {
-                writeln!(md, "### {}", area.title).unwrap();
-                if let Some(notes) = &area.notes {
-                    writeln!(md, "{notes}\n").unwrap();
-                }
-            }
-        }
-
-        // Export projects
-        if !data.projects.is_empty() {
-            md.push_str("## Projects\n\n");
-            for project in &data.projects {
-                writeln!(md, "### {}", project.title).unwrap();
-                writeln!(md, "**Status:** {:?}", project.status).unwrap();
-                if let Some(notes) = &project.notes {
-                    writeln!(md, "**Notes:** {notes}").unwrap();
-                }
-                if let Some(deadline) = &project.deadline {
-                    writeln!(md, "**Deadline:** {deadline}").unwrap();
-                }
-                md.push('\n');
-            }
-        }
-
-        // Export tasks
-        if !data.tasks.is_empty() {
-            md.push_str("## Tasks\n\n");
-            for task in &data.tasks {
-                writeln!(
-                    md,
-                    "- [{}] {}",
-                    if task.status == TaskStatus::Completed {
-                        "x"
-                    } else {
-                        " "
-                    },
-                    task.title
-                )
-                .unwrap();
-                if let Some(notes) = &task.notes {
-                    writeln!(md, "  - {notes}").unwrap();
-                }
-                if let Some(deadline) = &task.deadline {
-                    writeln!(md, "  - **Deadline:** {deadline}").unwrap();
-                }
-            }
-        }
-
-        md
-    }
-
-    /// Export as iCalendar (RFC 5545) — all items map to VTODO components.
-    ///
-    /// Projects export as top-level VTODOs. Tasks with a project emit
-    /// `RELATED-TO:<project-uid>`; tasks with a parent task also emit
-    /// `RELATED-TO:<parent-uid>` (RELTYPE defaults to PARENT per RFC 5545).
-    /// Areas surface as `CATEGORIES` entries rather than standalone components.
-    #[cfg(feature = "export-ical")]
-    fn export_icalendar(data: &ExportData) -> String {
-        use icalendar::{Calendar, Component, DatePerhapsTime, EventLike, Todo};
-
-        let mut cal = Calendar::new();
-        cal.name("Things 3 Export");
-
-        for project in &data.projects {
-            let mut todo = Todo::new();
-            todo.uid(project.uuid.as_ref());
-            todo.summary(&project.title);
-
-            if let Some(notes) = &project.notes {
-                todo.description(notes);
-            }
-
-            todo.status(ical_todo_status(project.status));
-
-            if let Some(d) = project.deadline {
-                todo.due(DatePerhapsTime::Date(d));
-            }
-            if let Some(d) = project.start_date {
-                todo.starts(DatePerhapsTime::Date(d));
-            }
-
-            let area_cat = data
-                .areas
-                .iter()
-                .find(|a| Some(&a.uuid) == project.area_uuid.as_ref());
-            for cat in project
-                .tags
-                .iter()
-                .map(String::as_str)
-                .chain(area_cat.map(|a| a.title.as_str()))
-            {
-                todo.add_multi_property("CATEGORIES", cat);
-            }
-
-            todo.created(project.created);
-            todo.last_modified(project.modified);
-
-            cal.push(todo);
-        }
-
-        for task in &data.tasks {
-            let mut todo = Todo::new();
-            todo.uid(task.uuid.as_ref());
-            todo.summary(&task.title);
-
-            if let Some(notes) = &task.notes {
-                todo.description(notes);
-            }
-
-            todo.status(ical_todo_status(task.status));
-
-            if task.status == TaskStatus::Completed {
-                if let Some(stop) = task.stop_date {
-                    todo.completed(stop);
-                }
-            }
-
-            if let Some(d) = task.deadline {
-                todo.due(DatePerhapsTime::Date(d));
-            }
-            if let Some(d) = task.start_date {
-                todo.starts(DatePerhapsTime::Date(d));
-            }
-
-            let area_cat = data
-                .areas
-                .iter()
-                .find(|a| Some(&a.uuid) == task.area_uuid.as_ref());
-            for cat in task
-                .tags
-                .iter()
-                .map(String::as_str)
-                .chain(area_cat.map(|a| a.title.as_str()))
-            {
-                todo.add_multi_property("CATEGORIES", cat);
-            }
-
-            // RELATED-TO links project and parent task (RELTYPE defaults to PARENT per RFC 5545)
-            if let Some(proj_uuid) = &task.project_uuid {
-                todo.add_multi_property("RELATED-TO", proj_uuid.as_str());
-            }
-            if let Some(parent_uuid) = &task.parent_uuid {
-                todo.add_multi_property("RELATED-TO", parent_uuid.as_str());
-            }
-
-            todo.created(task.created);
-            todo.last_modified(task.modified);
-
-            cal.push(todo);
-        }
-
-        cal.to_string()
-    }
-}
-
-/// Helper functions for CSV export
-#[cfg(feature = "export-csv")]
-const fn format_task_type_csv(task_type: TaskType) -> &'static str {
-    match task_type {
-        TaskType::Todo => "Todo",
-        TaskType::Project => "Project",
-        TaskType::Heading => "Heading",
-        TaskType::Area => "Area",
-    }
-}
-
-#[cfg(feature = "export-csv")]
-const fn format_task_status_csv(status: TaskStatus) -> &'static str {
-    match status {
-        TaskStatus::Incomplete => "Incomplete",
-        TaskStatus::Completed => "Completed",
-        TaskStatus::Canceled => "Canceled",
-        TaskStatus::Trashed => "Trashed",
-    }
-}
-
-#[cfg(feature = "export-csv")]
-fn format_date_csv(date: Option<chrono::NaiveDate>) -> String {
-    date.map(|d| d.format("%Y-%m-%d").to_string())
-        .unwrap_or_default()
-}
-
-#[cfg(feature = "export-csv")]
-fn format_datetime_csv(datetime: DateTime<Utc>) -> String {
-    datetime.format("%Y-%m-%d %H:%M:%S").to_string()
-}
-
-#[cfg(feature = "export-csv")]
-fn escape_csv(s: &str) -> String {
-    if s.contains(',') || s.contains('"') || s.contains('\n') {
-        format!("\"{}\"", s.replace('"', "\"\""))
-    } else {
-        s.to_string()
-    }
-}
-
-/// Sanitize a tag name for TaskPaper syntax.
-///
-/// TaskPaper tags are `@word` tokens — no spaces, parens, or `@`.
-/// Whitespace runs become `-`; `@`, `(`, `)`, and control characters are stripped.
-/// Note: paren content is not treated as a separate value — characters on both
-/// sides of `(…)` are concatenated directly (e.g. `weird(name)` → `weirdname`).
-/// This is intentional: Things tag names containing parens are rare enough that
-/// discarding the distinction is preferable to a more complex parse.
-#[cfg(feature = "export-taskpaper")]
-fn sanitize_taskpaper_tag(s: &str) -> String {
-    let mut result = String::with_capacity(s.len());
-    let mut prev_was_space = false;
-    for ch in s.chars() {
-        match ch {
-            '@' | '(' | ')' => {}
-            c if c.is_control() => {}
-            c if c.is_whitespace() => {
-                if !prev_was_space && !result.is_empty() {
-                    result.push('-');
-                }
-                prev_was_space = true;
-                continue;
-            }
-            c => result.push(c),
-        }
-        prev_was_space = false;
-    }
-    // Strip trailing dashes that result from trailing whitespace
-    result.trim_end_matches('-').to_string()
-}
-
-/// Escape a task/project title for TaskPaper.
-///
-/// Titles must be single-line: `\n`, `\r`, and `\t` are replaced with spaces.
-/// (`\t` would corrupt indent-based parsing if emitted inside a title.)
-/// A trailing `:` is padded with a trailing space so the line is not
-/// misread as a project header.
-#[cfg(feature = "export-taskpaper")]
-fn escape_taskpaper_title(s: &str) -> String {
-    let single_line = s.replace(['\n', '\r', '\t'], " ");
-    if single_line.ends_with(':') {
-        format!("{single_line} ")
-    } else {
-        single_line
-    }
-}
-
-/// Build the inline metadata suffix for a task/project line.
-///
-/// Returns the `@tag(value) @tag …` string (with a leading space when non-empty).
-#[cfg(feature = "export-taskpaper")]
-fn taskpaper_metadata(
-    status: TaskStatus,
-    stop_date: Option<chrono::DateTime<Utc>>,
-    deadline: Option<chrono::NaiveDate>,
-    start_date: Option<chrono::NaiveDate>,
-    tags: &[String],
-) -> String {
-    let mut parts: Vec<String> = Vec::new();
-
-    match status {
-        TaskStatus::Completed => {
-            if let Some(dt) = stop_date {
-                parts.push(format!("@done({})", dt.format("%Y-%m-%d")));
-            } else {
-                parts.push("@done".to_string());
-            }
-        }
-        TaskStatus::Canceled => parts.push("@cancelled".to_string()),
-        TaskStatus::Trashed => parts.push("@trashed".to_string()),
-        TaskStatus::Incomplete => {}
-    }
-
-    if let Some(d) = deadline {
-        parts.push(format!("@due({})", d.format("%Y-%m-%d")));
-    }
-    if let Some(d) = start_date {
-        parts.push(format!("@start({})", d.format("%Y-%m-%d")));
-    }
-
-    for tag in tags {
-        let sanitized = sanitize_taskpaper_tag(tag);
-        if !sanitized.is_empty() {
-            parts.push(format!("@{sanitized}"));
-        }
-    }
-
-    if parts.is_empty() {
-        String::new()
-    } else {
-        format!(" {}", parts.join(" "))
-    }
-}
-
-/// Write notes indented at `indent` tabs, one output line per note line.
-#[cfg(feature = "export-taskpaper")]
-fn write_taskpaper_notes(out: &mut String, notes: &str, indent: usize) {
-    let prefix = "\t".repeat(indent);
-    for line in notes.lines() {
-        writeln!(out, "{prefix}{line}").unwrap();
-    }
-}
-
-/// Write a single task (and its children) at the given indent depth.
-#[cfg(feature = "export-taskpaper")]
-fn write_taskpaper_task(out: &mut String, task: &Task, indent: usize, all_tasks: &[Task]) {
-    let tabs = "\t".repeat(indent);
-
-    if task.task_type == TaskType::Heading {
-        // Headings are section dividers — render as a nested project-style header
-        let meta = taskpaper_metadata(
-            task.status,
-            task.stop_date,
-            task.deadline,
-            task.start_date,
-            &task.tags,
-        );
-        writeln!(out, "{tabs}{}:{meta}", escape_taskpaper_title(&task.title)).unwrap();
-    } else {
-        let meta = taskpaper_metadata(
-            task.status,
-            task.stop_date,
-            task.deadline,
-            task.start_date,
-            &task.tags,
-        );
-        writeln!(out, "{tabs}- {}{meta}", escape_taskpaper_title(&task.title)).unwrap();
-    }
-
-    if let Some(notes) = &task.notes {
-        write_taskpaper_notes(out, notes, indent + 1);
-    }
-
-    // Two sources of children depending on how the caller built ExportData:
-    // - task.children populated (nested model): recurse with &[] so each child
-    //   uses its own .children rather than re-scanning the flat list.
-    // - flat all_tasks list (flat model): scan for tasks whose parent_uuid
-    //   matches this task's uuid.
-    if !task.children.is_empty() {
-        for child in &task.children {
-            write_taskpaper_task(out, child, indent + 1, &[]);
-        }
-    } else {
-        for child in all_tasks
-            .iter()
-            .filter(|t| t.parent_uuid.as_ref() == Some(&task.uuid))
-        {
-            write_taskpaper_task(out, child, indent + 1, all_tasks);
-        }
-    }
-}
-
-#[cfg(feature = "export-opml")]
-fn escape_xml(s: &str) -> String {
-    s.replace('&', "&amp;")
-        .replace('<', "&lt;")
-        .replace('>', "&gt;")
-        .replace('"', "&quot;")
-        .replace('\'', "&apos;")
-}
-
-#[cfg(feature = "export-ical")]
-fn ical_todo_status(status: TaskStatus) -> icalendar::TodoStatus {
-    match status {
-        TaskStatus::Incomplete => icalendar::TodoStatus::NeedsAction,
-        TaskStatus::Completed => icalendar::TodoStatus::Completed,
-        TaskStatus::Canceled | TaskStatus::Trashed => icalendar::TodoStatus::Cancelled,
-    }
 }
 
 #[cfg(test)]
@@ -739,7 +148,19 @@ mod tests {
     use super::*;
     #[cfg(any(feature = "export-taskpaper", feature = "export-ical"))]
     use crate::models::ThingsId;
+    use crate::models::TaskStatus;
+    #[cfg(any(feature = "export-csv", feature = "export-taskpaper", feature = "export-ical"))]
+    use crate::models::TaskType;
     use crate::test_utils::{create_mock_areas, create_mock_projects, create_mock_tasks};
+    #[cfg(feature = "export-csv")]
+    use super::csv::{
+        escape_csv, format_date_csv, format_datetime_csv, format_task_status_csv,
+        format_task_type_csv,
+    };
+    #[cfg(feature = "export-opml")]
+    use super::opml::escape_xml;
+    #[cfg(feature = "export-taskpaper")]
+    use super::taskpaper::{escape_taskpaper_title, sanitize_taskpaper_tag};
     #[cfg(any(feature = "export-taskpaper", feature = "export-ical"))]
     use std::str::FromStr;
 
