@@ -43,11 +43,16 @@ brew install things3-cli
 
 ```bash
 # Install from crates.io (when published)
-cargo install things3-cli
+cargo install things3-cli --features mcp-server
 
 # Or install from source
-cargo install --git https://github.com/GarthDB/rust-things3
+cargo install --path apps/things3-cli --features mcp-server
 ```
+
+> **After upgrading:** `cargo install` replaces the binary on disk, but any
+> running MCP server process still uses the old in-memory binary. Restart the
+> process (or your editor/agent host) after upgrading so the new version is
+> loaded. You can verify the running version with `things3 --version`.
 
 ### From Source
 
@@ -727,6 +732,23 @@ export THINGS_DB_PATH="/path/to/main.sqlite"
 Ensure Things 3 is closed when running the CLI:
 ```bash
 killall Things3
+```
+
+### Stale Binary After Upgrade
+
+If you upgrade via `cargo install` but the MCP server still behaves as if it's
+on the old version, you are likely running a **stale in-memory binary** — the
+OS cached the old executable in memory even though the file on disk changed.
+
+**Symptoms:** tool calls return errors that were fixed in the new version;
+`things3 --version` prints the old version number when run from a fresh shell
+but the running process reports something different.
+
+**Fix:** restart the process or application hosting the MCP server (e.g. your
+editor, Claude Desktop, or the shell running `things3 mcp`), then verify:
+
+```bash
+things3 --version   # should print the new version
 ```
 
 ### Test Failures
