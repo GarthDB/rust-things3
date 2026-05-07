@@ -7,9 +7,9 @@ use std::sync::Arc;
 #[cfg(target_os = "macos")]
 use things3_core::AppleScriptBackend;
 use things3_core::{
-    models::ThingsId, BackupManager, DataExporter, DeleteChildHandling, McpServerConfig,
-    MutationBackend, PerformanceMonitor, SqlxBackend, ThingsCache, ThingsConfig, ThingsDatabase,
-    ThingsError,
+    models::ThingsId, BackupManager, DataExporter, DeleteChildHandling, ExportData, ExportFormat,
+    McpServerConfig, MutationBackend, PerformanceMonitor, SqlxBackend, ThingsCache, ThingsConfig,
+    ThingsDatabase, ThingsError,
 };
 use thiserror::Error;
 use tokio::sync::Mutex;
@@ -1676,7 +1676,7 @@ impl ThingsMcpServer {
             },
             Tool {
                 name: "export_data".to_string(),
-                description: "Export data in various formats".to_string(),
+                description: "Export data in various formats. When output_path is provided, writes to that file and returns a short confirmation; otherwise returns the data inline. Note: CSV format does not support data_type=all.".to_string(),
                 input_schema: serde_json::json!({
                     "type": "object",
                     "properties": {
@@ -1689,6 +1689,10 @@ impl ThingsMcpServer {
                             "type": "string",
                             "description": "Type of data to export",
                             "enum": ["tasks", "projects", "areas", "all"]
+                        },
+                        "output_path": {
+                            "type": "string",
+                            "description": "Optional absolute path to write the export file. Supports leading ~ for home directory. When provided, returns a confirmation object instead of inline data."
                         }
                     },
                     "required": ["format", "data_type"]
@@ -3153,75 +3157,129 @@ impl ThingsMcpServer {
             .get("data_type")
             .and_then(|v| v.as_str())
             .ok_or_else(|| McpError::missing_parameter("data_type"))?;
+        let output_path = args.get("output_path").and_then(|v| v.as_str());
+
+        if !matches!(data_type, "tasks" | "projects" | "areas" | "all") {
+            return Err(McpError::invalid_data_type(
+                data_type,
+                "tasks, projects, areas, all",
+            ));
+        }
+
+        if format == "csv" && data_type == "all" {
+            return Err(McpError::invalid_parameter(
+                "data_type",
+                "CSV format does not support data_type=all. Use tasks, projects, or areas individually.",
+            ));
+        }
 
         let db = &self.db;
-        let export_data =
-            match data_type {
-                "tasks" => {
-                    let inbox = db.get_inbox(None).await.map_err(|e| {
-                        McpError::database_operation_failed("get_inbox for export", e)
-                    })?;
-                    let today = db.get_today(None).await.map_err(|e| {
-                        McpError::database_operation_failed("get_today for export", e)
-                    })?;
-                    serde_json::json!({
-                        "inbox": inbox,
-                        "today": today
-                    })
-                }
-                "projects" => {
-                    let projects = db.get_projects(None).await.map_err(|e| {
-                        McpError::database_operation_failed("get_projects for export", e)
-                    })?;
-                    serde_json::json!({ "projects": projects })
-                }
-                "areas" => {
-                    let areas = db.get_areas().await.map_err(|e| {
-                        McpError::database_operation_failed("get_areas for export", e)
-                    })?;
-                    serde_json::json!({ "areas": areas })
-                }
-                "all" => {
-                    let inbox = db.get_inbox(None).await.map_err(|e| {
-                        McpError::database_operation_failed("get_inbox for export", e)
-                    })?;
-                    let today = db.get_today(None).await.map_err(|e| {
-                        McpError::database_operation_failed("get_today for export", e)
-                    })?;
-                    let projects = db.get_projects(None).await.map_err(|e| {
-                        McpError::database_operation_failed("get_projects for export", e)
-                    })?;
-                    let areas = db.get_areas().await.map_err(|e| {
-                        McpError::database_operation_failed("get_areas for export", e)
-                    })?;
-                    let _ = db;
-                    serde_json::json!({
-                        "inbox": inbox,
-                        "today": today,
-                        "projects": projects,
-                        "areas": areas
-                    })
-                }
-                _ => {
-                    return Err(McpError::invalid_data_type(
-                        data_type,
-                        "tasks, projects, areas, all",
-                    ))
-                }
-            };
+        let need_tasks = matches!(data_type, "tasks" | "all");
+        let need_projects = matches!(data_type, "projects" | "all");
+        let need_areas = matches!(data_type, "areas" | "all");
 
-        let result = match format {
-            "json" => serde_json::to_string_pretty(&export_data)
-                .map_err(|e| McpError::serialization_failed("export_data serialization", e))?,
-            "csv" => "CSV export not yet implemented".to_string(),
-            "markdown" => "Markdown export not yet implemented".to_string(),
+        let inbox = if need_tasks {
+            db.get_inbox(None)
+                .await
+                .map_err(|e| McpError::database_operation_failed("get_inbox for export", e))?
+        } else {
+            vec![]
+        };
+        let today = if need_tasks {
+            db.get_today(None)
+                .await
+                .map_err(|e| McpError::database_operation_failed("get_today for export", e))?
+        } else {
+            vec![]
+        };
+        let projects = if need_projects {
+            db.get_projects(None)
+                .await
+                .map_err(|e| McpError::database_operation_failed("get_projects for export", e))?
+        } else {
+            vec![]
+        };
+        let areas = if need_areas {
+            db.get_areas()
+                .await
+                .map_err(|e| McpError::database_operation_failed("get_areas for export", e))?
+        } else {
+            vec![]
+        };
+
+        let mut counts = serde_json::Map::new();
+        if need_tasks {
+            counts.insert("inbox".to_string(), inbox.len().into());
+            counts.insert("today".to_string(), today.len().into());
+        }
+        if need_projects {
+            counts.insert("projects".to_string(), projects.len().into());
+        }
+        if need_areas {
+            counts.insert("areas".to_string(), areas.len().into());
+        }
+
+        let formatted = match format {
+            "json" => {
+                let json_val = match data_type {
+                    "tasks" => serde_json::json!({ "inbox": &inbox, "today": &today }),
+                    "projects" => serde_json::json!({ "projects": &projects }),
+                    "areas" => serde_json::json!({ "areas": &areas }),
+                    _ => serde_json::json!({
+                        "inbox": &inbox,
+                        "today": &today,
+                        "projects": &projects,
+                        "areas": &areas
+                    }),
+                };
+                serde_json::to_string_pretty(&json_val)
+                    .map_err(|e| McpError::serialization_failed("export_data json", e))?
+            }
+            "csv" => {
+                let mut all_tasks = inbox;
+                all_tasks.extend(today);
+                let export_data = ExportData::new(all_tasks, projects, areas);
+                DataExporter::new_default()
+                    .export(&export_data, ExportFormat::Csv)
+                    .map_err(|e| McpError::invalid_parameter("format", e.to_string()))?
+            }
+            "markdown" => {
+                let mut all_tasks = inbox;
+                all_tasks.extend(today);
+                let export_data = ExportData::new(all_tasks, projects, areas);
+                DataExporter::new_default()
+                    .export(&export_data, ExportFormat::Markdown)
+                    .map_err(|e| McpError::invalid_parameter("format", e.to_string()))?
+            }
             _ => return Err(McpError::invalid_format(format, "json, csv, markdown")),
         };
 
-        Ok(CallToolResult {
-            content: vec![Content::Text { text: result }],
-            is_error: false,
-        })
+        if let Some(raw_path) = output_path {
+            let path = expand_tilde(raw_path)?;
+            let bytes = formatted.as_bytes();
+            std::fs::write(&path, bytes)
+                .map_err(|e| McpError::io_operation_failed("export_data write", e))?;
+            let confirmation = serde_json::json!({
+                "path": path.to_string_lossy().as_ref(),
+                "format": format,
+                "data_type": data_type,
+                "bytes_written": bytes.len(),
+                "counts": serde_json::Value::Object(counts)
+            });
+            Ok(CallToolResult {
+                content: vec![Content::Text {
+                    text: serde_json::to_string_pretty(&confirmation).map_err(|e| {
+                        McpError::serialization_failed("export_data confirmation", e)
+                    })?,
+                }],
+                is_error: false,
+            })
+        } else {
+            Ok(CallToolResult {
+                content: vec![Content::Text { text: formatted }],
+                is_error: false,
+            })
+        }
     }
 
     async fn handle_bulk_create_tasks(&self, args: Value) -> McpResult<CallToolResult> {
@@ -4732,6 +4790,25 @@ impl ThingsMcpServer {
             "id": id,
             "result": result
         })))
+    }
+}
+
+fn expand_tilde(path: &str) -> McpResult<std::path::PathBuf> {
+    if path == "~" || path.starts_with("~/") {
+        let home = std::env::var("HOME").map_err(|_| {
+            McpError::invalid_parameter(
+                "output_path",
+                "cannot expand ~: HOME environment variable is not set",
+            )
+        })?;
+        Ok(std::path::PathBuf::from(format!("{}{}", home, &path[1..])))
+    } else if path.starts_with('~') {
+        Err(McpError::invalid_parameter(
+            "output_path",
+            "~user expansion is not supported; use an absolute path or ~/...",
+        ))
+    } else {
+        Ok(std::path::PathBuf::from(path))
     }
 }
 

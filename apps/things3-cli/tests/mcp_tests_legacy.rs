@@ -597,6 +597,191 @@ async fn test_export_data_tool_invalid_format() {
 }
 
 #[tokio::test]
+async fn test_export_data_csv_tasks() {
+    let server = create_test_mcp_server().await;
+    let request = CallToolRequest {
+        name: "export_data".to_string(),
+        arguments: Some(json!({
+            "format": "csv",
+            "data_type": "tasks"
+        })),
+    };
+
+    let result = server.call_tool(request).await.unwrap();
+    assert!(!result.is_error);
+    match &result.content[0] {
+        Content::Text { text } => {
+            assert!(
+                text.contains("Type,Title,Status"),
+                "expected task CSV header, got: {text}"
+            );
+            assert!(text.contains("Inbox Task"), "expected inbox task row");
+        }
+    }
+}
+
+#[tokio::test]
+async fn test_export_data_csv_projects() {
+    let server = create_test_mcp_server().await;
+    let request = CallToolRequest {
+        name: "export_data".to_string(),
+        arguments: Some(json!({
+            "format": "csv",
+            "data_type": "projects"
+        })),
+    };
+
+    let result = server.call_tool(request).await.unwrap();
+    assert!(!result.is_error);
+    match &result.content[0] {
+        Content::Text { text } => {
+            assert!(
+                text.contains("Title,Status,Notes"),
+                "expected project CSV header, got: {text}"
+            );
+            assert!(text.contains("Website Redesign"), "expected project row");
+        }
+    }
+}
+
+#[tokio::test]
+async fn test_export_data_csv_areas() {
+    let server = create_test_mcp_server().await;
+    let request = CallToolRequest {
+        name: "export_data".to_string(),
+        arguments: Some(json!({
+            "format": "csv",
+            "data_type": "areas"
+        })),
+    };
+
+    let result = server.call_tool(request).await.unwrap();
+    assert!(!result.is_error);
+    match &result.content[0] {
+        Content::Text { text } => {
+            assert!(
+                text.contains("Title,Notes,Created,Modified"),
+                "expected area CSV header, got: {text}"
+            );
+            assert!(text.contains("Work"), "expected area row");
+        }
+    }
+}
+
+#[tokio::test]
+async fn test_export_data_csv_all_rejected() {
+    let server = create_test_mcp_server().await;
+    let request = CallToolRequest {
+        name: "export_data".to_string(),
+        arguments: Some(json!({
+            "format": "csv",
+            "data_type": "all"
+        })),
+    };
+
+    let result = server.call_tool(request).await;
+    assert!(result.is_err());
+    match result.unwrap_err() {
+        McpError::InvalidParameter {
+            parameter_name,
+            message,
+        } => {
+            assert_eq!(parameter_name, "data_type");
+            assert!(
+                message.contains("tasks")
+                    && message.contains("projects")
+                    && message.contains("areas"),
+                "error should name the valid alternatives, got: {message}"
+            );
+        }
+        e => panic!("Expected InvalidParameter error, got: {e:?}"),
+    }
+}
+
+#[tokio::test]
+async fn test_export_data_markdown_tasks() {
+    let server = create_test_mcp_server().await;
+    let request = CallToolRequest {
+        name: "export_data".to_string(),
+        arguments: Some(json!({
+            "format": "markdown",
+            "data_type": "tasks"
+        })),
+    };
+
+    let result = server.call_tool(request).await.unwrap();
+    assert!(!result.is_error);
+    match &result.content[0] {
+        Content::Text { text } => {
+            assert!(
+                text.starts_with("# Things 3 Export"),
+                "expected markdown heading, got: {text}"
+            );
+            assert!(text.contains("## Tasks"), "expected Tasks section");
+            assert!(text.contains("Inbox Task"), "expected inbox task");
+        }
+    }
+}
+
+#[tokio::test]
+async fn test_export_data_markdown_all() {
+    let server = create_test_mcp_server().await;
+    let request = CallToolRequest {
+        name: "export_data".to_string(),
+        arguments: Some(json!({
+            "format": "markdown",
+            "data_type": "all"
+        })),
+    };
+
+    let result = server.call_tool(request).await.unwrap();
+    assert!(!result.is_error);
+    match &result.content[0] {
+        Content::Text { text } => {
+            assert!(text.contains("## Areas"), "expected Areas section");
+            assert!(text.contains("## Projects"), "expected Projects section");
+            assert!(text.contains("## Tasks"), "expected Tasks section");
+        }
+    }
+}
+
+#[tokio::test]
+async fn test_export_data_output_path_writes_file() {
+    let server = create_test_mcp_server().await;
+    let tmp = NamedTempFile::new().unwrap();
+    let path = tmp.path().to_str().unwrap().to_string();
+
+    let request = CallToolRequest {
+        name: "export_data".to_string(),
+        arguments: Some(json!({
+            "format": "json",
+            "data_type": "tasks",
+            "output_path": path
+        })),
+    };
+
+    let result = server.call_tool(request).await.unwrap();
+    assert!(!result.is_error);
+
+    match &result.content[0] {
+        Content::Text { text } => {
+            let parsed: serde_json::Value = serde_json::from_str(text).unwrap();
+            assert_eq!(parsed["path"].as_str().unwrap(), path);
+            assert_eq!(parsed["format"].as_str().unwrap(), "json");
+            assert_eq!(parsed["data_type"].as_str().unwrap(), "tasks");
+            assert!(parsed["bytes_written"].as_u64().unwrap() > 0);
+            assert!(parsed["counts"]["inbox"].is_number());
+            assert!(parsed["counts"]["today"].is_number());
+
+            // Verify the file was actually written with valid JSON
+            let file_content = std::fs::read_to_string(&path).unwrap();
+            let file_json: serde_json::Value = serde_json::from_str(&file_content).unwrap();
+            assert!(file_json["inbox"].is_array());
+        }
+    }
+}
+
+#[tokio::test]
 async fn test_bulk_create_tasks_tool() {
     let server = create_test_mcp_server().await;
     let request = CallToolRequest {
