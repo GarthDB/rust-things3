@@ -10,9 +10,11 @@ set -e  # Exit on any error
 if [ -n "$1" ] && [ -f "$1" ]; then
     # Standard Git hook behavior (if rusty-hook ever fixes this)
     cat "$1" | conventional_commits_linter --allow-angular-type-only -
-elif [ -f ".git/COMMIT_EDITMSG" ]; then
-    # rusty-hook behavior - read from the standard Git commit message file
-    cat ".git/COMMIT_EDITMSG" | conventional_commits_linter --allow-angular-type-only -
+elif COMMIT_FILE="$(git rev-parse --git-path COMMIT_EDITMSG 2>/dev/null)" && [ -f "$COMMIT_FILE" ]; then
+    # rusty-hook behavior - read from the standard Git commit message file.
+    # Resolve via `git rev-parse --git-path` so this works in worktrees, where
+    # `.git` is a file pointing at the real gitdir rather than a directory.
+    cat "$COMMIT_FILE" | conventional_commits_linter --allow-angular-type-only -
 else
     echo "Error: Cannot find commit message file" >&2
     exit 1
