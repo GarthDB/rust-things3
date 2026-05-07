@@ -226,6 +226,27 @@ impl MutationBackend for AppleScriptBackend {
     // ---- Tasks (Phase B — implemented) ----
 
     async fn create_task(&self, request: CreateTaskRequest) -> ThingsResult<ThingsId> {
+        use crate::models::TaskType;
+        match request.task_type {
+            Some(TaskType::Heading) => {
+                return Err(ThingsError::validation(
+                    "Heading creation via AppleScript is not supported: Things 3 does not \
+                     expose heading creation in its AppleScript dictionary. Use the Things 3 \
+                     UI to create headings (#161).",
+                ));
+            }
+            Some(TaskType::Project) => {
+                return Err(ThingsError::validation(
+                    "Use create_project to create a project, not create_task.",
+                ));
+            }
+            Some(TaskType::Area) => {
+                return Err(ThingsError::validation(
+                    "Use create_area to create an area, not create_task.",
+                ));
+            }
+            Some(TaskType::Todo) | None => {}
+        }
         let script = script::create_task_script(&request);
         let stdout = runner::run_script(&script).await?;
         parse::extract_id(&stdout)
@@ -1209,6 +1230,65 @@ mod tests {
             .await
             .expect_err("guard should fire on the bad ID");
         assert_native_format_validation(err);
+    }
+
+    // ============================================================================
+    // create_task task_type validation (#161) — heading/project/area types must
+    // be rejected with a Validation error before osascript is invoked.
+    // ============================================================================
+
+    fn minimal_create_request(task_type: crate::models::TaskType) -> CreateTaskRequest {
+        CreateTaskRequest {
+            title: "test".into(),
+            task_type: Some(task_type),
+            notes: None,
+            start_date: None,
+            deadline: None,
+            project_uuid: None,
+            area_uuid: None,
+            parent_uuid: None,
+            tags: None,
+            status: None,
+        }
+    }
+
+    #[tokio::test]
+    async fn create_task_rejects_heading_type() {
+        let backend = guard_test_backend().await;
+        let err = backend
+            .create_task(minimal_create_request(crate::models::TaskType::Heading))
+            .await
+            .expect_err("heading should be rejected");
+        assert!(
+            matches!(err, ThingsError::Validation { .. }),
+            "expected Validation, got {err:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn create_task_rejects_project_type() {
+        let backend = guard_test_backend().await;
+        let err = backend
+            .create_task(minimal_create_request(crate::models::TaskType::Project))
+            .await
+            .expect_err("project type should be rejected");
+        assert!(
+            matches!(err, ThingsError::Validation { .. }),
+            "expected Validation, got {err:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn create_task_rejects_area_type() {
+        let backend = guard_test_backend().await;
+        let err = backend
+            .create_task(minimal_create_request(crate::models::TaskType::Area))
+            .await
+            .expect_err("area type should be rejected");
+        assert!(
+            matches!(err, ThingsError::Validation { .. }),
+            "expected Validation, got {err:?}"
+        );
     }
 
     // Live lifecycle tests live in `libs/things3-core/tests/applescript_live.rs`
