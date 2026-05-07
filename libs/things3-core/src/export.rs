@@ -180,7 +180,6 @@ impl DataExporter {
 
         // Export projects
         if !data.projects.is_empty() {
-            csv.push_str("\n\nProjects\n");
             csv.push_str("Title,Status,Notes,Start Date,Deadline,Created,Modified,Area\n");
             for project in &data.projects {
                 writeln!(
@@ -205,7 +204,6 @@ impl DataExporter {
 
         // Export areas
         if !data.areas.is_empty() {
-            csv.push_str("\n\nAreas\n");
             csv.push_str("Title,Notes,Created,Modified\n");
             for area in &data.areas {
                 writeln!(
@@ -876,9 +874,9 @@ mod tests {
             "Type,Title,Status,Notes,Start Date,Deadline,Created,Modified,Project,Area,Parent"
         ));
         assert!(csv.contains("Research competitors"));
-        assert!(csv.contains("Projects"));
+        assert!(csv.contains("Title,Status,Notes,Start Date,Deadline,Created,Modified,Area"));
         assert!(csv.contains("Website Redesign"));
-        assert!(csv.contains("Areas"));
+        assert!(csv.contains("Title,Notes,Created,Modified"));
         assert!(csv.contains("Work"));
     }
 
