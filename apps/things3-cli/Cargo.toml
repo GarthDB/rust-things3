@@ -111,6 +111,9 @@ name = "cli_error_handling"
 path = "tests/cli_error_handling.rs"
 required-features = ["mcp-server"]
 
+[lints]
+workspace = true
+
 [features]
 default = ["mcp-server", "export-csv", "export-opml", "observability"]
 mcp-server = ["export-csv", "export-opml"]  # MCP server needs export functionality
