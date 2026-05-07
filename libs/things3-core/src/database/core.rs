@@ -2365,18 +2365,24 @@ impl ThingsDatabase {
 
     /// Get recently used tags
     ///
+    /// Recency is determined by `MAX(t.userModificationDate)` across non-trashed tasks
+    /// referencing the tag — this reflects when those tasks were last touched rather than
+    /// when they were created. Tags with no non-trashed task associations are excluded
+    /// entirely (INNER JOIN); previously the old `usedDate`-based query would have returned
+    /// them if `usedDate` were populated (it never is in practice).
+    ///
     /// # Errors
     ///
     /// Returns an error if the database query fails
     #[instrument(skip(self))]
     pub async fn get_recent_tags(&self, limit: usize) -> ThingsResult<Vec<crate::models::Tag>> {
         // Things 3 never populates `usedDate` for tags created via its own UI or
-        // AppleScript. Instead, order by the most recent `creationDate` of any
+        // AppleScript. Instead, order by the most recent `userModificationDate` of any
         // non-trashed task that references the tag via the TMTaskTag join table.
         let rows = sqlx::query(
             "SELECT tg.uuid, tg.title, tg.shortcut, tg.parent,
                     COUNT(t.uuid) AS usage_count,
-                    MAX(t.creationDate) AS most_recent
+                    MAX(t.userModificationDate) AS most_recent
              FROM TMTag tg
              JOIN TMTaskTag tt ON tt.tags = tg.uuid
              JOIN TMTask t ON t.uuid = tt.tasks
