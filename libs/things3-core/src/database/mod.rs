@@ -1,14 +1,39 @@
 //! Database module - organized submodules for better maintainability
 
+pub(crate) mod conversions;
 mod core;
 pub mod date_utils;
 pub mod mappers;
+mod mutations;
+pub(crate) mod path_discovery;
+pub(crate) mod pool;
+mod queries;
 pub mod query_builders;
+pub(crate) mod stats;
 pub mod tag_utils;
 pub mod validators;
 
 // Re-export everything from core for backward compatibility
 pub use core::*;
+
+// Re-export conversions
+pub use conversions::{
+    deserialize_tags_from_blob, naive_date_to_things_timestamp, serialize_tags_to_blob,
+};
+// Crate-internal helpers used by sibling submodules (mappers.rs, core.rs).
+pub(crate) use conversions::{safe_timestamp_convert, things_date_to_naive_date};
+
+// Re-export path discovery
+pub use path_discovery::get_default_database_path;
+
+// Re-export pool/health types
+pub use pool::{
+    ComprehensiveHealthStatus, DatabasePoolConfig, PoolHealthStatus, PoolMetrics,
+    SqliteOptimizations,
+};
+
+// Re-export stats
+pub use stats::DatabaseStats;
 
 // Re-export mapper functions for easy access
 pub use mappers::{map_project_row, map_task_row};
