@@ -39,32 +39,18 @@ jobs:
     
     - name: Check formatting
       run: cargo fmt --all -- --check
-    
+
     - name: Run clippy
       run: cargo clippy --all-targets --all-features -- -D warnings
 
-  # Security audit
-  security:
-    name: Security Audit
-    runs-on: ubuntu-latest
-    needs: lint
-    
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-    
-    - name: Install Rust
-      uses: dtolnay/rust-toolchain@stable
-    
-    - name: Install cargo-audit
-      run: cargo install cargo-audit
-    
-    - name: Run security audit
-      # Ignore RUSTSEC-2023-0071 (RSA timing sidechannel vulnerability) as it's a transitive
-      # dependency through SQLx MySQL support with no fix available and we don't directly use MySQL
-      # Ignore RUSTSEC-2024-0363 (Binary Protocol Misinterpretation in sqlx) as it's a transitive
-      # dependency and we don't directly use the affected MySQL binary protocol features
-      run: cargo audit --ignore RUSTSEC-2023-0071 --ignore RUSTSEC-2024-0363
+    - name: Check for typos
+      uses: crate-ci/typos-action@v1
+
+    - name: Run cargo-deny
+      uses: EmbarkStudios/cargo-deny-action@v2
+      with:
+        command: check
+        arguments: --workspace
 
   # Combined test and coverage job - runs tests once and generates coverage
   test-and-coverage:
@@ -183,7 +169,7 @@ jobs:
   build:
     name: Build and Package
     runs-on: ubuntu-latest
-    needs: [test-and-coverage, security]
+    needs: [test-and-coverage, lint]
     
     steps:
     - name: Checkout code
@@ -223,7 +209,7 @@ jobs:
   summary:
     name: CI Summary
     runs-on: ubuntu-latest
-    needs: [lint, test-and-coverage, security, build]
+    needs: [lint, test-and-coverage, build]
     if: always()
     
     steps:
@@ -244,7 +230,6 @@ jobs:
         echo "### ✅ Job Results:"
         echo "- Lint and Format: ${{ needs.lint.result }}"
         echo "- Test and Coverage: ${{ needs.test-and-coverage.result }}"
-        echo "- Security Audit: ${{ needs.security.result }}"
         echo "- Build and Package: ${{ needs.build.result }}"
         echo
         

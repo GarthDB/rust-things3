@@ -12,6 +12,9 @@ readme = "../../README.md"
 keywords = ["things3", "productivity", "task-management", "sqlite", "async"]
 categories = ["database", "development-tools"]
 
+[lints]
+workspace = true
+
 [features]
 default = []
 test-utils = []

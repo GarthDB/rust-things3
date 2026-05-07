@@ -13,7 +13,7 @@ exclude = [
 [workspace.package]
 version = "1.4.0"
 edition = "2021"
-rust-version = "1.70"
+rust-version = "1.74"
 authors = ["GarthDB <garthdb@gmail.com>"]
 license = "MIT"
 repository = "https://github.com/GarthDB/rust-things3"
@@ -106,6 +106,14 @@ html-dir = "target/llvm-cov/html"
 json-file = "coverage.json"
 cobertura-file = "cobertura.xml"
 text-file = "coverage.txt"
+
+# Lint configuration — inherited by all workspace members via `[lints] workspace = true`
+# Phase 1: safety-net lints only. Pedantic/nursery deferred to Phase 2 once baseline is audited.
+[workspace.lints.rust]
+unsafe_code = "deny"
+
+[workspace.lints.clippy]
+all = { level = "warn", priority = -1 }
 
 # Coverage thresholds
 [workspace.metadata.coverage.thresholds]

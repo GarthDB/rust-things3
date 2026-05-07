@@ -1,0 +1,39 @@
+[advisories]
+version = 2
+ignore = [
+    # Transitive dep via SQLx MySQL support; we don't use MySQL
+    { id = "RUSTSEC-2023-0071", reason = "Transitive dep via SQLx MySQL; no fix available and MySQL not used" },
+    # Transitive dep via SQLx MySQL binary protocol; not used
+    { id = "RUSTSEC-2024-0363", reason = "Transitive dep via SQLx MySQL binary protocol; not used" },
+]
+
+[licenses]
+version = 2
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "Unicode-DFS-2016",
+    "Unicode-3.0",
+    "Zlib",
+    "CC0-1.0",
+    "MPL-2.0",
+    "OpenSSL",
+]
+
+# ring uses a mix of ISC, MIT, and OpenSSL-licensed code
+[[licenses.exceptions]]
+allow = ["ISC", "MIT", "OpenSSL"]
+name = "ring"
+
+[bans]
+multiple-versions = "warn"
+wildcards = "deny"
+
+[sources]
+unknown-registry = "warn"
+unknown-git = "warn"
+allow-git = []

@@ -11,6 +11,9 @@ description = "Build and development tools for Things 3 integration"
 name = "xtask"
 path = "src/main.rs"
 
+[lints]
+workspace = true
+
 [dependencies]
 # CLI
 clap.workspace = true
