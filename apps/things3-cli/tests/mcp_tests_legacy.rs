@@ -612,8 +612,8 @@ async fn test_export_data_csv_tasks() {
     match &result.content[0] {
         Content::Text { text } => {
             assert!(
-                text.contains("Type,Title,Status"),
-                "expected task CSV header, got: {text}"
+                text.contains("Type,Title,Status,Notes,Start Date,Deadline,Created,Modified,Project,Area,Parent"),
+                "expected full task CSV header, got: {text}"
             );
             assert!(text.contains("Inbox Task"), "expected inbox task row");
         }
