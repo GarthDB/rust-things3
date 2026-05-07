@@ -55,7 +55,7 @@ async fn test_search_logbook_all_completed() {
 
     // Search with no filters
     let results = db
-        .search_logbook(None, None, None, None, None, None, None)
+        .search_logbook(None, None, None, None, None, None, None, None)
         .await
         .expect("Failed to search logbook");
 
@@ -122,6 +122,7 @@ async fn test_search_logbook_text_search() {
             None,
             None,
             None,
+            None,
         )
         .await
         .expect("Failed to search logbook");
@@ -139,6 +140,7 @@ async fn test_search_logbook_text_search() {
     let results = db
         .search_logbook(
             Some("groceries".to_string()),
+            None,
             None,
             None,
             None,
@@ -191,6 +193,7 @@ async fn test_search_logbook_text_search_in_notes() {
             None,
             None,
             None,
+            None,
         )
         .await
         .expect("Failed to search logbook");
@@ -221,7 +224,7 @@ async fn test_search_logbook_date_range() {
 
     // Search for tasks completed today or after
     let results = db
-        .search_logbook(None, Some(today), None, None, None, None, None)
+        .search_logbook(None, Some(today), None, None, None, None, None, None)
         .await
         .expect("Failed to search logbook");
 
@@ -229,7 +232,7 @@ async fn test_search_logbook_date_range() {
 
     // Search for tasks completed yesterday (should be none)
     let results = db
-        .search_logbook(None, None, Some(yesterday), None, None, None, None)
+        .search_logbook(None, None, Some(yesterday), None, None, None, None, None)
         .await
         .expect("Failed to search logbook");
 
@@ -245,6 +248,7 @@ async fn test_search_logbook_date_range() {
             None,
             Some(yesterday),
             Some(tomorrow),
+            None,
             None,
             None,
             None,
@@ -276,7 +280,7 @@ async fn test_search_logbook_from_date_only() {
 
     // Search from today
     let results = db
-        .search_logbook(None, Some(today), None, None, None, None, None)
+        .search_logbook(None, Some(today), None, None, None, None, None, None)
         .await
         .expect("Failed to search logbook");
 
@@ -284,7 +288,7 @@ async fn test_search_logbook_from_date_only() {
 
     // Search from future date (should be empty)
     let results = db
-        .search_logbook(None, Some(future_date), None, None, None, None, None)
+        .search_logbook(None, Some(future_date), None, None, None, None, None, None)
         .await
         .expect("Failed to search logbook");
 
@@ -315,7 +319,7 @@ async fn test_search_logbook_to_date_only() {
 
     // Search up to today
     let results = db
-        .search_logbook(None, None, Some(today), None, None, None, None)
+        .search_logbook(None, None, Some(today), None, None, None, None, None)
         .await
         .expect("Failed to search logbook");
 
@@ -323,7 +327,7 @@ async fn test_search_logbook_to_date_only() {
 
     // Search up to past date (should be empty)
     let results = db
-        .search_logbook(None, None, Some(past_date), None, None, None, None)
+        .search_logbook(None, None, Some(past_date), None, None, None, None, None)
         .await
         .expect("Failed to search logbook");
 
@@ -411,6 +415,7 @@ async fn test_search_logbook_project_filter() {
             None,
             None,
             None,
+            None,
         )
         .await
         .expect("Failed to search logbook");
@@ -422,7 +427,16 @@ async fn test_search_logbook_project_filter() {
 
     // Search by project 2
     let results = db
-        .search_logbook(None, None, None, Some(project2_uuid), None, None, None)
+        .search_logbook(
+            None,
+            None,
+            None,
+            Some(project2_uuid),
+            None,
+            None,
+            None,
+            None,
+        )
         .await
         .expect("Failed to search logbook");
 
@@ -480,7 +494,16 @@ async fn test_search_logbook_area_filter() {
 
     // Search by area 1
     let results = db
-        .search_logbook(None, None, None, None, Some(area1_uuid.clone()), None, None)
+        .search_logbook(
+            None,
+            None,
+            None,
+            None,
+            Some(area1_uuid.clone()),
+            None,
+            None,
+            None,
+        )
         .await
         .expect("Failed to search logbook");
 
@@ -491,7 +514,7 @@ async fn test_search_logbook_area_filter() {
 
     // Search by area 2
     let results = db
-        .search_logbook(None, None, None, None, Some(area2_uuid), None, None)
+        .search_logbook(None, None, None, None, Some(area2_uuid), None, None, None)
         .await
         .expect("Failed to search logbook");
 
@@ -550,6 +573,7 @@ async fn test_search_logbook_tag_filter() {
             None,
             Some(vec!["work".to_string()]),
             None,
+            None,
         )
         .await
         .expect("Failed to search logbook");
@@ -566,6 +590,7 @@ async fn test_search_logbook_tag_filter() {
             None,
             None,
             Some(vec!["personal".to_string()]),
+            None,
             None,
         )
         .await
@@ -617,6 +642,7 @@ async fn test_search_logbook_multiple_tags() {
             None,
             None,
             Some(vec!["work".to_string(), "urgent".to_string()]),
+            None,
             None,
         )
         .await
@@ -684,6 +710,7 @@ async fn test_search_logbook_combined_filters() {
             None,
             None,
             None,
+            None,
         )
         .await
         .expect("Failed to search logbook");
@@ -712,7 +739,7 @@ async fn test_search_logbook_limit() {
 
     // Search with limit of 10
     let results = db
-        .search_logbook(None, None, None, None, None, None, Some(10))
+        .search_logbook(None, None, None, None, None, None, Some(10), None)
         .await
         .expect("Failed to search logbook");
 
@@ -720,7 +747,7 @@ async fn test_search_logbook_limit() {
 
     // Search with limit of 5
     let results = db
-        .search_logbook(None, None, None, None, None, None, Some(5))
+        .search_logbook(None, None, None, None, None, None, Some(5), None)
         .await
         .expect("Failed to search logbook");
 
@@ -728,7 +755,7 @@ async fn test_search_logbook_limit() {
 
     // Search with default limit (50)
     let results = db
-        .search_logbook(None, None, None, None, None, None, None)
+        .search_logbook(None, None, None, None, None, None, None, None)
         .await
         .expect("Failed to search logbook");
 
@@ -764,6 +791,7 @@ async fn test_search_logbook_empty_results() {
             None,
             None,
             None,
+            None,
         )
         .await
         .expect("Failed to search logbook");
@@ -773,7 +801,7 @@ async fn test_search_logbook_empty_results() {
     // Search with non-existent UUID
     let fake_uuid = ThingsId::new_v4();
     let results = db
-        .search_logbook(None, None, None, Some(fake_uuid), None, None, None)
+        .search_logbook(None, None, None, Some(fake_uuid), None, None, None, None)
         .await
         .expect("Failed to search logbook");
 
@@ -814,7 +842,7 @@ async fn test_search_logbook_excludes_trashed() {
 
     // Search logbook
     let results = db
-        .search_logbook(None, None, None, None, None, None, None)
+        .search_logbook(None, None, None, None, None, None, None, None)
         .await
         .expect("Failed to search logbook");
 

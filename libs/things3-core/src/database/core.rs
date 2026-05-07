@@ -1102,9 +1102,11 @@ impl ThingsDatabase {
         area_uuid: Option<ThingsId>,
         tags: Option<Vec<String>>,
         limit: Option<u32>,
+        offset: Option<u32>,
     ) -> ThingsResult<Vec<Task>> {
-        // Apply limit
+        // Apply limit and offset
         let result_limit = limit.unwrap_or(50).min(500);
+        let result_offset = offset.unwrap_or(0);
 
         // Build and execute query based on filters
         // type = 0 (Todo) is intentional here: headings (type=2) have no stopDate and
@@ -1139,7 +1141,9 @@ impl ThingsDatabase {
                 q.push_str(&format!(" AND area = '{}'", id));
             }
 
-            q.push_str(&format!(" ORDER BY stopDate DESC LIMIT {result_limit}"));
+            q.push_str(&format!(
+                " ORDER BY stopDate DESC LIMIT {result_limit} OFFSET {result_offset}"
+            ));
 
             sqlx::query(&q)
                 .bind(&pattern)
@@ -1175,7 +1179,9 @@ impl ThingsDatabase {
                 q.push_str(&format!(" AND area = '{}'", id));
             }
 
-            q.push_str(&format!(" ORDER BY stopDate DESC LIMIT {result_limit}"));
+            q.push_str(&format!(
+                " ORDER BY stopDate DESC LIMIT {result_limit} OFFSET {result_offset}"
+            ));
 
             sqlx::query(&q)
                 .fetch_all(&self.pool)
@@ -2359,16 +2365,30 @@ impl ThingsDatabase {
 
     /// Get recently used tags
     ///
+    /// Recency is determined by `MAX(t.userModificationDate)` across non-trashed tasks
+    /// referencing the tag — this reflects when those tasks were last touched rather than
+    /// when they were created. Tags with no non-trashed task associations are excluded
+    /// entirely (INNER JOIN); previously the old `usedDate`-based query would have returned
+    /// them if `usedDate` were populated (it never is in practice).
+    ///
     /// # Errors
     ///
     /// Returns an error if the database query fails
     #[instrument(skip(self))]
     pub async fn get_recent_tags(&self, limit: usize) -> ThingsResult<Vec<crate::models::Tag>> {
+        // Things 3 never populates `usedDate` for tags created via its own UI or
+        // AppleScript. Instead, order by the most recent `userModificationDate` of any
+        // non-trashed task that references the tag via the TMTaskTag join table.
         let rows = sqlx::query(
-            "SELECT uuid, title, shortcut, parent, usedDate
-             FROM TMTag
-             WHERE usedDate IS NOT NULL
-             ORDER BY usedDate DESC
+            "SELECT tg.uuid, tg.title, tg.shortcut, tg.parent,
+                    COUNT(t.uuid) AS usage_count,
+                    MAX(t.userModificationDate) AS most_recent
+             FROM TMTag tg
+             JOIN TMTaskTag tt ON tt.tags = tg.uuid
+             JOIN TMTask t ON t.uuid = tt.tasks
+             WHERE t.trashed = 0
+             GROUP BY tg.uuid, tg.title, tg.shortcut, tg.parent
+             ORDER BY most_recent DESC
              LIMIT ?",
         )
         .bind(limit as i64)
@@ -2383,26 +2403,13 @@ impl ThingsDatabase {
             let shortcut: Option<String> = row.get("shortcut");
             let parent_str: Option<String> = row.get("parent");
             let parent_uuid = parent_str.map(ThingsId::from_trusted);
+            let usage_count: i64 = row.get("usage_count");
 
-            let used_ts: Option<f64> = row.get("usedDate");
-            let last_used = used_ts.and_then(|ts| {
+            let most_recent_ts: Option<f64> = row.get("most_recent");
+            let last_used = most_recent_ts.and_then(|ts| {
                 let ts_i64 = safe_timestamp_convert(ts);
                 DateTime::from_timestamp(ts_i64, 0)
             });
-
-            // Count usage via TMTaskTag join table
-            let usage_count: i64 = sqlx::query_scalar(
-                "SELECT COUNT(*) FROM TMTask
-                 WHERE trashed = 0
-                 AND EXISTS (
-                     SELECT 1 FROM TMTaskTag tt
-                     WHERE tt.tasks = TMTask.uuid AND tt.tags = ?
-                 )",
-            )
-            .bind(uuid_str.as_str())
-            .fetch_one(&self.pool)
-            .await
-            .unwrap_or(0);
 
             tags.push(crate::models::Tag {
                 uuid: ThingsId::from_trusted(uuid_str),

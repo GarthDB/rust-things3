@@ -253,7 +253,17 @@ impl PerformanceMonitor {
                 cpu_usage
             },
             #[allow(clippy::cast_precision_loss)]
-            available_memory_mb: system.available_memory() as f64 / 1024.0 / 1024.0,
+            available_memory_mb: {
+                // macOS does not always populate `available_memory()` via sysinfo;
+                // fall back to total − used when it returns 0.
+                let avail = system.available_memory();
+                let bytes = if avail > 0 {
+                    avail
+                } else {
+                    system.total_memory().saturating_sub(system.used_memory())
+                };
+                bytes as f64 / 1024.0 / 1024.0
+            },
             #[allow(clippy::cast_precision_loss)]
             total_memory_mb: system.total_memory() as f64 / 1024.0 / 1024.0,
         })

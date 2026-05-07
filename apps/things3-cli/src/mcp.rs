@@ -1237,6 +1237,12 @@ impl ThingsMcpServer {
                             "minimum": 1,
                             "maximum": 500,
                             "description": "Maximum number of results to return (default: 50, max: 500)"
+                        },
+                        "offset": {
+                            "type": "integer",
+                            "default": 0,
+                            "minimum": 0,
+                            "description": "Number of results to skip for pagination (default: 0). Applied at the SQL level before tag filtering."
                         }
                     }
                 }),
@@ -2342,6 +2348,10 @@ impl ThingsMcpServer {
         });
 
         let limit = args.get("limit").and_then(|v| v.as_u64()).map(|v| v as u32);
+        let offset = args
+            .get("offset")
+            .and_then(|v| v.as_u64())
+            .map(|v| v as u32);
 
         // Call database method
         let tasks = self
@@ -2354,6 +2364,7 @@ impl ThingsMcpServer {
                 area_uuid,
                 tags,
                 limit,
+                offset,
             )
             .await
             .map_err(|e| McpError::database_operation_failed("logbook_search", e))?;
