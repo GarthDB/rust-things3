@@ -3241,7 +3241,7 @@ impl ThingsMcpServer {
                 let export_data = ExportData::new(all_tasks, projects, areas);
                 DataExporter::new_default()
                     .export(&export_data, ExportFormat::Csv)
-                    .map_err(|e| McpError::invalid_parameter("format", e.to_string()))?
+                    .map_err(|e| McpError::configuration_error(e.to_string()))?
             }
             "markdown" => {
                 let mut all_tasks = inbox;
@@ -3249,7 +3249,7 @@ impl ThingsMcpServer {
                 let export_data = ExportData::new(all_tasks, projects, areas);
                 DataExporter::new_default()
                     .export(&export_data, ExportFormat::Markdown)
-                    .map_err(|e| McpError::invalid_parameter("format", e.to_string()))?
+                    .map_err(|e| McpError::configuration_error(e.to_string()))?
             }
             _ => return Err(McpError::invalid_format(format, "json, csv, markdown")),
         };
