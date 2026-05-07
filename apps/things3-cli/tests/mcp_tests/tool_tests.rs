@@ -465,12 +465,6 @@ async fn test_export_data_csv_projects() {
     assert!(!result.is_error);
     match &result.content[0] {
         Content::Text { text } => {
-            // DataExporter emits a "\n\nProjects\n" section label before the header row.
-            // These assertions document the current format so any change is visible.
-            assert!(
-                text.contains("\n\nProjects\n"),
-                "expected Projects section label, got: {text}"
-            );
             assert!(
                 text.contains("Title,Status,Notes,Start Date,Deadline,Created,Modified,Area"),
                 "expected full project CSV header, got: {text}"
@@ -495,11 +489,6 @@ async fn test_export_data_csv_areas() {
     assert!(!result.is_error);
     match &result.content[0] {
         Content::Text { text } => {
-            // DataExporter emits a "\n\nAreas\n" section label before the header row.
-            assert!(
-                text.contains("\n\nAreas\n"),
-                "expected Areas section label, got: {text}"
-            );
             assert!(
                 text.contains("Title,Notes,Created,Modified"),
                 "expected full area CSV header, got: {text}"

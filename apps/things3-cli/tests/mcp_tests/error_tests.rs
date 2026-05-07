@@ -4,9 +4,7 @@
 
 use crate::mcp_tests::common::create_test_mcp_server;
 use serde_json::json;
-use things3_cli::mcp::{
-    CallToolRequest, Content, GetPromptRequest, McpError, ReadResourceRequest, ThingsMcpServer,
-};
+use things3_cli::mcp::{CallToolRequest, Content, McpError};
 
 #[tokio::test]
 async fn test_mcp_error_creation() {

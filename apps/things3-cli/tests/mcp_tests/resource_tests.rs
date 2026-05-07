@@ -3,7 +3,7 @@
 #![cfg(feature = "mcp-server")]
 
 use crate::mcp_tests::common::create_test_mcp_server;
-use things3_cli::mcp::{Content, McpError, ReadResourceRequest, ThingsMcpServer};
+use things3_cli::mcp::{Content, McpError};
 
 #[tokio::test]
 async fn test_list_resources() {
