@@ -48,7 +48,7 @@ async fn test_read_inbox_resource() {
     match &result.contents[0] {
         Content::Text { text } => {
             // Should be valid JSON
-            let parsed: serde_json::Value = serde_json::from_str(text).unwrap();
+            let parsed: serde_json::Value = serde_json::from_str(&text).unwrap();
             assert!(parsed.is_array());
         }
     }
@@ -68,7 +68,7 @@ async fn test_read_projects_resource() {
     match &result.contents[0] {
         Content::Text { text } => {
             // Should be valid JSON
-            let parsed: serde_json::Value = serde_json::from_str(text).unwrap();
+            let parsed: serde_json::Value = serde_json::from_str(&text).unwrap();
             assert!(parsed.is_array());
         }
     }
@@ -88,7 +88,7 @@ async fn test_read_areas_resource() {
     match &result.contents[0] {
         Content::Text { text } => {
             // Should be valid JSON
-            let parsed: serde_json::Value = serde_json::from_str(text).unwrap();
+            let parsed: serde_json::Value = serde_json::from_str(&text).unwrap();
             assert!(parsed.is_array());
         }
     }
@@ -108,7 +108,7 @@ async fn test_read_today_resource() {
     match &result.contents[0] {
         Content::Text { text } => {
             // Should be valid JSON
-            let parsed: serde_json::Value = serde_json::from_str(text).unwrap();
+            let parsed: serde_json::Value = serde_json::from_str(&text).unwrap();
             assert!(parsed.is_array());
         }
     }
