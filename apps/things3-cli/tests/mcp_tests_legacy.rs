@@ -635,9 +635,15 @@ async fn test_export_data_csv_projects() {
     assert!(!result.is_error);
     match &result.content[0] {
         Content::Text { text } => {
+            // DataExporter emits a "\n\nProjects\n" section label before the header row.
+            // These assertions document the current format so any change is visible.
             assert!(
-                text.contains("Title,Status,Notes"),
-                "expected project CSV header, got: {text}"
+                text.contains("\n\nProjects\n"),
+                "expected Projects section label, got: {text}"
+            );
+            assert!(
+                text.contains("Title,Status,Notes,Start Date,Deadline,Created,Modified,Area"),
+                "expected full project CSV header, got: {text}"
             );
             assert!(text.contains("Website Redesign"), "expected project row");
         }
@@ -659,9 +665,14 @@ async fn test_export_data_csv_areas() {
     assert!(!result.is_error);
     match &result.content[0] {
         Content::Text { text } => {
+            // DataExporter emits a "\n\nAreas\n" section label before the header row.
+            assert!(
+                text.contains("\n\nAreas\n"),
+                "expected Areas section label, got: {text}"
+            );
             assert!(
                 text.contains("Title,Notes,Created,Modified"),
-                "expected area CSV header, got: {text}"
+                "expected full area CSV header, got: {text}"
             );
             assert!(text.contains("Work"), "expected area row");
         }
@@ -777,6 +788,41 @@ async fn test_export_data_output_path_writes_file() {
             let file_content = std::fs::read_to_string(&path).unwrap();
             let file_json: serde_json::Value = serde_json::from_str(&file_content).unwrap();
             assert!(file_json["inbox"].is_array());
+        }
+    }
+}
+
+#[tokio::test]
+async fn test_export_data_output_path_csv() {
+    let server = create_test_mcp_server().await;
+    let tmp = NamedTempFile::new().unwrap();
+    let path = tmp.path().to_str().unwrap().to_string();
+
+    let request = CallToolRequest {
+        name: "export_data".to_string(),
+        arguments: Some(json!({
+            "format": "csv",
+            "data_type": "tasks",
+            "output_path": path
+        })),
+    };
+
+    let result = server.call_tool(request).await.unwrap();
+    assert!(!result.is_error);
+
+    match &result.content[0] {
+        Content::Text { text } => {
+            let parsed: serde_json::Value = serde_json::from_str(text).unwrap();
+            assert_eq!(parsed["format"].as_str().unwrap(), "csv");
+            assert_eq!(parsed["data_type"].as_str().unwrap(), "tasks");
+            assert!(parsed["bytes_written"].as_u64().unwrap() > 0);
+
+            // Verify the file content is CSV (not JSON)
+            let file_content = std::fs::read_to_string(&path).unwrap();
+            assert!(
+                file_content.contains("Type,Title,Status"),
+                "expected CSV header in file, got: {file_content}"
+            );
         }
     }
 }
