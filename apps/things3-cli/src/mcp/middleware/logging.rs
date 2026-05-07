@@ -78,7 +78,7 @@ impl McpMiddleware for LoggingMiddleware {
     }
 
     fn priority(&self) -> i32 {
-        100 // Low priority to run early
+        100 // runs after auth (10), rate-limit (20), and validation (50)
     }
 
     async fn before_request(

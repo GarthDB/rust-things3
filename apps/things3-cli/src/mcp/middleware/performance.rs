@@ -37,7 +37,7 @@ impl McpMiddleware for PerformanceMiddleware {
     }
 
     fn priority(&self) -> i32 {
-        200 // High priority to run late
+        200 // runs last — measures total wall time
     }
 
     async fn after_request(

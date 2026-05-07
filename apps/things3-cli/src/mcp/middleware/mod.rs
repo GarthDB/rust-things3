@@ -1,8 +1,6 @@
 //! MCP Middleware system for cross-cutting concerns
 
 use crate::mcp::{CallToolRequest, CallToolResult, McpError, McpResult};
-#[allow(unused_imports)]
-use jsonwebtoken::{decode, encode, Algorithm, DecodingKey, EncodingKey, Header, Validation};
 use serde_json::Value;
 use std::sync::Arc;
 use std::time::{Duration, Instant};

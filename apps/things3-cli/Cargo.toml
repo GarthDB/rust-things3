@@ -22,6 +22,11 @@ path = "src/bin/test_mcp_real_data.rs"
 required-features = ["mcp-server"]
 
 [[test]]
+name = "mcp_tests"
+path = "tests/mcp_tests/mod.rs"
+required-features = ["mcp-server"]
+
+[[test]]
 name = "mcp_bulk_operations_tests"
 path = "tests/mcp_bulk_operations_tests.rs"
 required-features = ["mcp-server"]

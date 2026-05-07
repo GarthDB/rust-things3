@@ -101,10 +101,17 @@ impl AuthenticationMiddleware {
 
     /// Validate API key
     fn validate_api_key(&self, api_key: &str) -> McpResult<ApiKeyInfo> {
-        self.api_keys
+        let info = self
+            .api_keys
             .get(api_key)
             .cloned()
-            .ok_or_else(|| McpError::validation_error("Invalid API key"))
+            .ok_or_else(|| McpError::validation_error("Invalid API key"))?;
+        if let Some(exp) = &info.expires_at {
+            if *exp < chrono::Utc::now() {
+                return Err(McpError::validation_error("API key has expired"));
+            }
+        }
+        Ok(info)
     }
 
     /// Validate JWT token

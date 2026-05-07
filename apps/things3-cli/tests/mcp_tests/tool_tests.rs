@@ -2,7 +2,7 @@
 
 #![cfg(feature = "mcp-server")]
 
-use crate::mcp_tests::common::create_test_mcp_server;
+use crate::common::create_test_mcp_server;
 use serde_json::json;
 use tempfile::NamedTempFile;
 use things3_cli::mcp::{CallToolRequest, Content, McpError, ThingsMcpServer};

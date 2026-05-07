@@ -2,7 +2,7 @@
 
 #![cfg(feature = "mcp-server")]
 
-use crate::mcp_tests::common::create_test_mcp_server;
+use super::common::create_test_mcp_server;
 use things3_cli::mcp::{Content, McpError};
 
 #[tokio::test]
