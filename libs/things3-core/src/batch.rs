@@ -53,7 +53,11 @@ impl ThingsDatabase {
             &self.pool,
             uuids,
             "SELECT uuid, title, type, status, notes, startDate, deadline, stopDate, \
-             creationDate, userModificationDate, project, area, heading, cachedTags, trashed \
+             creationDate, userModificationDate, project, area, heading, trashed, \
+             (SELECT GROUP_CONCAT(tg.title, char(31)) \
+                FROM TMTaskTag tt \
+                JOIN TMTag tg ON tg.uuid = tt.tags \
+               WHERE tt.tasks = TMTask.uuid) AS tags_csv \
              FROM TMTask WHERE uuid IN ({placeholders})",
             |row| {
                 let trashed: i64 = row.get("trashed");
