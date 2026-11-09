@@ -9,7 +9,6 @@ ignore = [
     { id = "RUSTSEC-2026-0459", reason = "libsqlite3-sys pinned by sqlx 0.8; revisit on sqlx 0.9 upgrade" },
     # Transitive dep via indicatif; no safe upgrade available
     { id = "RUSTSEC-2025-0119", reason = "number_prefix is unmaintained; transitive via indicatif with no safe upgrade" },
-    { id = "RUSTSEC-2024-0449", reason = "unsafe-libyaml is unmaintained; transitive via serde_yaml with no drop-in replacement" },
 ]
 
 [licenses]
