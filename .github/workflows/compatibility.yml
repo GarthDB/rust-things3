@@ -20,7 +20,7 @@ jobs:
       matrix:
         os: [macos-latest]
         rust:
-          - 1.70.0  # MSRV
+          - 1.89.0  # MSRV
           - stable
 
     steps:

@@ -648,7 +648,7 @@ mod tests {
 
         // Verify it's valid YAML
         let content = std::fs::read_to_string(&yaml_file).unwrap();
-        let _: serde_norway::Value = serde_norway::from_str(&content).unwrap();
+        let _: serde_json::Value = serde_saphyr::from_str(&content).unwrap();
     }
 
     #[test]

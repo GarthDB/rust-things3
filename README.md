@@ -8,7 +8,7 @@ A high-performance Rust library and CLI for Things 3 integration with integrated
 [![codecov](https://codecov.io/gh/GarthDB/rust-things3/branch/main/graph/badge.svg)](https://codecov.io/gh/GarthDB/rust-things3)
 [![Crates.io](https://img.shields.io/crates/v/things3-cli.svg)](https://crates.io/crates/things3-cli)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Rust](https://img.shields.io/badge/rust-1.70+-orange.svg)](https://www.rust-lang.org)
+[![Rust](https://img.shields.io/badge/rust-1.89+-orange.svg)](https://www.rust-lang.org)
 [![Version](https://img.shields.io/badge/version-1.0.0-blue.svg)](RELEASE_NOTES.md)
 
 ## ✨ Features
@@ -457,7 +457,7 @@ See [Development Guide](docs/DEVELOPMENT.md) for more testing details.
 
 ### Prerequisites
 
-- Rust 1.70+
+- Rust 1.89+
 - Moon (for workspace management)
 - Things 3 (for testing)
 - cargo-llvm-cov (for coverage)

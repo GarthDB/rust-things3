@@ -461,7 +461,7 @@ impl McpServerConfig {
         let config = if path.extension().and_then(|s| s.to_str()) == Some("yaml")
             || path.extension().and_then(|s| s.to_str()) == Some("yml")
         {
-            serde_norway::from_str(&content).map_err(|e| {
+            serde_saphyr::from_str(&content).map_err(|e| {
                 ThingsError::configuration(format!("Failed to parse YAML config: {e}"))
             })?
         } else {
@@ -484,7 +484,7 @@ impl McpServerConfig {
     pub fn to_file<P: AsRef<Path>>(&self, path: P, format: &str) -> Result<()> {
         let path = path.as_ref();
         let content = match format {
-            "yaml" | "yml" => serde_norway::to_string(self).map_err(|e| {
+            "yaml" | "yml" => serde_saphyr::to_string(self).map_err(|e| {
                 ThingsError::configuration(format!("Failed to serialize YAML: {e}"))
             })?,
             "json" => serde_json::to_string_pretty(self).map_err(|e| {
