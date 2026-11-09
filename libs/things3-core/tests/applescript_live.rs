@@ -528,3 +528,59 @@ async fn merge_tags_lifecycle() {
         .expect("delete_tag (target) should succeed");
     target_guard.dismiss();
 }
+
+/// #214: `start_date` must be applied via `schedule` (future date and today),
+/// and a failed create must not leave an orphan task behind.
+#[tokio::test]
+#[ignore = "requires Things 3 + Automation permission; set THINGS3_LIVE_TESTS=1"]
+async fn create_task_with_start_date_and_rollback() {
+    if !live_tests_enabled() {
+        return;
+    }
+    let backend = live_backend().await;
+    let db_path = std::env::var("THINGS_DB_PATH")
+        .or_else(|_| std::env::var("THINGS_DATABASE_PATH"))
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|_| things3_core::get_default_database_path());
+    let db = ThingsDatabase::new(&db_path).await.expect("open db");
+    let new_req = |title: &str, start, project: Option<ThingsId>| CreateTaskRequest {
+        title: title.to_string(),
+        task_type: None,
+        notes: None,
+        start_date: start,
+        deadline: None,
+        project_uuid: project,
+        area_uuid: None,
+        parent_uuid: None,
+        tags: None,
+        status: None,
+    };
+
+    let today = chrono::Local::now().date_naive();
+    for date in [today + chrono::Duration::days(30), today] {
+        let title = format!("rust-things3 e2e start_date {}", unique_suffix());
+        let id = backend
+            .create_task(new_req(&title, Some(date), None))
+            .await
+            .expect("create_task with start_date should succeed");
+        let _guard = Guard::new(Arc::clone(&backend), id.clone(), Kind::Task);
+        let task = db
+            .get_task_by_uuid(&id)
+            .await
+            .expect("lookup")
+            .expect("task should exist");
+        // Only checks presence: the DB read path decodes Things' packed
+        // startDate integer as seconds-since-2001 (separate bug), so the
+        // value itself can't be compared yet.
+        assert!(task.start_date.is_some(), "start_date not applied");
+    }
+
+    let title = format!("rust-things3 e2e rollback {}", unique_suffix());
+    let bogus = ThingsId::new_v4();
+    let res = backend
+        .create_task(new_req(&title, Some(today), Some(bogus)))
+        .await;
+    assert!(res.is_err(), "create into a missing project must fail");
+    let found = db.search_tasks(&title).await.expect("search");
+    assert!(found.is_empty(), "failed create left an orphan: {found:?}");
+}

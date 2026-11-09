@@ -62,6 +62,20 @@ fn assign_date_var(var: &str, date: NaiveDate) -> String {
     )
 }
 
+/// Create `var` via `make_cmd`, run `steps` in a `try`, and delete `var` if any
+/// step fails so a failed create never leaves an orphan item behind.
+fn with_rollback(var: &str, make_cmd: &str, steps: &str) -> String {
+    format!(
+        "\t\tset {var} to {make_cmd}\n\
+         \t\ttry\n\
+         {steps}\
+         \t\ton error errMsg number errNum\n\
+         \t\t\tdelete {var}\n\
+         \t\t\terror errMsg number errNum\n\
+         \t\tend try\n"
+    )
+}
+
 /// Map a [`TaskStatus`] to its AppleScript constant name.
 ///
 /// Things AS exposes `open | completed | canceled` as the `status` enum.
@@ -92,14 +106,11 @@ pub(crate) fn create_task_script(req: &CreateTaskRequest) -> String {
         }
     }
 
-    let mut body = format!(
-        "\t\tset newTask to make new to do with properties {{{}}}\n",
-        props.join(", "),
-    );
+    let mut body = String::new();
 
     if let Some(date) = req.start_date {
         body.push_str(&assign_date_var("activationDate", date));
-        body.push_str("\t\tset activation date of newTask to activationDate\n");
+        body.push_str("\t\tschedule newTask for activationDate\n");
     }
     if let Some(date) = req.deadline {
         body.push_str(&assign_date_var("dueDate", date));
@@ -129,7 +140,11 @@ pub(crate) fn create_task_script(req: &CreateTaskRequest) -> String {
     }
 
     body.push_str("\t\treturn id of newTask\n");
-    wrap(&body)
+    wrap(&with_rollback(
+        "newTask",
+        &format!("make new to do with properties {{{}}}", props.join(", ")),
+        &body,
+    ))
 }
 
 /// Build the partial-update script for an [`UpdateTaskRequest`].
@@ -154,7 +169,7 @@ pub(crate) fn update_task_script(req: &UpdateTaskRequest) -> String {
     }
     if let Some(date) = req.start_date {
         body.push_str(&assign_date_var("activationDate", date));
-        body.push_str("\t\tset activation date of t to activationDate\n");
+        body.push_str("\t\tschedule t for activationDate\n");
     }
     if let Some(date) = req.deadline {
         body.push_str(&assign_date_var("dueDate", date));
@@ -225,14 +240,11 @@ pub(crate) fn create_project_script(req: &CreateProjectRequest) -> String {
         }
     }
 
-    let mut body = format!(
-        "\t\tset newProject to make new project with properties {{{}}}\n",
-        props.join(", "),
-    );
+    let mut body = String::new();
 
     if let Some(date) = req.start_date {
         body.push_str(&assign_date_var("activationDate", date));
-        body.push_str("\t\tset activation date of newProject to activationDate\n");
+        body.push_str("\t\tschedule newProject for activationDate\n");
     }
     if let Some(date) = req.deadline {
         body.push_str(&assign_date_var("dueDate", date));
@@ -244,7 +256,11 @@ pub(crate) fn create_project_script(req: &CreateProjectRequest) -> String {
     }
 
     body.push_str("\t\treturn id of newProject\n");
-    wrap(&body)
+    wrap(&with_rollback(
+        "newProject",
+        &format!("make new project with properties {{{}}}", props.join(", ")),
+        &body,
+    ))
 }
 
 /// Build the partial-update script for an [`UpdateProjectRequest`].
@@ -266,7 +282,7 @@ pub(crate) fn update_project_script(req: &UpdateProjectRequest) -> String {
     }
     if let Some(date) = req.start_date {
         body.push_str(&assign_date_var("activationDate", date));
-        body.push_str("\t\tset activation date of p to activationDate\n");
+        body.push_str("\t\tschedule p for activationDate\n");
     }
     if let Some(date) = req.deadline {
         body.push_str(&assign_date_var("dueDate", date));
@@ -469,7 +485,7 @@ fn create_task_snippet(req: &CreateTaskRequest) -> String {
 
     if let Some(date) = req.start_date {
         snippet.push_str(&assign_date_var_indented("activationDate", date, 3));
-        snippet.push_str("\t\t\tset activation date of newTask to activationDate\n");
+        snippet.push_str("\t\t\tschedule newTask for activationDate\n");
     }
     if let Some(date) = req.deadline {
         snippet.push_str(&assign_date_var_indented("dueDate", date, 3));
@@ -593,9 +609,9 @@ pub(crate) fn bulk_update_dates_script(req: &BulkUpdateDatesRequest) -> String {
             let mut snippet = format!("\t\t\tset t to to do id \"{id}\"\n");
             if let Some(date) = req.start_date {
                 snippet.push_str(&assign_date_var_indented("activationDate", date, 3));
-                snippet.push_str("\t\t\tset activation date of t to activationDate\n");
+                snippet.push_str("\t\t\tschedule t for activationDate\n");
             } else if req.clear_start_date {
-                snippet.push_str("\t\t\tset activation date of t to missing value\n");
+                snippet.push_str("\t\t\tmove t to list \"Anytime\"\n");
             }
             if let Some(date) = req.deadline {
                 snippet.push_str(&assign_date_var_indented("dueDate", date, 3));
@@ -810,7 +826,7 @@ mod tests {
         assert!(script.contains("set year of activationDate to 2026"));
         assert!(script.contains("set month of activationDate to 4"));
         assert!(script.contains("set day of activationDate to 15"));
-        assert!(script.contains("set activation date of newTask to activationDate"));
+        assert!(script.contains("schedule newTask for activationDate"));
         // due date setup
         assert!(script.contains("set dueDate to current date"));
         assert!(script.contains("set month of dueDate to 5"));
@@ -1035,7 +1051,7 @@ mod tests {
             "move newProject to area id \"{}\"",
             project_uuid()
         )));
-        assert!(script.contains("set activation date of newProject to activationDate"));
+        assert!(script.contains("schedule newProject for activationDate"));
     }
 
     #[test]
@@ -1284,6 +1300,26 @@ mod tests {
     }
 
     #[test]
+    fn create_task_rolls_back_on_error() {
+        let req = CreateTaskRequest {
+            title: "t".into(),
+            task_type: None,
+            notes: None,
+            start_date: Some(date(2026, 7, 12)),
+            deadline: None,
+            project_uuid: None,
+            area_uuid: None,
+            parent_uuid: None,
+            tags: None,
+            status: None,
+        };
+        let script = create_task_script(&req);
+        assert!(script.contains("try\n"));
+        assert!(script.contains("delete newTask"));
+        assert!(!script.contains("set activation date"));
+    }
+
+    #[test]
     fn bulk_update_dates_with_clears() {
         let req = BulkUpdateDatesRequest {
             task_uuids: vec![sample_uuid()],
@@ -1293,7 +1329,7 @@ mod tests {
             clear_deadline: true,
         };
         let script = bulk_update_dates_script(&req);
-        assert!(script.contains("set activation date of t to missing value"));
+        assert!(script.contains("move t to list \"Anytime\""));
         assert!(script.contains("set due date of t to missing value"));
     }
 
@@ -1307,7 +1343,7 @@ mod tests {
             clear_deadline: false,
         };
         let script = bulk_update_dates_script(&req);
-        assert!(script.contains("set activation date of t to activationDate"));
+        assert!(script.contains("schedule t for activationDate"));
         assert!(script.contains("set due date of t to dueDate"));
     }
 
