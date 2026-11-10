@@ -293,6 +293,16 @@ pub struct FeatureFlags {
     pub hot_reloading: bool,
 }
 
+/// Serialize as YAML without folding long strings into `>` blocks, matching
+/// the single-line style `serde_yaml` produced.
+fn yaml_to_string<T: serde::Serialize>(
+    value: &T,
+) -> std::result::Result<String, serde_saphyr::SerializeError> {
+    let mut options = serde_saphyr::SerializerOptions::default();
+    options.prefer_block_scalars = false;
+    serde_saphyr::to_string_with_options(value, options)
+}
+
 impl McpServerConfig {
     /// Create a new MCP server configuration with default values
     #[must_use]
@@ -484,7 +494,7 @@ impl McpServerConfig {
     pub fn to_file<P: AsRef<Path>>(&self, path: P, format: &str) -> Result<()> {
         let path = path.as_ref();
         let content = match format {
-            "yaml" | "yml" => serde_saphyr::to_string(self).map_err(|e| {
+            "yaml" | "yml" => yaml_to_string(self).map_err(|e| {
                 ThingsError::configuration(format!("Failed to serialize YAML: {e}"))
             })?,
             "json" => serde_json::to_string_pretty(self).map_err(|e| {
@@ -914,6 +924,36 @@ mod tests {
                 serde_json::to_value(&loaded).unwrap()
             );
         }
+    }
+
+    /// Pins the YAML layout against what `serde_yaml` produced (compared on the
+    /// default config): same key order and indentation, long values on one line.
+    /// Known remaining differences: strings are double-quoted (`"*"`, `"2.1.0"`).
+    #[test]
+    fn test_yaml_output_layout() {
+        let mut config = McpServerConfig::default();
+        let long_path = "/Users/x/Library/Group Containers/JLMPQHK86H.com.culturedcode.ThingsMac/ThingsData-0Z0Z2/Things Database.thingsdatabase/main.sqlite";
+        config.database.path = long_path.into();
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("c.yaml");
+        config.to_file(&path, "yaml").unwrap();
+        let yaml = std::fs::read_to_string(&path).unwrap();
+
+        assert!(
+            yaml.starts_with("server:\n  name: things3-mcp-server\n"),
+            "{yaml}"
+        );
+        assert!(yaml.contains(&format!("\n  path: {long_path}\n")), "{yaml}");
+        assert!(!yaml.contains(">-"), "long strings must not fold:\n{yaml}");
+        assert!(
+            yaml.contains("\n  rotation:\n    enabled: true\n"),
+            "{yaml}"
+        );
+        assert!(yaml.contains("\n    api_keys: []\n"), "{yaml}");
+        assert!(
+            yaml.contains("\n    allowed_methods:\n    - GET\n    - POST\n"),
+            "{yaml}"
+        );
     }
 
     #[test]
