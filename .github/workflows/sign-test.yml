@@ -2,8 +2,6 @@ name: Sign Test
 
 on:
   workflow_dispatch:
-  push:
-    branches: [ci/macos-signing]  # temporary: remove after the first successful run
 
 jobs:
   sign-test:
