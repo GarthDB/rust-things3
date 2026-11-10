@@ -109,6 +109,11 @@ text-file = "coverage.txt"
 
 # Lint configuration — inherited by all workspace members via `[lints] workspace = true`
 # Phase 1: safety-net lints only. Pedantic/nursery deferred to Phase 2 once baseline is audited.
+# Line tables keep backtraces readable but skip variable debug info, which
+# shrinks target/ considerably.
+[profile.dev]
+debug = "line-tables-only"
+
 [workspace.lints.rust]
 unsafe_code = "deny"
 unreachable_pub = "warn"
