@@ -4,7 +4,6 @@ on:
   push:
     tags:
       - 'v*'
-  workflow_dispatch: # TEMP: remove before PR
 
 env:
   CARGO_TERM_COLOR: always
@@ -64,6 +63,5 @@ jobs:
         with:
           tag_name: ${{ github.ref_name }}
           name: Release ${{ github.ref_name }}
-          draft: ${{ github.event_name == 'workflow_dispatch' }} # TEMP: remove before PR
           generate_release_notes: true
           files: dist/${{ env.BINARY_NAME }}
