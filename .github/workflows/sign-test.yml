@@ -1,0 +1,30 @@
+name: Sign Test
+
+on:
+  workflow_dispatch:
+
+jobs:
+  sign-test:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build test binary
+        run: |
+          printf 'int main(void){return 0;}\n' > hello.c
+          cc -o hello hello.c
+
+      - name: Sign and notarize
+        env:
+          MACOS_CERT_P12_BASE64: ${{ secrets.MACOS_CERT_P12_BASE64 }}
+          MACOS_CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          NOTARY_API_KEY_ID: ${{ secrets.NOTARY_API_KEY_ID }}
+          NOTARY_API_ISSUER_ID: ${{ secrets.NOTARY_API_ISSUER_ID }}
+          NOTARY_API_KEY_P8: ${{ secrets.NOTARY_API_KEY_P8 }}
+        run: scripts/macos-sign-notarize.sh hello
+
+      - name: Verify
+        run: |
+          codesign -dv --verbose=4 hello
+          spctl --assess --type execute -vv hello || echo "spctl rejects bare binaries (expected); see docs"

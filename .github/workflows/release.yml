@@ -95,6 +95,17 @@ jobs:
         run: cargo build --release --target ${{ matrix.target }} --bin things3
         working-directory: apps/things3-cli
 
+      - name: Sign and notarize (macOS)
+        if: runner.os == 'macOS'
+        env:
+          MACOS_CERT_P12_BASE64: ${{ secrets.MACOS_CERT_P12_BASE64 }}
+          MACOS_CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          NOTARY_API_KEY_ID: ${{ secrets.NOTARY_API_KEY_ID }}
+          NOTARY_API_ISSUER_ID: ${{ secrets.NOTARY_API_ISSUER_ID }}
+          NOTARY_API_KEY_P8: ${{ secrets.NOTARY_API_KEY_P8 }}
+        run: scripts/macos-sign-notarize.sh target/${{ matrix.target }}/release/${{ matrix.binary_name }}
+
       - name: Upload Release Asset
         uses: softprops/action-gh-release@v1
         with:
