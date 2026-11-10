@@ -69,8 +69,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # both are Apple Silicon (macos-13 was the last Intel image)
-        os: [macos-14, macos-latest]
+        # Both are Apple Silicon. macos-14 was retired on 2026-11-02. GitHub keeps
+        # only two macOS images, so revisit macos-15 when the next macOS reaches GA.
+        os: [macos-15, macos-latest]
 
     steps:
       - uses: actions/checkout@v4

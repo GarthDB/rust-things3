@@ -40,8 +40,8 @@ These platforms are tested in CI and guaranteed to work:
 
 | Platform | Architecture | Status | Notes |
 |----------|-------------|--------|-------|
-| macOS 14+ | x86_64 (Intel) | ✅ Supported | Primary platform - where Things 3 runs |
-| macOS 14+ | ARM64 (Apple Silicon) | ✅ Supported | Native ARM support, tested on latest |
+| macOS 15+ | x86_64 (Intel) | ✅ Supported | Primary platform - where Things 3 runs |
+| macOS 15+ | ARM64 (Apple Silicon) | ✅ Supported | Native ARM support, tested on macOS 15 and latest |
 | Linux (Ubuntu) | x86_64 | ✅ Supported | For CI/CD and server-side processing |
 
 ### Tier 2: Should Work
@@ -159,8 +159,7 @@ Our CI pipeline tests the following combinations:
 #### Operating Systems
 - ✅ Ubuntu 22.04 LTS
 - ✅ Ubuntu 24.04 LTS
-- ✅ macOS 13 (Intel)
-- ✅ macOS 14 (Apple Silicon)
+- ✅ macOS 15 (Apple Silicon)
 - ✅ macOS latest
 
 #### SQLite Versions
