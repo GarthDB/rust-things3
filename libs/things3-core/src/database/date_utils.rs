@@ -1,23 +1,22 @@
 //! Date validation and conversion utilities for Things 3
 //!
 //! This module provides safe date conversion between Things 3's internal format
-//! (seconds since 2001-01-01) and standard date types, along with comprehensive
+//! (packed `year<<16 | month<<12 | day<<7` ints) and standard date types, along with comprehensive
 //! validation to ensure date consistency.
 
-use chrono::{Datelike, NaiveDate, NaiveTime, TimeZone, Utc};
+use chrono::{Datelike, NaiveDate, Utc};
+
+use super::conversions::{naive_date_to_things_timestamp, things_date_to_naive_date};
 use thiserror::Error;
 
-/// Things 3 epoch: 2001-01-01 00:00:00 UTC
+/// Earliest year accepted when encoding dates (Things 3 epoch year)
 const THINGS_EPOCH_YEAR: i32 = 2001;
 
 /// Maximum reasonable year for Things 3 dates (year 2100)
 const MAX_YEAR: i32 = 2100;
 
-/// Minimum reasonable timestamp (2000-01-01, before Things 3 was created but allows some leeway)
-const MIN_REASONABLE_TIMESTAMP: i64 = -31536000; // ~1 year before epoch
-
-/// Maximum reasonable timestamp (2100-01-01)
-const MAX_REASONABLE_TIMESTAMP: i64 = 3_124_224_000; // ~99 years after epoch
+/// Minimum year accepted when decoding dates
+const MIN_YEAR: i32 = 2000;
 
 /// Errors that can occur during date conversion
 #[non_exhaustive]
@@ -60,107 +59,41 @@ pub enum DateValidationError {
     ConversionFailed(#[from] DateConversionError),
 }
 
-/// Check if a Things 3 timestamp is within a reasonable range
-///
-/// Things 3 was released in 2009, so dates before 2000 are suspicious.
-/// Dates after 2100 are likely errors or overflow.
-///
-/// # Arguments
-/// * `seconds` - Seconds since 2001-01-01
-///
-/// # Returns
-/// `true` if the timestamp is reasonable, `false` otherwise
-pub fn is_valid_things_timestamp(seconds: i64) -> bool {
-    (MIN_REASONABLE_TIMESTAMP..=MAX_REASONABLE_TIMESTAMP).contains(&seconds)
+/// Check if a packed Things 3 date decodes to a reasonable date (2000..=2100)
+pub fn is_valid_things_timestamp(packed: i64) -> bool {
+    things_date_to_naive_date(packed).is_some_and(|d| (MIN_YEAR..=MAX_YEAR).contains(&d.year()))
 }
 
-/// Convert Things 3 timestamp to NaiveDate with comprehensive error handling
-///
-/// Things 3 stores dates as seconds since 2001-01-01 00:00:00 UTC.
-///
-/// # Arguments
-/// * `seconds_since_2001` - Seconds since the Things 3 epoch
-///
-/// # Returns
-/// `Ok(NaiveDate)` if conversion succeeds, `Err` with detailed error otherwise
+/// Convert a packed Things 3 date (`year<<16 | month<<12 | day<<7`) to a NaiveDate
 ///
 /// # Errors
-/// Returns error if:
-/// - Timestamp is invalid or would cause overflow
-/// - Resulting date is before 2000 or after 2100
-pub fn safe_things_date_to_naive_date(
-    seconds_since_2001: i64,
-) -> Result<NaiveDate, DateConversionError> {
-    // Check for reasonable range
-    if !is_valid_things_timestamp(seconds_since_2001) {
-        return Err(DateConversionError::InvalidTimestamp(seconds_since_2001));
+/// Returns error if the value is not a valid packed date or the year is after 2100
+pub fn safe_things_date_to_naive_date(packed: i64) -> Result<NaiveDate, DateConversionError> {
+    let date =
+        things_date_to_naive_date(packed).ok_or(DateConversionError::InvalidTimestamp(packed))?;
+    if date.year() < MIN_YEAR {
+        return Err(DateConversionError::InvalidTimestamp(packed));
     }
-
-    // Base date: 2001-01-01 00:00:00 UTC
-    let base_date = Utc
-        .with_ymd_and_hms(THINGS_EPOCH_YEAR, 1, 1, 0, 0, 0)
-        .single()
-        .ok_or(DateConversionError::Overflow)?;
-
-    // Add seconds to get the actual date
-    let date_time = base_date
-        .checked_add_signed(chrono::Duration::seconds(seconds_since_2001))
-        .ok_or(DateConversionError::Overflow)?;
-
-    let naive_date = date_time.date_naive();
-
-    // Verify the result is reasonable
-    if naive_date.year() > MAX_YEAR {
-        return Err(DateConversionError::TooFarFuture(naive_date));
-    }
-
-    Ok(naive_date)
-}
-
-/// Convert NaiveDate to Things 3 timestamp with validation
-///
-/// # Arguments
-/// * `date` - The date to convert
-///
-/// # Returns
-/// `Ok(i64)` timestamp if conversion succeeds, `Err` with detailed error otherwise
-///
-/// # Errors
-/// Returns error if:
-/// - Date is before the Things 3 epoch (2001-01-01)
-/// - Date is too far in the future (after 2100)
-/// - Calculation would overflow
-pub fn safe_naive_date_to_things_timestamp(date: NaiveDate) -> Result<i64, DateConversionError> {
-    // Check if date is before epoch
-    let epoch_date =
-        NaiveDate::from_ymd_opt(THINGS_EPOCH_YEAR, 1, 1).ok_or(DateConversionError::Overflow)?;
-
-    if date < epoch_date {
-        return Err(DateConversionError::BeforeEpoch(date));
-    }
-
-    // Check if date is too far in the future
     if date.year() > MAX_YEAR {
         return Err(DateConversionError::TooFarFuture(date));
     }
+    Ok(date)
+}
 
-    // Base date: 2001-01-01 00:00:00 UTC
-    let base_date = Utc
-        .with_ymd_and_hms(THINGS_EPOCH_YEAR, 1, 1, 0, 0, 0)
-        .single()
-        .ok_or(DateConversionError::Overflow)?;
-
-    // Convert NaiveDate to DateTime at midnight UTC
-    let date_time = date
-        .and_time(NaiveTime::from_hms_opt(0, 0, 0).ok_or(DateConversionError::Overflow)?)
-        .and_local_timezone(Utc)
-        .single()
-        .ok_or(DateConversionError::Overflow)?;
-
-    // Calculate seconds difference
-    let seconds = date_time.signed_duration_since(base_date).num_seconds();
-
-    Ok(seconds)
+/// Convert NaiveDate to a packed Things 3 date with validation
+///
+/// # Errors
+/// Returns error if the date is before 2001-01-01 or after 2100
+pub fn safe_naive_date_to_things_timestamp(date: NaiveDate) -> Result<i64, DateConversionError> {
+    let epoch_date =
+        NaiveDate::from_ymd_opt(THINGS_EPOCH_YEAR, 1, 1).ok_or(DateConversionError::Overflow)?;
+    if date < epoch_date {
+        return Err(DateConversionError::BeforeEpoch(date));
+    }
+    if date.year() > MAX_YEAR {
+        return Err(DateConversionError::TooFarFuture(date));
+    }
+    Ok(naive_date_to_things_timestamp(date))
 }
 
 /// Validate that a deadline is not before a start date
@@ -270,55 +203,44 @@ pub fn add_days(date: NaiveDate, days: i64) -> Result<NaiveDate, DateConversionE
 mod tests {
     use super::*;
 
+    fn packed(y: i32, m: u32, d: u32) -> i64 {
+        naive_date_to_things_timestamp(NaiveDate::from_ymd_opt(y, m, d).unwrap())
+    }
+
     #[test]
     fn test_is_valid_things_timestamp() {
-        // Valid timestamps
-        assert!(is_valid_things_timestamp(0)); // Epoch
-        assert!(is_valid_things_timestamp(86400)); // 1 day after
-        assert!(is_valid_things_timestamp(31536000)); // 1 year after
-
-        // Invalid - too far in past
-        assert!(!is_valid_things_timestamp(-100000000));
-
-        // Invalid - too far in future (beyond 2100)
-        assert!(!is_valid_things_timestamp(4000000000));
+        assert!(is_valid_things_timestamp(packed(2026, 11, 10)));
+        assert!(!is_valid_things_timestamp(0));
+        assert!(!is_valid_things_timestamp(86400)); // seconds-style value
+        assert!(!is_valid_things_timestamp(packed(2150, 1, 1)));
     }
 
     #[test]
-    fn test_safe_things_date_conversion_epoch() {
-        // Epoch should convert to 2001-01-01
-        let date = safe_things_date_to_naive_date(0).unwrap();
-        assert_eq!(date, NaiveDate::from_ymd_opt(2001, 1, 1).unwrap());
-    }
-
-    #[test]
-    fn test_safe_things_date_conversion_normal() {
-        // 1 day after epoch
-        let date = safe_things_date_to_naive_date(86400).unwrap();
-        assert_eq!(date, NaiveDate::from_ymd_opt(2001, 1, 2).unwrap());
+    fn test_safe_things_date_conversion_known() {
+        assert_eq!(
+            safe_things_date_to_naive_date(132_822_272).unwrap(),
+            NaiveDate::from_ymd_opt(2026, 11, 10).unwrap()
+        );
     }
 
     #[test]
     fn test_safe_things_date_conversion_invalid() {
-        // Way too far in future
-        assert!(safe_things_date_to_naive_date(10000000000).is_err());
-
-        // Way too far in past
-        assert!(safe_things_date_to_naive_date(-100000000).is_err());
+        assert!(safe_things_date_to_naive_date(0).is_err());
+        assert!(safe_things_date_to_naive_date(-100_000_000).is_err());
+        assert!(safe_things_date_to_naive_date(packed(1999, 12, 31)).is_err());
+        assert!(matches!(
+            safe_things_date_to_naive_date(packed(2150, 1, 1)),
+            Err(DateConversionError::TooFarFuture(_))
+        ));
     }
 
     #[test]
-    fn test_safe_naive_date_to_things_timestamp_epoch() {
-        let date = NaiveDate::from_ymd_opt(2001, 1, 1).unwrap();
-        let timestamp = safe_naive_date_to_things_timestamp(date).unwrap();
-        assert_eq!(timestamp, 0);
-    }
-
-    #[test]
-    fn test_safe_naive_date_to_things_timestamp_normal() {
-        let date = NaiveDate::from_ymd_opt(2001, 1, 2).unwrap();
-        let timestamp = safe_naive_date_to_things_timestamp(date).unwrap();
-        assert_eq!(timestamp, 86400);
+    fn test_safe_naive_date_to_things_timestamp_known() {
+        let date = NaiveDate::from_ymd_opt(2026, 11, 10).unwrap();
+        assert_eq!(
+            safe_naive_date_to_things_timestamp(date).unwrap(),
+            132_822_272
+        );
     }
 
     #[test]

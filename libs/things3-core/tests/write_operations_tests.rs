@@ -1172,15 +1172,7 @@ fn test_date_conversion_accuracy() {
     let original_date = NaiveDate::from_ymd_opt(2025, 6, 15).unwrap();
     let timestamp = naive_date_to_things_timestamp(original_date);
 
-    // Verify timestamp is positive and reasonable
-    assert!(timestamp > 0, "Timestamp should be positive");
-
-    // Verify it's in a reasonable range (between 2001 and 2100)
-    let seconds_in_100_years = 100 * 365 * 86400i64;
-    assert!(
-        timestamp < seconds_in_100_years,
-        "Timestamp should be reasonable"
-    );
+    assert_eq!(timestamp, (2025 << 16) | (6 << 12) | (15 << 7));
 }
 
 #[test]

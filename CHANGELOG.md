@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- `startDate`/`deadline` are now encoded/decoded as Things' packed ints
+  (`year<<16 | month<<12 | day<<7`) for tasks and projects (#215). Previously they were read as
+  seconds since 2001 (tasks) or Unix time (projects), so dates came back wrong. Dates written by
+  earlier versions are stored incorrectly and are not migrated. The year-4001 "no date" sentinel
+  now reads as `None`.
+
 ## [2.0.0] - 2026-05-08
 
 ### Breaking Changes

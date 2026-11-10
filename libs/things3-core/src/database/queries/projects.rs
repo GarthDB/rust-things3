@@ -1,7 +1,9 @@
 #![allow(deprecated)]
 use crate::{
     database::{
-        conversions::safe_timestamp_convert, mappers::map_project_row, SqliteThingsDatabase,
+        conversions::{safe_timestamp_convert, things_date_to_naive_date},
+        mappers::map_project_row,
+        SqliteThingsDatabase,
     },
     error::{Result as ThingsResult, ThingsError},
     models::{Project, TaskStatus, ThingsId},
@@ -46,12 +48,10 @@ impl SqliteThingsDatabase {
                 notes: row.get("notes"),
                 deadline: row
                     .get::<Option<i64>, _>("deadline")
-                    .and_then(|ts| DateTime::from_timestamp(ts, 0))
-                    .map(|dt| dt.date_naive()),
+                    .and_then(things_date_to_naive_date),
                 start_date: row
                     .get::<Option<i64>, _>("startDate")
-                    .and_then(|ts| DateTime::from_timestamp(ts, 0))
-                    .map(|dt| dt.date_naive()),
+                    .and_then(things_date_to_naive_date),
                 tags: Vec::new(),  // TODO: Load tags separately
                 tasks: Vec::new(), // TODO: Load child tasks separately
                 created: {
