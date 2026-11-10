@@ -902,6 +902,21 @@ mod tests {
     }
 
     #[test]
+    fn test_config_to_and_from_file_yaml() {
+        let config = McpServerConfig::default();
+        let dir = tempfile::tempdir().unwrap();
+        for ext in ["yaml", "yml"] {
+            let path = dir.path().join(format!("config.{ext}"));
+            config.to_file(&path, ext).unwrap();
+            let loaded = McpServerConfig::from_file(&path).unwrap();
+            assert_eq!(
+                serde_json::to_value(&config).unwrap(),
+                serde_json::to_value(&loaded).unwrap()
+            );
+        }
+    }
+
+    #[test]
     fn test_config_merge() {
         let mut config1 = McpServerConfig::default();
         let mut config2 = McpServerConfig::default();

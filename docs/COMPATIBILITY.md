@@ -153,8 +153,6 @@ Our CI pipeline tests the following combinations:
 
 #### Rust Versions
 - ✅ 1.89.0 (MSRV)
-- ✅ 1.75.0
-- ✅ 1.80.0
 - ✅ stable
 - ✅ beta
 
@@ -273,8 +271,7 @@ If you encounter compatibility issues:
 ### MSRV Updates
 
 Potential MSRV updates:
-- **1.75.0**: For improved async traits (0.4.0)
-- **1.80.0**: For const generics improvements (0.5.0)
+- Raised to 1.89.0 for `serde-saphyr` (unreleased)
 
 Updates will be announced in advance and documented in the changelog.
 
