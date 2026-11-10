@@ -1,7 +1,8 @@
 #![allow(deprecated)]
-
 use crate::{
-    database::{conversions::safe_timestamp_convert, mappers::map_project_row, ThingsDatabase},
+    database::{
+        conversions::safe_timestamp_convert, mappers::map_project_row, SqliteThingsDatabase,
+    },
     error::{Result as ThingsResult, ThingsError},
     models::{Project, TaskStatus, ThingsId},
 };
@@ -9,7 +10,7 @@ use chrono::{DateTime, Utc};
 use sqlx::Row;
 use tracing::{debug, instrument};
 
-impl ThingsDatabase {
+impl SqliteThingsDatabase {
     /// Get all projects (from `TMTask` table where type = 1)
     ///
     /// # Errors

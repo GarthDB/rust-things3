@@ -310,7 +310,7 @@ impl TaskQueryBuilder {
     #[cfg(feature = "advanced-queries")]
     pub async fn execute(
         &self,
-        db: &crate::database::ThingsDatabase,
+        db: &crate::database::SqliteThingsDatabase,
     ) -> crate::error::Result<Vec<crate::models::Task>> {
         if self.fuzzy_query.is_some() {
             return self
@@ -397,11 +397,11 @@ impl TaskQueryBuilder {
     /// - [`crate::error::ThingsQueryError::InvalidCursor`] if `.offset(...)` and
     ///   `.after(...)` are both set, or if `.fuzzy_search(...)` and
     ///   `.after(...)` are both set, or if the cursor itself is malformed.
-    /// - Any error returned by [`crate::database::ThingsDatabase::query_tasks`].
+    /// - Any error returned by [`crate::database::SqliteThingsDatabase::query_tasks`].
     #[cfg(all(feature = "advanced-queries", feature = "batch-operations"))]
     pub async fn execute_paged(
         &self,
-        db: &crate::database::ThingsDatabase,
+        db: &crate::database::SqliteThingsDatabase,
     ) -> crate::error::Result<crate::cursor::Page<crate::models::Task>> {
         if self.fuzzy_query.is_some() {
             return Err(crate::error::ThingsError::Query(crate::error::ThingsQueryError::InvalidCursor(
@@ -522,7 +522,7 @@ impl TaskQueryBuilder {
     #[cfg(all(feature = "advanced-queries", feature = "batch-operations"))]
     pub fn execute_stream<'a>(
         mut self,
-        db: &'a crate::database::ThingsDatabase,
+        db: &'a crate::database::SqliteThingsDatabase,
     ) -> std::pin::Pin<
         Box<dyn futures_core::Stream<Item = crate::error::Result<crate::models::Task>> + Send + 'a>,
     >
@@ -559,7 +559,7 @@ impl TaskQueryBuilder {
     #[cfg(feature = "advanced-queries")]
     pub async fn execute_ranked(
         &self,
-        db: &crate::database::ThingsDatabase,
+        db: &crate::database::SqliteThingsDatabase,
     ) -> crate::error::Result<Vec<crate::models::RankedTask>> {
         let query = self.fuzzy_query.as_deref().ok_or_else(|| {
             crate::error::ThingsError::validation(
@@ -873,7 +873,7 @@ mod tests {
             crate::test_utils::create_test_database(f.path())
                 .await
                 .unwrap();
-            let db = crate::database::ThingsDatabase::new(f.path())
+            let db = crate::database::SqliteThingsDatabase::new(f.path())
                 .await
                 .unwrap();
 
@@ -900,7 +900,7 @@ mod tests {
             crate::test_utils::create_test_database(f.path())
                 .await
                 .unwrap();
-            let db = crate::database::ThingsDatabase::new(f.path())
+            let db = crate::database::SqliteThingsDatabase::new(f.path())
                 .await
                 .unwrap();
 
@@ -1190,7 +1190,7 @@ mod tests {
             crate::test_utils::create_test_database(f.path())
                 .await
                 .unwrap();
-            let db = crate::database::ThingsDatabase::new(f.path())
+            let db = crate::database::SqliteThingsDatabase::new(f.path())
                 .await
                 .unwrap();
             let result = TaskQueryBuilder::new().execute(&db).await;
@@ -1203,7 +1203,7 @@ mod tests {
             crate::test_utils::create_test_database(f.path())
                 .await
                 .unwrap();
-            let db = crate::database::ThingsDatabase::new(f.path())
+            let db = crate::database::SqliteThingsDatabase::new(f.path())
                 .await
                 .unwrap();
             let result = TaskQueryBuilder::new()

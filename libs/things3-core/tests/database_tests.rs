@@ -3,13 +3,13 @@ use std::path::Path;
 use tempfile::{tempdir, NamedTempFile};
 use things3_core::{
     models::{TaskStatus, TaskType},
-    ThingsDatabase,
+    SqliteThingsDatabase,
 };
 use uuid::Uuid;
 
 // Helper function to create test schema and data
 #[allow(clippy::too_many_lines)]
-async fn create_test_schema(db: &ThingsDatabase) -> Result<(), Box<dyn std::error::Error>> {
+async fn create_test_schema(db: &SqliteThingsDatabase) -> Result<(), Box<dyn std::error::Error>> {
     let pool = db.pool();
 
     // Create the Things 3 schema - matches real database structure
@@ -181,7 +181,7 @@ async fn create_test_schema(db: &ThingsDatabase) -> Result<(), Box<dyn std::erro
 
 #[tokio::test]
 async fn test_database_new() {
-    let db = ThingsDatabase::from_connection_string("sqlite::memory:")
+    let db = SqliteThingsDatabase::from_connection_string("sqlite::memory:")
         .await
         .unwrap();
     // Test that we can create a database connection
@@ -194,7 +194,7 @@ async fn test_database_new() {
 
 #[tokio::test]
 async fn test_database_default_path() {
-    let db = ThingsDatabase::from_connection_string("sqlite::memory:")
+    let db = SqliteThingsDatabase::from_connection_string("sqlite::memory:")
         .await
         .unwrap();
     // Test that we can create a database connection with in-memory database
@@ -203,7 +203,7 @@ async fn test_database_default_path() {
 
 #[tokio::test]
 async fn test_get_inbox() {
-    let db = ThingsDatabase::from_connection_string("sqlite::memory:")
+    let db = SqliteThingsDatabase::from_connection_string("sqlite::memory:")
         .await
         .unwrap();
 
@@ -224,7 +224,7 @@ async fn test_get_inbox() {
 
 #[tokio::test]
 async fn test_get_today() {
-    let db = ThingsDatabase::from_connection_string("sqlite::memory:")
+    let db = SqliteThingsDatabase::from_connection_string("sqlite::memory:")
         .await
         .unwrap();
 
@@ -239,7 +239,7 @@ async fn test_get_today() {
 
 #[tokio::test]
 async fn test_get_projects() {
-    let db = ThingsDatabase::from_connection_string("sqlite::memory:")
+    let db = SqliteThingsDatabase::from_connection_string("sqlite::memory:")
         .await
         .unwrap();
 
@@ -259,7 +259,7 @@ async fn test_get_projects() {
 
 #[tokio::test]
 async fn test_get_areas() {
-    let db = ThingsDatabase::from_connection_string("sqlite::memory:")
+    let db = SqliteThingsDatabase::from_connection_string("sqlite::memory:")
         .await
         .unwrap();
 
@@ -278,7 +278,7 @@ async fn test_get_areas() {
 
 #[tokio::test]
 async fn test_search_tasks() {
-    let db = ThingsDatabase::from_connection_string("sqlite::memory:")
+    let db = SqliteThingsDatabase::from_connection_string("sqlite::memory:")
         .await
         .unwrap();
 
@@ -297,7 +297,7 @@ async fn test_search_tasks() {
 
 #[tokio::test]
 async fn test_search_tasks_empty_query() {
-    let db = ThingsDatabase::from_connection_string("sqlite::memory:")
+    let db = SqliteThingsDatabase::from_connection_string("sqlite::memory:")
         .await
         .unwrap();
 
@@ -311,7 +311,7 @@ async fn test_search_tasks_empty_query() {
 
 #[tokio::test]
 async fn test_search_tasks_no_results() {
-    let db = ThingsDatabase::from_connection_string("sqlite::memory:")
+    let db = SqliteThingsDatabase::from_connection_string("sqlite::memory:")
         .await
         .unwrap();
 
@@ -327,13 +327,13 @@ async fn test_search_tasks_no_results() {
 async fn test_database_error_handling() {
     // Test with invalid path
     let invalid_path = Path::new("/invalid/path/that/does/not/exist/database.sqlite");
-    let result = ThingsDatabase::new(Path::new(invalid_path));
+    let result = SqliteThingsDatabase::new(Path::new(invalid_path));
     assert!(result.await.is_err());
 }
 
 #[tokio::test]
 async fn test_database_connection_persistence() {
-    let db = ThingsDatabase::from_connection_string("sqlite::memory:")
+    let db = SqliteThingsDatabase::from_connection_string("sqlite::memory:")
         .await
         .unwrap();
 
@@ -341,7 +341,7 @@ async fn test_database_connection_persistence() {
     create_test_schema(&db).await.unwrap();
 
     // Test that we can create multiple connections to the same in-memory database
-    let db2 = ThingsDatabase::from_connection_string("sqlite::memory:")
+    let db2 = SqliteThingsDatabase::from_connection_string("sqlite::memory:")
         .await
         .unwrap();
 
@@ -358,7 +358,7 @@ async fn test_database_connection_persistence() {
 
 #[tokio::test]
 async fn test_database_with_mock_data_consistency() {
-    let db = ThingsDatabase::from_connection_string("sqlite::memory:")
+    let db = SqliteThingsDatabase::from_connection_string("sqlite::memory:")
         .await
         .unwrap();
 
@@ -406,7 +406,7 @@ async fn test_database_with_mock_data_consistency() {
 
 #[tokio::test]
 async fn test_database_query_consistency() {
-    let db = ThingsDatabase::from_connection_string("sqlite::memory:")
+    let db = SqliteThingsDatabase::from_connection_string("sqlite::memory:")
         .await
         .unwrap();
 
@@ -433,7 +433,7 @@ async fn test_database_query_consistency() {
 
 #[tokio::test]
 async fn test_database_date_filtering() {
-    let db = ThingsDatabase::from_connection_string("sqlite::memory:")
+    let db = SqliteThingsDatabase::from_connection_string("sqlite::memory:")
         .await
         .unwrap();
 
@@ -457,7 +457,7 @@ async fn test_database_error_recovery() {
     let _db_path = temp_dir.path().join("test.db");
 
     // Create a valid database first
-    let db = ThingsDatabase::from_connection_string("sqlite::memory:")
+    let db = SqliteThingsDatabase::from_connection_string("sqlite::memory:")
         .await
         .unwrap();
 
@@ -479,10 +479,10 @@ async fn test_database_concurrent_access() {
     let _db_path = temp_dir.path().join("test.db");
 
     // Create multiple database connections
-    let db1 = ThingsDatabase::from_connection_string("sqlite::memory:")
+    let db1 = SqliteThingsDatabase::from_connection_string("sqlite::memory:")
         .await
         .unwrap();
-    let db2 = ThingsDatabase::from_connection_string("sqlite::memory:")
+    let db2 = SqliteThingsDatabase::from_connection_string("sqlite::memory:")
         .await
         .unwrap();
 
@@ -505,7 +505,7 @@ async fn test_database_concurrent_access() {
 
 #[tokio::test]
 async fn test_database_helper_functions_indirectly() {
-    let db = ThingsDatabase::from_connection_string("sqlite::memory:")
+    let db = SqliteThingsDatabase::from_connection_string("sqlite::memory:")
         .await
         .unwrap();
 
@@ -568,7 +568,7 @@ async fn test_database_helper_functions_indirectly() {
 async fn test_database_error_handling_comprehensive() {
     // Test with invalid database path
     let invalid_path = "/invalid/path/that/does/not/exist/database.sqlite";
-    let result = ThingsDatabase::new(Path::new(invalid_path));
+    let result = SqliteThingsDatabase::new(Path::new(invalid_path));
     assert!(result.await.is_err());
 
     // Test with valid path but invalid database file
@@ -578,7 +578,7 @@ async fn test_database_error_handling_comprehensive() {
     // Create an empty file (not a valid SQLite database)
     std::fs::write(db_path, "not a database").unwrap();
 
-    let result = ThingsDatabase::new(db_path).await;
+    let result = SqliteThingsDatabase::new(db_path).await;
     // The database might still open successfully even with invalid content
     // or it might fail - both are valid test cases
     let _ = result;
@@ -586,7 +586,7 @@ async fn test_database_error_handling_comprehensive() {
 
 #[tokio::test]
 async fn test_database_edge_cases() {
-    let db = ThingsDatabase::from_connection_string("sqlite::memory:")
+    let db = SqliteThingsDatabase::from_connection_string("sqlite::memory:")
         .await
         .unwrap();
 
@@ -619,7 +619,7 @@ async fn test_database_edge_cases() {
 
 #[tokio::test]
 async fn test_database_performance_with_large_limits() {
-    let db = ThingsDatabase::from_connection_string("sqlite::memory:")
+    let db = SqliteThingsDatabase::from_connection_string("sqlite::memory:")
         .await
         .unwrap();
 
@@ -702,7 +702,7 @@ async fn create_minimal_task_schema(pool: &sqlx::SqlitePool) {
 
 #[tokio::test]
 async fn test_get_today_with_null_today_index() {
-    let db = ThingsDatabase::from_connection_string("sqlite::memory:")
+    let db = SqliteThingsDatabase::from_connection_string("sqlite::memory:")
         .await
         .unwrap();
     let pool = db.pool();
@@ -739,7 +739,7 @@ async fn test_get_today_with_null_today_index() {
 
 #[tokio::test]
 async fn test_get_today_with_zero_today_index() {
-    let db = ThingsDatabase::from_connection_string("sqlite::memory:")
+    let db = SqliteThingsDatabase::from_connection_string("sqlite::memory:")
         .await
         .unwrap();
     let pool = db.pool();
@@ -776,7 +776,7 @@ async fn test_get_today_with_zero_today_index() {
 
 #[tokio::test]
 async fn test_get_today_with_positive_today_index() {
-    let db = ThingsDatabase::from_connection_string("sqlite::memory:")
+    let db = SqliteThingsDatabase::from_connection_string("sqlite::memory:")
         .await
         .unwrap();
     let pool = db.pool();
@@ -814,7 +814,7 @@ async fn test_get_today_with_positive_today_index() {
 
 #[tokio::test]
 async fn test_get_today_excludes_trashed() {
-    let db = ThingsDatabase::from_connection_string("sqlite::memory:")
+    let db = SqliteThingsDatabase::from_connection_string("sqlite::memory:")
         .await
         .unwrap();
     let pool = db.pool();
@@ -851,7 +851,7 @@ async fn test_get_today_excludes_trashed() {
 
 #[tokio::test]
 async fn test_get_today_with_limit() {
-    let db = ThingsDatabase::from_connection_string("sqlite::memory:")
+    let db = SqliteThingsDatabase::from_connection_string("sqlite::memory:")
         .await
         .unwrap();
     let pool = db.pool();
@@ -891,7 +891,7 @@ async fn test_get_today_with_limit() {
 
 #[tokio::test]
 async fn test_get_inbox_empty_database() {
-    let db = ThingsDatabase::from_connection_string("sqlite::memory:")
+    let db = SqliteThingsDatabase::from_connection_string("sqlite::memory:")
         .await
         .unwrap();
     let pool = db.pool();
@@ -905,7 +905,7 @@ async fn test_get_inbox_empty_database() {
 
 #[tokio::test]
 async fn test_get_inbox_excludes_tasks_with_project() {
-    let db = ThingsDatabase::from_connection_string("sqlite::memory:")
+    let db = SqliteThingsDatabase::from_connection_string("sqlite::memory:")
         .await
         .unwrap();
     let pool = db.pool();
@@ -960,7 +960,7 @@ async fn test_get_inbox_excludes_tasks_with_project() {
 
 #[tokio::test]
 async fn test_get_inbox_with_limit_zero() {
-    let db = ThingsDatabase::from_connection_string("sqlite::memory:")
+    let db = SqliteThingsDatabase::from_connection_string("sqlite::memory:")
         .await
         .unwrap();
     let pool = db.pool();
@@ -993,7 +993,7 @@ async fn test_get_inbox_with_limit_zero() {
 
 #[tokio::test]
 async fn test_get_inbox_large_result_set() {
-    let db = ThingsDatabase::from_connection_string("sqlite::memory:")
+    let db = SqliteThingsDatabase::from_connection_string("sqlite::memory:")
         .await
         .unwrap();
     let pool = db.pool();
@@ -1035,7 +1035,7 @@ async fn test_get_inbox_large_result_set() {
 
 #[tokio::test]
 async fn test_search_tasks_includes_headings() {
-    let db = ThingsDatabase::from_connection_string("sqlite::memory:")
+    let db = SqliteThingsDatabase::from_connection_string("sqlite::memory:")
         .await
         .unwrap();
 
@@ -1056,7 +1056,7 @@ async fn test_search_tasks_includes_headings() {
 
 #[tokio::test]
 async fn test_get_inbox_includes_headings_without_project() {
-    let db = ThingsDatabase::from_connection_string("sqlite::memory:")
+    let db = SqliteThingsDatabase::from_connection_string("sqlite::memory:")
         .await
         .unwrap();
     let pool = db.pool();

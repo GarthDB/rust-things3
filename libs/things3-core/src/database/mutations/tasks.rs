@@ -1,9 +1,8 @@
 #![allow(deprecated)]
-
 use crate::{
     database::{
         conversions::naive_date_to_things_timestamp, query_builders::TaskUpdateBuilder, validators,
-        ThingsDatabase,
+        SqliteThingsDatabase,
     },
     error::{Result as ThingsResult, ThingsError},
     models::{
@@ -14,7 +13,7 @@ use chrono::Utc;
 use sqlx::Row;
 use tracing::{info, instrument};
 
-impl ThingsDatabase {
+impl SqliteThingsDatabase {
     /// Create a new task in the database
     ///
     /// Validates:
@@ -28,12 +27,12 @@ impl ThingsDatabase {
     /// # Examples
     ///
     /// ```no_run
-    /// use things3_core::{ThingsDatabase, CreateTaskRequest, ThingsError};
+    /// use things3_core::{SqliteThingsDatabase, CreateTaskRequest, ThingsError};
     /// use std::path::Path;
     /// use chrono::NaiveDate;
     ///
     /// # async fn example() -> Result<(), ThingsError> {
-    /// let db = ThingsDatabase::new(Path::new("/path/to/things.db")).await?;
+    /// let db = SqliteThingsDatabase::new(Path::new("/path/to/things.db")).await?;
     ///
     /// // Create a simple task
     /// let request = CreateTaskRequest {

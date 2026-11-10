@@ -5,14 +5,14 @@
 
 use std::path::PathBuf;
 use tempfile::{NamedTempFile, TempDir};
-use things3_core::ThingsDatabase;
+use things3_core::SqliteThingsDatabase;
 
 /// Test that connecting to a non-existent database fails gracefully
 #[tokio::test]
 async fn test_database_not_found() {
     let nonexistent_path = PathBuf::from("/nonexistent/path/to/database.db");
 
-    let result = ThingsDatabase::new(&nonexistent_path).await;
+    let result = SqliteThingsDatabase::new(&nonexistent_path).await;
 
     assert!(result.is_err(), "Should fail when database doesn't exist");
 
@@ -32,7 +32,7 @@ async fn test_database_path_is_directory() {
     let temp_dir = TempDir::new().unwrap();
     let dir_path = temp_dir.path();
 
-    let result = ThingsDatabase::new(dir_path).await;
+    let result = SqliteThingsDatabase::new(dir_path).await;
 
     assert!(result.is_err(), "Should fail when path is a directory");
 }
@@ -44,7 +44,7 @@ async fn test_database_empty_file() {
     let db_path = temp_file.path();
 
     // Empty file exists but is not a valid SQLite database
-    let result = ThingsDatabase::new(db_path).await;
+    let result = SqliteThingsDatabase::new(db_path).await;
 
     // Connection might succeed (SQLite can initialize), but queries should fail
     match result {
@@ -71,7 +71,7 @@ async fn test_database_corrupted_file() {
     // Write garbage data to simulate corruption
     std::fs::write(db_path, b"This is not a valid SQLite database file!").unwrap();
 
-    let result = ThingsDatabase::new(db_path).await;
+    let result = SqliteThingsDatabase::new(db_path).await;
 
     // Should fail to connect or queries should fail
     match result {
@@ -94,7 +94,7 @@ async fn test_database_invalid_path_characters() {
     // Test with null bytes (invalid in paths)
     let invalid_path = PathBuf::from("invalid\0path.db");
 
-    let result = ThingsDatabase::new(&invalid_path).await;
+    let result = SqliteThingsDatabase::new(&invalid_path).await;
 
     assert!(result.is_err(), "Should fail with invalid path characters");
 }
@@ -118,8 +118,8 @@ async fn test_database_wrong_schema() {
 
     pool.close().await;
 
-    // Now try to use it with ThingsDatabase
-    let result = ThingsDatabase::new(db_path).await;
+    // Now try to use it with SqliteThingsDatabase
+    let result = SqliteThingsDatabase::new(db_path).await;
 
     match result {
         Ok(db) => {
@@ -153,7 +153,7 @@ async fn test_database_wrong_schema() {
 async fn test_database_invalid_connection_string() {
     let invalid_conn_str = "invalid://connection/string";
 
-    let result = ThingsDatabase::from_connection_string(invalid_conn_str).await;
+    let result = SqliteThingsDatabase::from_connection_string(invalid_conn_str).await;
 
     assert!(
         result.is_err(),
@@ -183,7 +183,7 @@ async fn test_database_file_removed_during_operation() {
     }
 
     // Connect to database
-    let db = ThingsDatabase::new(&db_path).await.unwrap();
+    let db = SqliteThingsDatabase::new(&db_path).await.unwrap();
 
     // Remove the file while connection is open
     std::fs::remove_file(&db_path).unwrap();
@@ -205,7 +205,7 @@ async fn test_database_health_check_on_invalid_db() {
         .unwrap();
     pool.close().await;
 
-    let db = ThingsDatabase::new(db_path).await.unwrap();
+    let db = SqliteThingsDatabase::new(db_path).await.unwrap();
 
     // Health check should work even on minimal database
     let is_connected = db.is_connected().await;
@@ -222,7 +222,7 @@ async fn test_database_extremely_long_path() {
     let long_component = "a".repeat(300);
     let long_path = PathBuf::from(format!("/tmp/{}/{}", long_component, long_component));
 
-    let result = ThingsDatabase::new(&long_path).await;
+    let result = SqliteThingsDatabase::new(&long_path).await;
 
     assert!(result.is_err(), "Should fail with extremely long path");
 }

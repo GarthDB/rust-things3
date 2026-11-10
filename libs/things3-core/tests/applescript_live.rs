@@ -27,7 +27,7 @@ use std::sync::Arc;
 use things3_core::{
     mutations::{AppleScriptBackend, MutationBackend},
     CreateAreaRequest, CreateProjectRequest, CreateTagRequest, CreateTaskRequest,
-    DeleteChildHandling, ProjectChildHandling, ThingsDatabase, ThingsId, UpdateAreaRequest,
+    DeleteChildHandling, ProjectChildHandling, SqliteThingsDatabase, ThingsId, UpdateAreaRequest,
     UpdateProjectRequest, UpdateTagRequest, UpdateTaskRequest,
 };
 
@@ -51,7 +51,7 @@ async fn live_backend() -> Arc<AppleScriptBackend> {
         .map(std::path::PathBuf::from)
         .unwrap_or_else(|_| things3_core::get_default_database_path());
     let db = Arc::new(
-        ThingsDatabase::new(&db_path)
+        SqliteThingsDatabase::new(&db_path)
             .await
             .expect("failed to open Things 3 database"),
     );
@@ -542,7 +542,7 @@ async fn create_task_with_start_date_and_rollback() {
         .or_else(|_| std::env::var("THINGS_DATABASE_PATH"))
         .map(std::path::PathBuf::from)
         .unwrap_or_else(|_| things3_core::get_default_database_path());
-    let db = ThingsDatabase::new(&db_path).await.expect("open db");
+    let db = SqliteThingsDatabase::new(&db_path).await.expect("open db");
     let new_req = |title: &str, start, project: Option<ThingsId>| CreateTaskRequest {
         title: title.to_string(),
         task_type: None,

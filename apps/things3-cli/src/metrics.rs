@@ -5,14 +5,14 @@
 
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use things3_core::{ObservabilityManager, ThingsDatabase};
+use things3_core::{ObservabilityManager, SqliteThingsDatabase};
 use tokio::time::interval;
 use tracing::{debug, error, info, instrument, warn};
 
 /// Metrics collector for continuous monitoring
 pub struct MetricsCollector {
     observability: Arc<ObservabilityManager>,
-    database: Arc<ThingsDatabase>,
+    database: Arc<SqliteThingsDatabase>,
     collection_interval: Duration,
 }
 
@@ -21,7 +21,7 @@ impl MetricsCollector {
     #[must_use]
     pub fn new(
         observability: Arc<ObservabilityManager>,
-        database: Arc<ThingsDatabase>,
+        database: Arc<SqliteThingsDatabase>,
         collection_interval: Duration,
     ) -> Self {
         Self {
@@ -316,7 +316,7 @@ impl ErrorTracker {
 /// Returns an error if metrics collection fails
 pub async fn start_metrics_collection(
     observability: Arc<ObservabilityManager>,
-    database: Arc<ThingsDatabase>,
+    database: Arc<SqliteThingsDatabase>,
     collection_interval: Duration,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let collector = MetricsCollector::new(observability, database, collection_interval);
@@ -339,7 +339,7 @@ mod tests {
 
         let rt = tokio::runtime::Runtime::new().unwrap();
         let _database =
-            Arc::new(rt.block_on(async { ThingsDatabase::new(db_path).await.unwrap() }));
+            Arc::new(rt.block_on(async { SqliteThingsDatabase::new(db_path).await.unwrap() }));
 
         let obs_config = ObservabilityConfig::default();
         let observability = Arc::new(ObservabilityManager::new(obs_config).unwrap());
@@ -355,7 +355,7 @@ mod tests {
 
         let rt = tokio::runtime::Runtime::new().unwrap();
         let _database =
-            Arc::new(rt.block_on(async { ThingsDatabase::new(db_path).await.unwrap() }));
+            Arc::new(rt.block_on(async { SqliteThingsDatabase::new(db_path).await.unwrap() }));
 
         let obs_config = ObservabilityConfig::default();
         let observability = Arc::new(ObservabilityManager::new(obs_config).unwrap());
@@ -370,7 +370,8 @@ mod tests {
         let db_path = temp_file.path();
 
         let rt = tokio::runtime::Runtime::new().unwrap();
-        let database = Arc::new(rt.block_on(async { ThingsDatabase::new(db_path).await.unwrap() }));
+        let database =
+            Arc::new(rt.block_on(async { SqliteThingsDatabase::new(db_path).await.unwrap() }));
 
         let obs_config = ObservabilityConfig::default();
         let observability = Arc::new(ObservabilityManager::new(obs_config).unwrap());
@@ -384,7 +385,7 @@ mod tests {
         let temp_file = NamedTempFile::new().unwrap();
         let db_path = temp_file.path();
 
-        let _database = Arc::new(ThingsDatabase::new(db_path).await.unwrap());
+        let _database = Arc::new(SqliteThingsDatabase::new(db_path).await.unwrap());
 
         let obs_config = ObservabilityConfig::default();
         let observability = Arc::new(ObservabilityManager::new(obs_config).unwrap());
@@ -404,7 +405,7 @@ mod tests {
         let temp_file = NamedTempFile::new().unwrap();
         let db_path = temp_file.path();
 
-        let _database = Arc::new(ThingsDatabase::new(db_path).await.unwrap());
+        let _database = Arc::new(SqliteThingsDatabase::new(db_path).await.unwrap());
 
         let obs_config = ObservabilityConfig::default();
         let observability = Arc::new(ObservabilityManager::new(obs_config).unwrap());
@@ -420,7 +421,7 @@ mod tests {
         let temp_file = NamedTempFile::new().unwrap();
         let db_path = temp_file.path();
 
-        let _database = Arc::new(ThingsDatabase::new(db_path).await.unwrap());
+        let _database = Arc::new(SqliteThingsDatabase::new(db_path).await.unwrap());
 
         let obs_config = ObservabilityConfig::default();
         let observability = Arc::new(ObservabilityManager::new(obs_config).unwrap());
@@ -437,7 +438,7 @@ mod tests {
         let temp_file = NamedTempFile::new().unwrap();
         let db_path = temp_file.path();
 
-        let _database = Arc::new(ThingsDatabase::new(db_path).await.unwrap());
+        let _database = Arc::new(SqliteThingsDatabase::new(db_path).await.unwrap());
 
         let obs_config = ObservabilityConfig::default();
         let observability = Arc::new(ObservabilityManager::new(obs_config).unwrap());
@@ -454,7 +455,7 @@ mod tests {
         let temp_file = NamedTempFile::new().unwrap();
         let db_path = temp_file.path();
 
-        let _database = Arc::new(ThingsDatabase::new(db_path).await.unwrap());
+        let _database = Arc::new(SqliteThingsDatabase::new(db_path).await.unwrap());
 
         let obs_config = ObservabilityConfig::default();
         let observability = Arc::new(ObservabilityManager::new(obs_config).unwrap());
@@ -471,7 +472,7 @@ mod tests {
         let temp_file = NamedTempFile::new().unwrap();
         let db_path = temp_file.path();
 
-        let database = Arc::new(ThingsDatabase::new(db_path).await.unwrap());
+        let database = Arc::new(SqliteThingsDatabase::new(db_path).await.unwrap());
 
         let obs_config = ObservabilityConfig::default();
         let observability = Arc::new(ObservabilityManager::new(obs_config).unwrap());
@@ -492,7 +493,7 @@ mod tests {
         let temp_file = NamedTempFile::new().unwrap();
         let db_path = temp_file.path();
 
-        let database = Arc::new(ThingsDatabase::new(db_path).await.unwrap());
+        let database = Arc::new(SqliteThingsDatabase::new(db_path).await.unwrap());
 
         let obs_config = ObservabilityConfig::default();
         let observability = Arc::new(ObservabilityManager::new(obs_config).unwrap());
@@ -513,7 +514,7 @@ mod tests {
         let temp_file = NamedTempFile::new().unwrap();
         let db_path = temp_file.path();
 
-        let database = Arc::new(ThingsDatabase::new(db_path).await.unwrap());
+        let database = Arc::new(SqliteThingsDatabase::new(db_path).await.unwrap());
 
         let obs_config = ObservabilityConfig::default();
         let observability = Arc::new(ObservabilityManager::new(obs_config).unwrap());
@@ -534,7 +535,7 @@ mod tests {
         let temp_file = NamedTempFile::new().unwrap();
         let db_path = temp_file.path();
 
-        let database = Arc::new(ThingsDatabase::new(db_path).await.unwrap());
+        let database = Arc::new(SqliteThingsDatabase::new(db_path).await.unwrap());
 
         let obs_config = ObservabilityConfig::default();
         let observability = Arc::new(ObservabilityManager::new(obs_config).unwrap());
@@ -555,7 +556,7 @@ mod tests {
         let temp_file = NamedTempFile::new().unwrap();
         let db_path = temp_file.path();
 
-        let database = Arc::new(ThingsDatabase::new(db_path).await.unwrap());
+        let database = Arc::new(SqliteThingsDatabase::new(db_path).await.unwrap());
 
         let obs_config = ObservabilityConfig::default();
         let observability = Arc::new(ObservabilityManager::new(obs_config).unwrap());
@@ -577,7 +578,7 @@ mod tests {
 
         let rt = tokio::runtime::Runtime::new().unwrap();
         let _database =
-            Arc::new(rt.block_on(async { ThingsDatabase::new(db_path).await.unwrap() }));
+            Arc::new(rt.block_on(async { SqliteThingsDatabase::new(db_path).await.unwrap() }));
 
         let obs_config = ObservabilityConfig {
             service_name: "test-service".to_string(),
@@ -596,7 +597,7 @@ mod tests {
 
         let rt = tokio::runtime::Runtime::new().unwrap();
         let _database =
-            Arc::new(rt.block_on(async { ThingsDatabase::new(db_path).await.unwrap() }));
+            Arc::new(rt.block_on(async { SqliteThingsDatabase::new(db_path).await.unwrap() }));
 
         let obs_config = ObservabilityConfig {
             service_name: "test-service".to_string(),
@@ -614,7 +615,8 @@ mod tests {
         let db_path = temp_file.path();
 
         let rt = tokio::runtime::Runtime::new().unwrap();
-        let database = Arc::new(rt.block_on(async { ThingsDatabase::new(db_path).await.unwrap() }));
+        let database =
+            Arc::new(rt.block_on(async { SqliteThingsDatabase::new(db_path).await.unwrap() }));
 
         let obs_config = ObservabilityConfig::default();
         let observability = Arc::new(ObservabilityManager::new(obs_config).unwrap());

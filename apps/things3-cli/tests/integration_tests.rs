@@ -3,7 +3,7 @@
 use std::io::Cursor;
 use tempfile::NamedTempFile;
 use things3_core::{
-    config::ThingsConfig, database::ThingsDatabase, test_utils::create_test_database,
+    config::ThingsConfig, database::SqliteThingsDatabase, test_utils::create_test_database,
 };
 
 /// Test the `print_tasks` function with various inputs
@@ -14,7 +14,7 @@ async fn test_print_tasks_integration() {
     let db_path = temp_file.path();
     create_test_database(db_path).await.unwrap();
 
-    let db = ThingsDatabase::new(db_path).await.unwrap();
+    let db = SqliteThingsDatabase::new(db_path).await.unwrap();
 
     // Test with empty tasks
     let mut output = Cursor::new(Vec::new());
@@ -38,7 +38,7 @@ async fn test_print_projects_integration() {
     let db_path = temp_file.path();
     create_test_database(db_path).await.unwrap();
 
-    let db = ThingsDatabase::new(db_path).await.unwrap();
+    let db = SqliteThingsDatabase::new(db_path).await.unwrap();
 
     // Test with empty projects
     let mut output = Cursor::new(Vec::new());
@@ -62,7 +62,7 @@ async fn test_print_areas_integration() {
     let db_path = temp_file.path();
     create_test_database(db_path).await.unwrap();
 
-    let db = ThingsDatabase::new(db_path).await.unwrap();
+    let db = SqliteThingsDatabase::new(db_path).await.unwrap();
 
     // Test with empty areas
     let mut output = Cursor::new(Vec::new());
@@ -86,14 +86,14 @@ async fn test_health_check_integration() {
     let db_path = temp_file.path();
     create_test_database(db_path).await.unwrap();
 
-    let db = ThingsDatabase::new(db_path).await.unwrap();
+    let db = SqliteThingsDatabase::new(db_path).await.unwrap();
 
     // Test successful health check
     let result = things3_cli::health_check(&db).await;
     assert!(result.is_ok());
 
     // Test health check with invalid database
-    let invalid_db = ThingsDatabase::new(std::path::Path::new("/nonexistent/path")).await;
+    let invalid_db = SqliteThingsDatabase::new(std::path::Path::new("/nonexistent/path")).await;
     if let Ok(db) = invalid_db {
         let result = things3_cli::health_check(&db).await;
         // This might succeed or fail depending on the database state
@@ -114,7 +114,9 @@ async fn test_mcp_server_integration() {
         .database_path(db_path)
         .build()
         .unwrap();
-    let db = ThingsDatabase::new(config.database_path()).await.unwrap();
+    let db = SqliteThingsDatabase::new(config.database_path())
+        .await
+        .unwrap();
 
     // Test MCP server creation
     let server = things3_cli::mcp::ThingsMcpServer::new(db.into(), config, true);
@@ -161,14 +163,15 @@ fn test_cli_parsing_integration() {
 #[tokio::test]
 async fn test_cli_error_handling_integration() {
     // Test with nonexistent database
-    let db_result = ThingsDatabase::new(std::path::Path::new("/nonexistent/path")).await;
+    let db_result = SqliteThingsDatabase::new(std::path::Path::new("/nonexistent/path")).await;
 
     // This should fail
     assert!(db_result.is_err());
 
     // Test with malformed database path (invalid characters)
     let db_result =
-        ThingsDatabase::new(std::path::Path::new("/invalid/path/with/invalid/chars/\0")).await;
+        SqliteThingsDatabase::new(std::path::Path::new("/invalid/path/with/invalid/chars/\0"))
+            .await;
 
     // This should also fail
     assert!(db_result.is_err());

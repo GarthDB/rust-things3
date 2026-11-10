@@ -2,21 +2,24 @@
 
 use chrono::Utc;
 use things3_core::{
-    database::ThingsDatabase,
+    database::SqliteThingsDatabase,
     models::CreateTaskRequest,
     test_utils::{create_test_database_and_connect, TaskRequestBuilder},
     ThingsId,
 };
 
 /// Helper to complete a task
-async fn complete_task(db: &ThingsDatabase, uuid: ThingsId) {
+async fn complete_task(db: &SqliteThingsDatabase, uuid: ThingsId) {
     db.complete_task(&uuid)
         .await
         .expect("Failed to complete task");
 }
 
 /// Helper to create and complete a task
-async fn create_and_complete_task(db: &ThingsDatabase, request: CreateTaskRequest) -> ThingsId {
+async fn create_and_complete_task(
+    db: &SqliteThingsDatabase,
+    request: CreateTaskRequest,
+) -> ThingsId {
     let uuid = db
         .create_task(request)
         .await

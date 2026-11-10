@@ -6,7 +6,7 @@ use crate::progress::{ProgressManager, ProgressTracker};
 use std::sync::Arc;
 use things3_core::models::ThingsId;
 use things3_core::Result;
-use things3_core::{Task, ThingsDatabase};
+use things3_core::{SqliteThingsDatabase, Task};
 
 /// Bulk operations manager
 pub struct BulkOperationsManager {
@@ -28,7 +28,11 @@ impl BulkOperationsManager {
     ///
     /// # Errors
     /// Returns an error if the export operation fails
-    pub async fn export_all_tasks(&self, db: &ThingsDatabase, format: &str) -> Result<Vec<Task>> {
+    pub async fn export_all_tasks(
+        &self,
+        db: &SqliteThingsDatabase,
+        format: &str,
+    ) -> Result<Vec<Task>> {
         let tracker = self.progress_manager.create_tracker(
             "Export All Tasks",
             None, // We don't know the total count yet
@@ -83,7 +87,7 @@ impl BulkOperationsManager {
     /// Returns an error if the bulk update operation fails
     pub async fn bulk_update_task_status(
         &self,
-        _db: &ThingsDatabase,
+        _db: &SqliteThingsDatabase,
         task_ids: Vec<ThingsId>,
         new_status: things3_core::TaskStatus,
     ) -> Result<usize> {
@@ -139,7 +143,7 @@ impl BulkOperationsManager {
     /// Returns an error if the search or processing operation fails
     pub async fn search_and_process_tasks(
         &self,
-        db: &ThingsDatabase,
+        db: &SqliteThingsDatabase,
         query: &str,
         processor: impl Fn(&Task) -> Result<()> + Send + Sync + 'static,
     ) -> Result<Vec<Task>> {
@@ -257,7 +261,7 @@ mod tests {
         let temp_file = tempfile::NamedTempFile::new().unwrap();
         let db_path = temp_file.path();
         create_test_database(db_path).await.unwrap();
-        let db = ThingsDatabase::new(db_path).await.unwrap();
+        let db = SqliteThingsDatabase::new(db_path).await.unwrap();
 
         // Note: Progress manager is not started in tests to avoid hanging
         // In real usage, the progress manager would be started separately
@@ -284,7 +288,7 @@ mod tests {
         let temp_file = tempfile::NamedTempFile::new().unwrap();
         let db_path = temp_file.path();
         create_test_database(db_path).await.unwrap();
-        let db = ThingsDatabase::new(db_path).await.unwrap();
+        let db = SqliteThingsDatabase::new(db_path).await.unwrap();
 
         // Note: Progress manager is not started in tests to avoid hanging
         // In real usage, the progress manager would be started separately
@@ -304,7 +308,7 @@ mod tests {
         let temp_file = tempfile::NamedTempFile::new().unwrap();
         let db_path = temp_file.path();
         create_test_database(db_path).await.unwrap();
-        let db = ThingsDatabase::new(db_path).await.unwrap();
+        let db = SqliteThingsDatabase::new(db_path).await.unwrap();
 
         // Note: Progress manager is not started in tests to avoid hanging
         // In real usage, the progress manager would be started separately
@@ -326,7 +330,7 @@ mod tests {
         let temp_file = tempfile::NamedTempFile::new().unwrap();
         let db_path = temp_file.path();
         create_test_database(db_path).await.unwrap();
-        let db = ThingsDatabase::new(db_path).await.unwrap();
+        let db = SqliteThingsDatabase::new(db_path).await.unwrap();
 
         // Note: Progress manager is not started in tests to avoid hanging
         // In real usage, the progress manager would be started separately
@@ -349,7 +353,7 @@ mod tests {
         let temp_file = tempfile::NamedTempFile::new().unwrap();
         let db_path = temp_file.path();
         create_test_database(db_path).await.unwrap();
-        let db = ThingsDatabase::new(db_path).await.unwrap();
+        let db = SqliteThingsDatabase::new(db_path).await.unwrap();
 
         let task_ids = vec![];
         let statuses = vec![
@@ -375,7 +379,7 @@ mod tests {
         let temp_file = tempfile::NamedTempFile::new().unwrap();
         let db_path = temp_file.path();
         create_test_database(db_path).await.unwrap();
-        let db = ThingsDatabase::new(db_path).await.unwrap();
+        let db = SqliteThingsDatabase::new(db_path).await.unwrap();
 
         // Note: Progress manager is not started in tests to avoid hanging
         // In real usage, the progress manager would be started separately
@@ -397,7 +401,7 @@ mod tests {
         let temp_file = tempfile::NamedTempFile::new().unwrap();
         let db_path = temp_file.path();
         create_test_database(db_path).await.unwrap();
-        let db = ThingsDatabase::new(db_path).await.unwrap();
+        let db = SqliteThingsDatabase::new(db_path).await.unwrap();
 
         // Note: Progress manager is not started in tests to avoid hanging
         // In real usage, the progress manager would be started separately
@@ -419,7 +423,7 @@ mod tests {
         let temp_file = tempfile::NamedTempFile::new().unwrap();
         let db_path = temp_file.path();
         create_test_database(db_path).await.unwrap();
-        let db = ThingsDatabase::new(db_path).await.unwrap();
+        let db = SqliteThingsDatabase::new(db_path).await.unwrap();
 
         let limits = vec![1, 5, 10, 100];
 
@@ -497,7 +501,7 @@ mod tests {
         let temp_file = tempfile::NamedTempFile::new().unwrap();
         let db_path = temp_file.path();
         create_test_database(db_path).await.unwrap();
-        let db = ThingsDatabase::new(db_path).await.unwrap();
+        let db = SqliteThingsDatabase::new(db_path).await.unwrap();
 
         // Note: Progress manager is not started in tests to avoid hanging
         // In real usage, the progress manager would be started separately
@@ -517,7 +521,7 @@ mod tests {
         let temp_file = tempfile::NamedTempFile::new().unwrap();
         let db_path = temp_file.path();
         create_test_database(db_path).await.unwrap();
-        let db = ThingsDatabase::new(db_path).await.unwrap();
+        let db = SqliteThingsDatabase::new(db_path).await.unwrap();
 
         // Note: Progress manager is not started in tests to avoid hanging
         // In real usage, the progress manager would be started separately
@@ -539,7 +543,7 @@ mod tests {
         let temp_file = tempfile::NamedTempFile::new().unwrap();
         let db_path = temp_file.path();
         create_test_database(db_path).await.unwrap();
-        let db = ThingsDatabase::new(db_path).await.unwrap();
+        let db = SqliteThingsDatabase::new(db_path).await.unwrap();
 
         // Note: Progress manager is not started in tests to avoid hanging
         // In real usage, the progress manager would be started separately
@@ -561,7 +565,7 @@ mod tests {
         let temp_file = tempfile::NamedTempFile::new().unwrap();
         let db_path = temp_file.path();
         create_test_database(db_path).await.unwrap();
-        let db = ThingsDatabase::new(db_path).await.unwrap();
+        let db = SqliteThingsDatabase::new(db_path).await.unwrap();
 
         // Note: Progress manager is not started in tests to avoid hanging
         // In real usage, the progress manager would be started separately
@@ -579,7 +583,7 @@ mod tests {
         let temp_file = tempfile::NamedTempFile::new().unwrap();
         let db_path = temp_file.path();
         create_test_database(db_path).await.unwrap();
-        let _db = ThingsDatabase::new(db_path).await.unwrap();
+        let _db = SqliteThingsDatabase::new(db_path).await.unwrap();
 
         // Note: Progress manager is not started in tests to avoid hanging
         // In real usage, the progress manager would be started separately
@@ -623,7 +627,7 @@ mod tests {
         let db_path = temp_file.path();
         create_test_database(db_path).await.unwrap();
 
-        let db = ThingsDatabase::new(db_path).await.unwrap();
+        let db = SqliteThingsDatabase::new(db_path).await.unwrap();
 
         // Test direct database query without progress tracking
         let tasks = db.get_inbox(None).await.unwrap();
@@ -640,7 +644,7 @@ mod tests {
         let db_path = temp_file.path();
         create_test_database(db_path).await.unwrap();
 
-        let db = ThingsDatabase::new(db_path).await.unwrap();
+        let db = SqliteThingsDatabase::new(db_path).await.unwrap();
 
         // Test the core functionality without the progress manager
         let tasks = db.get_inbox(Some(5)).await.unwrap();
@@ -663,7 +667,7 @@ mod tests {
         let db_path = temp_file.path();
         create_test_database(db_path).await.unwrap();
 
-        let db = ThingsDatabase::new(db_path).await.unwrap();
+        let db = SqliteThingsDatabase::new(db_path).await.unwrap();
         let manager = BulkOperationsManager::new();
 
         let result = manager

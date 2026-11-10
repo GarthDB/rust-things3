@@ -5,7 +5,7 @@
 
 use std::time::Instant;
 use tempfile::NamedTempFile;
-use things3_core::{CacheConfig, ThingsCache, ThingsDatabase};
+use things3_core::{CacheConfig, SqliteThingsDatabase, ThingsCache};
 
 #[cfg(feature = "test-utils")]
 use things3_core::test_utils::create_test_database;
@@ -20,7 +20,7 @@ async fn benchmark_database_connection() {
     create_test_database(db_path).await.unwrap();
 
     let start = Instant::now();
-    let _db = ThingsDatabase::new(db_path).await.unwrap();
+    let _db = SqliteThingsDatabase::new(db_path).await.unwrap();
     let duration = start.elapsed();
 
     println!("Database connection time: {:?}", duration);
@@ -39,7 +39,7 @@ async fn benchmark_get_inbox() {
     let db_path = temp_file.path();
 
     create_test_database(db_path).await.unwrap();
-    let db = ThingsDatabase::new(db_path).await.unwrap();
+    let db = SqliteThingsDatabase::new(db_path).await.unwrap();
 
     let start = Instant::now();
     let _tasks = db.get_inbox(Some(100)).await.unwrap();
@@ -61,7 +61,7 @@ async fn benchmark_get_today() {
     let db_path = temp_file.path();
 
     create_test_database(db_path).await.unwrap();
-    let db = ThingsDatabase::new(db_path).await.unwrap();
+    let db = SqliteThingsDatabase::new(db_path).await.unwrap();
 
     let start = Instant::now();
     let _tasks = db.get_today(Some(100)).await.unwrap();
@@ -83,7 +83,7 @@ async fn benchmark_get_projects() {
     let db_path = temp_file.path();
 
     create_test_database(db_path).await.unwrap();
-    let db = ThingsDatabase::new(db_path).await.unwrap();
+    let db = SqliteThingsDatabase::new(db_path).await.unwrap();
 
     let start = Instant::now();
     let _projects = db.get_projects(Some(100)).await.unwrap();
@@ -105,7 +105,7 @@ async fn benchmark_search_tasks() {
     let db_path = temp_file.path();
 
     create_test_database(db_path).await.unwrap();
-    let db = ThingsDatabase::new(db_path).await.unwrap();
+    let db = SqliteThingsDatabase::new(db_path).await.unwrap();
 
     let start = Instant::now();
     let _results = db.search_tasks("test").await.unwrap();
@@ -144,7 +144,7 @@ async fn benchmark_sequential_queries() {
     let db_path = temp_file.path();
 
     create_test_database(db_path).await.unwrap();
-    let db = ThingsDatabase::new(db_path).await.unwrap();
+    let db = SqliteThingsDatabase::new(db_path).await.unwrap();
 
     let start = Instant::now();
     for _ in 0..10 {
@@ -169,7 +169,7 @@ async fn benchmark_health_check() {
     let db_path = temp_file.path();
 
     create_test_database(db_path).await.unwrap();
-    let db = ThingsDatabase::new(db_path).await.unwrap();
+    let db = SqliteThingsDatabase::new(db_path).await.unwrap();
 
     let start = Instant::now();
     let _is_connected = db.is_connected().await;
@@ -191,7 +191,7 @@ async fn benchmark_mixed_queries() {
     let db_path = temp_file.path();
 
     create_test_database(db_path).await.unwrap();
-    let db = ThingsDatabase::new(db_path).await.unwrap();
+    let db = SqliteThingsDatabase::new(db_path).await.unwrap();
 
     let start = Instant::now();
     let _ = db.get_inbox(Some(10)).await.unwrap();

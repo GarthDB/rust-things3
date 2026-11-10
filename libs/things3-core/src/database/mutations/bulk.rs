@@ -1,14 +1,13 @@
 #![allow(deprecated)]
-
 use crate::{
-    database::{conversions::naive_date_to_things_timestamp, validators, ThingsDatabase},
+    database::{conversions::naive_date_to_things_timestamp, validators, SqliteThingsDatabase},
     error::{Result as ThingsResult, ThingsDatabaseError, ThingsError},
 };
 use chrono::Utc;
 use sqlx::Row;
 use tracing::{info, instrument};
 
-impl ThingsDatabase {
+impl SqliteThingsDatabase {
     /// Maximum number of tasks that can be processed in a single bulk operation
     /// This prevents abuse and ensures reasonable transaction sizes
     const MAX_BULK_BATCH_SIZE: usize = 1000;

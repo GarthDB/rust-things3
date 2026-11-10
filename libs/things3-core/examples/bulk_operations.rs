@@ -9,13 +9,13 @@
 use chrono::NaiveDate;
 use things3_core::{
     BulkCompleteRequest, BulkDeleteRequest, BulkMoveRequest, BulkUpdateDatesRequest,
-    ThingsDatabase, ThingsError, ThingsId,
+    SqliteThingsDatabase, ThingsError, ThingsId,
 };
 
 #[tokio::main]
 async fn main() -> Result<(), ThingsError> {
     let db_path = things3_core::get_default_database_path();
-    let db = ThingsDatabase::new(&db_path).await?;
+    let db = SqliteThingsDatabase::new(&db_path).await?;
 
     // Get some task UUIDs for demonstration
     let tasks = db.get_inbox(Some(10)).await?;

@@ -10,7 +10,7 @@ use std::sync::{Arc, OnceLock};
 use tempfile::NamedTempFile;
 use things3_cli::mcp::io_wrapper::{McpIo, MockIo};
 use things3_cli::mcp::{start_mcp_server_generic, start_mcp_server_with_config_generic};
-use things3_core::{ThingsConfig, ThingsDatabase};
+use things3_core::{SqliteThingsDatabase, ThingsConfig};
 use tokio::time::{timeout, Duration};
 
 // ============================================================================
@@ -100,7 +100,7 @@ fn validate_result(version: &str, type_name: &str, response: &serde_json::Value)
 }
 
 /// Helper to create a test database
-async fn create_test_db() -> (NamedTempFile, Arc<ThingsDatabase>) {
+async fn create_test_db() -> (NamedTempFile, Arc<SqliteThingsDatabase>) {
     let temp_file = NamedTempFile::new().unwrap();
     let db_path = temp_file.path();
 
@@ -109,7 +109,7 @@ async fn create_test_db() -> (NamedTempFile, Arc<ThingsDatabase>) {
         .await
         .unwrap();
 
-    let db = ThingsDatabase::new(db_path).await.unwrap();
+    let db = SqliteThingsDatabase::new(db_path).await.unwrap();
     (temp_file, Arc::new(db))
 }
 

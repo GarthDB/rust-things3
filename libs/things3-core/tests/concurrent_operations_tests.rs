@@ -5,7 +5,7 @@
 
 use std::sync::Arc;
 use tempfile::NamedTempFile;
-use things3_core::{CacheConfig, ThingsCache, ThingsDatabase};
+use things3_core::{CacheConfig, SqliteThingsDatabase, ThingsCache};
 use tokio::task::JoinSet;
 
 #[cfg(feature = "test-utils")]
@@ -19,7 +19,7 @@ async fn concurrent_test_database_reads() {
     let db_path = temp_file.path();
 
     create_test_database(db_path).await.unwrap();
-    let db = Arc::new(ThingsDatabase::new(db_path).await.unwrap());
+    let db = Arc::new(SqliteThingsDatabase::new(db_path).await.unwrap());
 
     let mut tasks = JoinSet::new();
     let num_tasks = 20;
@@ -61,7 +61,7 @@ async fn concurrent_test_searches() {
     let db_path = temp_file.path();
 
     create_test_database(db_path).await.unwrap();
-    let db = Arc::new(ThingsDatabase::new(db_path).await.unwrap());
+    let db = Arc::new(SqliteThingsDatabase::new(db_path).await.unwrap());
 
     let queries = vec!["test", "project", "task", "important"];
     let mut tasks = JoinSet::new();
@@ -96,7 +96,7 @@ async fn concurrent_test_health_checks() {
     let db_path = temp_file.path();
 
     create_test_database(db_path).await.unwrap();
-    let db = Arc::new(ThingsDatabase::new(db_path).await.unwrap());
+    let db = Arc::new(SqliteThingsDatabase::new(db_path).await.unwrap());
 
     let mut tasks = JoinSet::new();
     let num_checks = 30;
@@ -156,7 +156,7 @@ async fn concurrent_test_mixed_operations() {
     let db_path = temp_file.path();
 
     create_test_database(db_path).await.unwrap();
-    let db = Arc::new(ThingsDatabase::new(db_path).await.unwrap());
+    let db = Arc::new(SqliteThingsDatabase::new(db_path).await.unwrap());
 
     let mut tasks = JoinSet::new();
 
@@ -205,7 +205,7 @@ async fn concurrent_test_pool_stress() {
     let db_path = temp_file.path();
 
     create_test_database(db_path).await.unwrap();
-    let db = Arc::new(ThingsDatabase::new(db_path).await.unwrap());
+    let db = Arc::new(SqliteThingsDatabase::new(db_path).await.unwrap());
 
     let mut tasks = JoinSet::new();
     let num_concurrent = 15;
@@ -274,7 +274,7 @@ async fn concurrent_test_database_cloning() {
     let db_path = temp_file.path();
 
     create_test_database(db_path).await.unwrap();
-    let db = ThingsDatabase::new(db_path).await.unwrap();
+    let db = SqliteThingsDatabase::new(db_path).await.unwrap();
 
     let mut tasks = JoinSet::new();
 
@@ -304,7 +304,7 @@ async fn concurrent_test_varying_query_sizes() {
     let db_path = temp_file.path();
 
     create_test_database(db_path).await.unwrap();
-    let db = Arc::new(ThingsDatabase::new(db_path).await.unwrap());
+    let db = Arc::new(SqliteThingsDatabase::new(db_path).await.unwrap());
 
     let mut tasks = JoinSet::new();
     let sizes = vec![1, 5, 10, 50, 100];
@@ -361,7 +361,7 @@ async fn concurrent_test_areas_queries() {
     let db_path = temp_file.path();
 
     create_test_database(db_path).await.unwrap();
-    let db = Arc::new(ThingsDatabase::new(db_path).await.unwrap());
+    let db = Arc::new(SqliteThingsDatabase::new(db_path).await.unwrap());
 
     let mut tasks = JoinSet::new();
 

@@ -1,21 +1,21 @@
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
 use things3_core::test_utils::create_test_database;
 use things3_core::{
-    BulkCompleteRequest, BulkDeleteRequest, BulkMoveRequest, CreateTaskRequest, ThingsDatabase,
-    ThingsId,
+    BulkCompleteRequest, BulkDeleteRequest, BulkMoveRequest, CreateTaskRequest,
+    SqliteThingsDatabase, ThingsId,
 };
 use tokio::runtime::Runtime;
 
 fn create_test_db_with_tasks(
     task_count: usize,
-) -> (tempfile::NamedTempFile, ThingsDatabase, Vec<ThingsId>) {
+) -> (tempfile::NamedTempFile, SqliteThingsDatabase, Vec<ThingsId>) {
     let rt = Runtime::new().unwrap();
     let temp_file = tempfile::NamedTempFile::new().unwrap();
     let db_path = temp_file.path().to_path_buf();
 
     let (db, task_uuids) = rt.block_on(async {
         create_test_database(&db_path).await.unwrap();
-        let db = ThingsDatabase::new(&db_path).await.unwrap();
+        let db = SqliteThingsDatabase::new(&db_path).await.unwrap();
 
         let mut task_uuids = Vec::new();
         for i in 0..task_count {

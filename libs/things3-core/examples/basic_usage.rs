@@ -7,7 +7,7 @@
 //! - Creating and updating tasks
 
 use chrono::NaiveDate;
-use things3_core::{CreateTaskRequest, ThingsDatabase, ThingsError, UpdateTaskRequest};
+use things3_core::{CreateTaskRequest, SqliteThingsDatabase, ThingsError, UpdateTaskRequest};
 
 #[tokio::main]
 async fn main() -> Result<(), ThingsError> {
@@ -16,7 +16,7 @@ async fn main() -> Result<(), ThingsError> {
 
     // Connect to the database
     println!("Connecting to database at: {}", db_path.display());
-    let db = ThingsDatabase::new(&db_path).await?;
+    let db = SqliteThingsDatabase::new(&db_path).await?;
 
     // Get inbox tasks
     println!("\n=== Inbox Tasks ===");

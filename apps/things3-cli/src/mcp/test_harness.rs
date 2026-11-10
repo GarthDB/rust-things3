@@ -7,7 +7,7 @@ use crate::mcp::{
 use serde_json::Value;
 use std::path::Path;
 use tempfile::NamedTempFile;
-use things3_core::{config::ThingsConfig, ThingsDatabase};
+use things3_core::{config::ThingsConfig, SqliteThingsDatabase};
 // use std::sync::Arc; // Not needed for test harness
 
 /// Test harness for MCP server operations
@@ -331,7 +331,7 @@ impl McpTestHarness {
 
     /// Create a comprehensive test database with mock data
     #[allow(clippy::too_many_lines)]
-    async fn create_test_database<P: AsRef<Path>>(db_path: P) -> ThingsDatabase {
+    async fn create_test_database<P: AsRef<Path>>(db_path: P) -> SqliteThingsDatabase {
         use sqlx::SqlitePool;
 
         let database_url = format!("sqlite:{}", db_path.as_ref().display());
@@ -540,7 +540,7 @@ impl McpTestHarness {
         .execute(&pool).await.unwrap();
 
         pool.close().await;
-        ThingsDatabase::new(db_path.as_ref()).await.unwrap()
+        SqliteThingsDatabase::new(db_path.as_ref()).await.unwrap()
     }
 }
 

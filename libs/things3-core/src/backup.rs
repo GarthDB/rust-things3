@@ -1,6 +1,6 @@
 //! Backup and restore functionality for Things 3 database
 
-use crate::{ThingsConfig, ThingsDatabase};
+use crate::{SqliteThingsDatabase, ThingsConfig};
 use anyhow::Result;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -218,7 +218,7 @@ impl BackupManager {
         }
 
         // Try to open the backup as a database
-        match ThingsDatabase::new(backup_path).await {
+        match SqliteThingsDatabase::new(backup_path).await {
             Ok(_) => Ok(true),
             Err(_) => Ok(false),
         }

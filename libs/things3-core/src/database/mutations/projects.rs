@@ -1,9 +1,8 @@
 #![allow(deprecated)]
-
 use crate::{
     database::{
         conversions::naive_date_to_things_timestamp, query_builders::TaskUpdateBuilder, validators,
-        ThingsDatabase,
+        SqliteThingsDatabase,
     },
     error::{Result as ThingsResult, ThingsError},
     models::ThingsId,
@@ -11,7 +10,7 @@ use crate::{
 use chrono::Utc;
 use tracing::{info, instrument};
 
-impl ThingsDatabase {
+impl SqliteThingsDatabase {
     /// Create a new project
     ///
     /// Projects are tasks with type = 1 in the TMTask table

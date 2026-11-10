@@ -5,7 +5,7 @@
 
 use std::sync::Arc;
 use tempfile::NamedTempFile;
-use things3_core::{CacheConfig, ThingsCache, ThingsDatabase};
+use things3_core::{CacheConfig, SqliteThingsDatabase, ThingsCache};
 
 #[cfg(any(feature = "export-csv", feature = "export-opml"))]
 use things3_core::{DataExporter, ExportData, ExportFormat};
@@ -24,7 +24,7 @@ async fn memory_test_database_connection() {
 
     // Create and drop database connections
     for _ in 0..10 {
-        let _db = ThingsDatabase::new(db_path).await.unwrap();
+        let _db = SqliteThingsDatabase::new(db_path).await.unwrap();
         // Database should be properly cleaned up on drop
     }
 
@@ -40,7 +40,7 @@ async fn memory_test_large_query_results() {
     let db_path = temp_file.path();
 
     create_test_database(db_path).await.unwrap();
-    let db = ThingsDatabase::new(db_path).await.unwrap();
+    let db = SqliteThingsDatabase::new(db_path).await.unwrap();
 
     // Query large result sets
     let _inbox = db.get_inbox(Some(1000)).await.unwrap();
@@ -91,7 +91,7 @@ async fn memory_test_repeated_operations() {
     let db_path = temp_file.path();
 
     create_test_database(db_path).await.unwrap();
-    let db = ThingsDatabase::new(db_path).await.unwrap();
+    let db = SqliteThingsDatabase::new(db_path).await.unwrap();
 
     // Perform same operation many times
     for _ in 0..100 {
@@ -135,7 +135,7 @@ async fn memory_test_arc_wrapped_database() {
     let db_path = temp_file.path();
 
     create_test_database(db_path).await.unwrap();
-    let db = Arc::new(ThingsDatabase::new(db_path).await.unwrap());
+    let db = Arc::new(SqliteThingsDatabase::new(db_path).await.unwrap());
 
     // Clone Arc multiple times
     let mut handles = Vec::new();
@@ -161,7 +161,7 @@ async fn memory_test_health_checks() {
     let db_path = temp_file.path();
 
     create_test_database(db_path).await.unwrap();
-    let db = ThingsDatabase::new(db_path).await.unwrap();
+    let db = SqliteThingsDatabase::new(db_path).await.unwrap();
 
     // Perform many health checks
     for _ in 0..100 {
@@ -192,7 +192,7 @@ async fn memory_test_search_operations() {
     let db_path = temp_file.path();
 
     create_test_database(db_path).await.unwrap();
-    let db = ThingsDatabase::new(db_path).await.unwrap();
+    let db = SqliteThingsDatabase::new(db_path).await.unwrap();
 
     // Perform various searches
     let queries = vec!["test", "project", "task", "important"];
@@ -212,7 +212,7 @@ async fn memory_test_error_cleanup() {
 
     // Attempt connections that will fail
     for _ in 0..10 {
-        let _result = ThingsDatabase::new(&nonexistent_path).await;
+        let _result = SqliteThingsDatabase::new(&nonexistent_path).await;
         // Error paths should clean up properly
     }
 
@@ -227,7 +227,7 @@ async fn memory_test_database_pool() {
     let db_path = temp_file.path();
 
     create_test_database(db_path).await.unwrap();
-    let db = ThingsDatabase::new(db_path).await.unwrap();
+    let db = SqliteThingsDatabase::new(db_path).await.unwrap();
 
     // Perform concurrent operations (uses connection pool)
     let mut tasks = Vec::new();

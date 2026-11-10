@@ -1,7 +1,7 @@
 //! Integration tests for things-core
 
 use tempfile::NamedTempFile;
-use things3_core::{Result, ThingsDatabase};
+use things3_core::{Result, SqliteThingsDatabase};
 
 #[cfg(feature = "test-utils")]
 use things3_core::test_utils;
@@ -14,7 +14,7 @@ async fn test_database_connection() -> Result<()> {
     println!("Testing database connection to: {db_path:?}");
 
     // Try to connect (this might fail in CI, which is expected)
-    match ThingsDatabase::new(db_path).await {
+    match SqliteThingsDatabase::new(db_path).await {
         Ok(_db) => {
             println!("✅ Database connection successful");
         }
@@ -43,7 +43,7 @@ async fn test_mock_database() {
     test_utils::create_test_database(db_path).await.unwrap();
 
     // Test that we can connect to the mock database
-    let db = ThingsDatabase::new(db_path).await.unwrap();
+    let db = SqliteThingsDatabase::new(db_path).await.unwrap();
 
     // Test basic queries
     let inbox_tasks = db.get_inbox(Some(10)).await.unwrap();

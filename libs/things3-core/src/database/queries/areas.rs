@@ -1,7 +1,6 @@
 #![allow(deprecated)]
-
 use crate::{
-    database::ThingsDatabase,
+    database::SqliteThingsDatabase,
     error::{Result as ThingsResult, ThingsError},
     models::{Area, ThingsId},
 };
@@ -9,7 +8,7 @@ use chrono::Utc;
 use sqlx::Row;
 use tracing::{debug, instrument};
 
-impl ThingsDatabase {
+impl SqliteThingsDatabase {
     /// Get all areas
     ///
     /// # Errors

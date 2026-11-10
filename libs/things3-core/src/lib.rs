@@ -16,12 +16,12 @@
 //! # Quick Start
 //!
 //! ```no_run
-//! use things3_core::{ThingsDatabase, ThingsError};
+//! use things3_core::{SqliteThingsDatabase, ThingsError};
 //! use std::path::Path;
 //!
 //! # async fn example() -> Result<(), ThingsError> {
 //! // Connect to Things 3 database
-//! let db = ThingsDatabase::new(Path::new("/path/to/things.db")).await?;
+//! let db = SqliteThingsDatabase::new(Path::new("/path/to/things.db")).await?;
 //!
 //! // Get inbox tasks
 //! let tasks = db.get_inbox(None).await?;
@@ -111,7 +111,7 @@ pub use config_hot_reload::{
 pub use config_loader::{load_config, load_config_from_env, load_config_with_paths, ConfigLoader};
 pub use database::{
     get_default_database_path, ComprehensiveHealthStatus, DatabasePoolConfig, DatabaseStats,
-    PoolHealthStatus, PoolMetrics, SqliteOptimizations, ThingsDatabase,
+    PoolHealthStatus, PoolMetrics, SqliteOptimizations, SqliteThingsDatabase, ThingsDatabase,
 };
 pub use disk_cache::{DiskCache, DiskCacheConfig, DiskCacheStats};
 pub use error::{Result, ThingsDatabaseError, ThingsError, ThingsExportError, ThingsQueryError};

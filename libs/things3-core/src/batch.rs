@@ -1,14 +1,14 @@
-//! Batch fetch-by-id primitives on [`ThingsDatabase`].
+//! Batch fetch-by-id primitives on [`SqliteThingsDatabase`].
 #![allow(deprecated)]
 //!
-//! Two methods extend [`ThingsDatabase`] when the `batch-operations` feature
+//! Two methods extend [`SqliteThingsDatabase`] when the `batch-operations` feature
 //! is enabled:
-//! - [`ThingsDatabase::get_tasks_batch`] — many tasks by UUID
-//! - [`ThingsDatabase::get_projects_batch`] — many projects by UUID
+//! - [`SqliteThingsDatabase::get_tasks_batch`] — many tasks by UUID
+//! - [`SqliteThingsDatabase::get_projects_batch`] — many projects by UUID
 //!
 //! Both mirror the filtering semantics of their single-fetch siblings
-//! ([`ThingsDatabase::get_task_by_uuid`] and
-//! [`ThingsDatabase::get_project_by_uuid`]): trashed rows are omitted, no
+//! ([`SqliteThingsDatabase::get_task_by_uuid`] and
+//! [`SqliteThingsDatabase::get_project_by_uuid`]): trashed rows are omitted, no
 //! type filter is applied beyond what `get_project_by_uuid` already does
 //! (`type = 1`). Duplicate UUIDs in the input are de-duplicated; empty
 //! input returns `Ok(vec![])` without any SQL roundtrip; results are
@@ -25,7 +25,7 @@ use std::collections::HashSet;
 use sqlx::{sqlite::SqliteRow, Row, SqlitePool};
 
 use crate::database::mappers::{map_project_row, map_task_row};
-use crate::database::ThingsDatabase;
+use crate::database::SqliteThingsDatabase;
 use crate::error::{Result as ThingsResult, ThingsError};
 use crate::models::{Project, Task, ThingsId};
 
@@ -34,10 +34,10 @@ use crate::models::{Project, Task, ThingsId};
 /// long UUID lists without surfacing parameter-limit failures.
 const BATCH_CHUNK_SIZE: usize = 500;
 
-impl ThingsDatabase {
+impl SqliteThingsDatabase {
     /// Fetch many tasks by UUID in a single batched query.
     ///
-    /// Mirrors [`ThingsDatabase::get_task_by_uuid`]: trashed rows are omitted
+    /// Mirrors [`SqliteThingsDatabase::get_task_by_uuid`]: trashed rows are omitted
     /// and there is no task-type filter (a project or heading UUID will
     /// resolve to a [`Task`] mapped from its TMTask row, matching
     /// single-fetch loose semantics). Duplicate UUIDs are de-duplicated.
@@ -76,7 +76,7 @@ impl ThingsDatabase {
 
     /// Fetch many projects by UUID in a single batched query.
     ///
-    /// Mirrors [`ThingsDatabase::get_project_by_uuid`]: only `type = 1` rows
+    /// Mirrors [`SqliteThingsDatabase::get_project_by_uuid`]: only `type = 1` rows
     /// are returned, trashed rows are omitted. Duplicate UUIDs are
     /// de-duplicated. Empty input returns `Ok(vec![])` without any SQL
     /// call. Results are ordered by `(creationDate DESC, uuid DESC)`.
@@ -158,16 +158,16 @@ mod tests {
     use super::*;
     use tempfile::NamedTempFile;
 
-    async fn open_test_db() -> (ThingsDatabase, NamedTempFile) {
+    async fn open_test_db() -> (SqliteThingsDatabase, NamedTempFile) {
         let f = NamedTempFile::new().unwrap();
         crate::test_utils::create_test_database(f.path())
             .await
             .unwrap();
-        let db = ThingsDatabase::new(f.path()).await.unwrap();
+        let db = SqliteThingsDatabase::new(f.path()).await.unwrap();
         (db, f)
     }
 
-    async fn insert_task(db: &ThingsDatabase, title: &str) -> ThingsId {
+    async fn insert_task(db: &SqliteThingsDatabase, title: &str) -> ThingsId {
         let raw = uuid::Uuid::new_v4();
         sqlx::query(
             "INSERT INTO TMTask \
@@ -182,7 +182,7 @@ mod tests {
         ThingsId::from_trusted(raw.to_string())
     }
 
-    async fn insert_project(db: &ThingsDatabase, title: &str) -> ThingsId {
+    async fn insert_project(db: &SqliteThingsDatabase, title: &str) -> ThingsId {
         let raw = uuid::Uuid::new_v4();
         sqlx::query(
             "INSERT INTO TMTask \
@@ -197,7 +197,7 @@ mod tests {
         ThingsId::from_trusted(raw.to_string())
     }
 
-    async fn mark_trashed(db: &ThingsDatabase, id: &ThingsId) {
+    async fn mark_trashed(db: &SqliteThingsDatabase, id: &ThingsId) {
         sqlx::query("UPDATE TMTask SET trashed = 1 WHERE uuid = ?")
             .bind(id.as_str())
             .execute(&db.pool)

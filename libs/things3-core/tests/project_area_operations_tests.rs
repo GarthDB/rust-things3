@@ -5,7 +5,7 @@ use things3_core::{
         CreateAreaRequest, CreateProjectRequest, ProjectChildHandling, UpdateAreaRequest,
         UpdateProjectRequest,
     },
-    ThingsDatabase,
+    SqliteThingsDatabase,
 };
 
 #[cfg(feature = "test-utils")]
@@ -20,7 +20,7 @@ async fn test_create_project_success() {
     let temp_file = NamedTempFile::new().unwrap();
     let db_path = temp_file.path();
     create_test_database(db_path).await.unwrap();
-    let db = ThingsDatabase::new(db_path).await.unwrap();
+    let db = SqliteThingsDatabase::new(db_path).await.unwrap();
 
     let request = CreateProjectRequest {
         title: "Test Project".to_string(),
@@ -48,7 +48,7 @@ async fn test_create_project_with_area() {
     let temp_file = NamedTempFile::new().unwrap();
     let db_path = temp_file.path();
     create_test_database(db_path).await.unwrap();
-    let db = ThingsDatabase::new(db_path).await.unwrap();
+    let db = SqliteThingsDatabase::new(db_path).await.unwrap();
 
     // Create an area first
     let area_request = CreateAreaRequest {
@@ -77,7 +77,7 @@ async fn test_update_project_success() {
     let temp_file = NamedTempFile::new().unwrap();
     let db_path = temp_file.path();
     create_test_database(db_path).await.unwrap();
-    let db = ThingsDatabase::new(db_path).await.unwrap();
+    let db = SqliteThingsDatabase::new(db_path).await.unwrap();
 
     // Create a project
     let create_request = CreateProjectRequest {
@@ -114,7 +114,7 @@ async fn test_complete_project_success() {
     let temp_file = NamedTempFile::new().unwrap();
     let db_path = temp_file.path();
     create_test_database(db_path).await.unwrap();
-    let db = ThingsDatabase::new(db_path).await.unwrap();
+    let db = SqliteThingsDatabase::new(db_path).await.unwrap();
 
     // Create a project
     let request = CreateProjectRequest {
@@ -144,7 +144,7 @@ async fn test_complete_project_with_children_cascade() {
     let temp_file = NamedTempFile::new().unwrap();
     let db_path = temp_file.path();
     create_test_database(db_path).await.unwrap();
-    let db = ThingsDatabase::new(db_path).await.unwrap();
+    let db = SqliteThingsDatabase::new(db_path).await.unwrap();
 
     // Create a project
     let project_request = CreateProjectRequest {
@@ -183,7 +183,7 @@ async fn test_delete_project_with_children_error() {
     let temp_file = NamedTempFile::new().unwrap();
     let db_path = temp_file.path();
     create_test_database(db_path).await.unwrap();
-    let db = ThingsDatabase::new(db_path).await.unwrap();
+    let db = SqliteThingsDatabase::new(db_path).await.unwrap();
 
     // Create a project with a child task
     let project_request = CreateProjectRequest {
@@ -215,7 +215,7 @@ async fn test_delete_project_with_children_orphan() {
     let temp_file = NamedTempFile::new().unwrap();
     let db_path = temp_file.path();
     create_test_database(db_path).await.unwrap();
-    let db = ThingsDatabase::new(db_path).await.unwrap();
+    let db = SqliteThingsDatabase::new(db_path).await.unwrap();
 
     // Create a project with a child task
     let project_request = CreateProjectRequest {
@@ -254,7 +254,7 @@ async fn test_create_area_success() {
     let temp_file = NamedTempFile::new().unwrap();
     let db_path = temp_file.path();
     create_test_database(db_path).await.unwrap();
-    let db = ThingsDatabase::new(db_path).await.unwrap();
+    let db = SqliteThingsDatabase::new(db_path).await.unwrap();
 
     let request = CreateAreaRequest {
         title: "Personal".to_string(),
@@ -276,7 +276,7 @@ async fn test_update_area_success() {
     let temp_file = NamedTempFile::new().unwrap();
     let db_path = temp_file.path();
     create_test_database(db_path).await.unwrap();
-    let db = ThingsDatabase::new(db_path).await.unwrap();
+    let db = SqliteThingsDatabase::new(db_path).await.unwrap();
 
     // Create an area
     let create_request = CreateAreaRequest {
@@ -303,7 +303,7 @@ async fn test_delete_area_with_projects() {
     let temp_file = NamedTempFile::new().unwrap();
     let db_path = temp_file.path();
     create_test_database(db_path).await.unwrap();
-    let db = ThingsDatabase::new(db_path).await.unwrap();
+    let db = SqliteThingsDatabase::new(db_path).await.unwrap();
 
     // Create an area
     let area_request = CreateAreaRequest {
@@ -340,7 +340,7 @@ async fn test_delete_area_empty() {
     let temp_file = NamedTempFile::new().unwrap();
     let db_path = temp_file.path();
     create_test_database(db_path).await.unwrap();
-    let db = ThingsDatabase::new(db_path).await.unwrap();
+    let db = SqliteThingsDatabase::new(db_path).await.unwrap();
 
     // Create an area with no projects
     let request = CreateAreaRequest {

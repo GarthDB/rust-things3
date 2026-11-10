@@ -106,7 +106,7 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
-use things3_core::{HealthStatus, ObservabilityManager, ThingsDatabase};
+use things3_core::{HealthStatus, ObservabilityManager, SqliteThingsDatabase};
 use tokio::net::TcpListener;
 use tower_http::cors::CorsLayer;
 use tracing::{info, instrument};
@@ -116,7 +116,7 @@ use tracing::{info, instrument};
 #[derive(Clone)]
 pub struct DashboardState {
     pub observability: Arc<ObservabilityManager>,
-    pub database: Arc<ThingsDatabase>,
+    pub database: Arc<SqliteThingsDatabase>,
 }
 
 /// Dashboard metrics
@@ -188,7 +188,7 @@ impl DashboardServer {
     pub fn new(
         port: u16,
         observability: Arc<ObservabilityManager>,
-        database: Arc<ThingsDatabase>,
+        database: Arc<SqliteThingsDatabase>,
     ) -> Self {
         Self {
             port,
@@ -230,7 +230,7 @@ impl DashboardServer {
 pub struct DashboardServer {
     port: u16,
     observability: Arc<ObservabilityManager>,
-    database: Arc<ThingsDatabase>,
+    database: Arc<SqliteThingsDatabase>,
 }
 
 /// Start the dashboard server
@@ -241,7 +241,7 @@ pub struct DashboardServer {
 pub async fn start_dashboard_server(
     port: u16,
     observability: Arc<ObservabilityManager>,
-    database: Arc<ThingsDatabase>,
+    database: Arc<SqliteThingsDatabase>,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let server = DashboardServer::new(port, observability, database);
     server.start().await
@@ -259,7 +259,8 @@ mod tests {
         let db_path = temp_file.path();
 
         let rt = tokio::runtime::Runtime::new().unwrap();
-        let database = Arc::new(rt.block_on(async { ThingsDatabase::new(db_path).await.unwrap() }));
+        let database =
+            Arc::new(rt.block_on(async { SqliteThingsDatabase::new(db_path).await.unwrap() }));
 
         let observability = Arc::new(
             things3_core::ObservabilityManager::new(things3_core::ObservabilityConfig::default())
@@ -453,7 +454,8 @@ mod tests {
         let db_path = temp_file.path();
 
         let rt = tokio::runtime::Runtime::new().unwrap();
-        let database = Arc::new(rt.block_on(async { ThingsDatabase::new(db_path).await.unwrap() }));
+        let database =
+            Arc::new(rt.block_on(async { SqliteThingsDatabase::new(db_path).await.unwrap() }));
 
         let observability = Arc::new(
             things3_core::ObservabilityManager::new(things3_core::ObservabilityConfig::default())

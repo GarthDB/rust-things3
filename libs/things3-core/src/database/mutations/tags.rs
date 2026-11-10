@@ -1,14 +1,13 @@
 #![allow(deprecated)]
-
 use crate::{
-    database::{validators, ThingsDatabase},
+    database::{validators, SqliteThingsDatabase},
     error::{Result as ThingsResult, ThingsError},
     models::ThingsId,
 };
 use chrono::Utc;
 use tracing::{info, instrument};
 
-impl ThingsDatabase {
+impl SqliteThingsDatabase {
     /// Create a tag with smart duplicate detection
     ///
     /// Returns:

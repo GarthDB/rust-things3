@@ -1,11 +1,10 @@
 #![allow(deprecated)]
-
 #[cfg(feature = "advanced-queries")]
 use crate::database::conversions::naive_date_to_things_timestamp;
 #[cfg(feature = "advanced-queries")]
 use crate::models::TaskFilters;
 use crate::{
-    database::{mappers::map_task_row, ThingsDatabase},
+    database::{mappers::map_task_row, SqliteThingsDatabase},
     error::{Result as ThingsResult, ThingsError},
     models::{Task, TaskStatus, TaskType, ThingsId},
 };
@@ -15,17 +14,17 @@ use tracing::{debug, instrument};
 #[cfg(any(feature = "advanced-queries", feature = "batch-operations"))]
 use uuid::Uuid;
 
-impl ThingsDatabase {
+impl SqliteThingsDatabase {
     /// Get all tasks from the database
     ///
     /// # Examples
     ///
     /// ```no_run
-    /// use things3_core::{ThingsDatabase, ThingsError};
+    /// use things3_core::{SqliteThingsDatabase, ThingsError};
     /// use std::path::Path;
     ///
     /// # async fn example() -> Result<(), ThingsError> {
-    /// let db = ThingsDatabase::new(Path::new("/path/to/things.db")).await?;
+    /// let db = SqliteThingsDatabase::new(Path::new("/path/to/things.db")).await?;
     ///
     /// // Get all tasks
     /// let tasks = db.get_all_tasks().await?;

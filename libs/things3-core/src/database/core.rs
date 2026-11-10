@@ -8,26 +8,29 @@ use sqlx::{pool::PoolOptions, SqlitePool};
 use std::path::Path;
 use tracing::{info, instrument};
 
-/// SQLx-based database implementation for Things 3 data
-/// This provides async, Send + Sync compatible database access
+/// SQLite-backed implementation of [`ThingsDatabase`](crate::database::ThingsDatabase).
+///
+/// This is the production database implementation.  Use
+/// [`ThingsDatabase`](crate::database::ThingsDatabase) as the trait type when
+/// you need to accept any backend (e.g. the in-memory test fixture).
 #[derive(Debug, Clone)]
-pub struct ThingsDatabase {
+pub struct SqliteThingsDatabase {
     pub(crate) pool: SqlitePool,
     pub(crate) config: DatabasePoolConfig,
 }
 
-impl ThingsDatabase {
+impl SqliteThingsDatabase {
     /// Create a new database connection pool with default configuration
     ///
     /// # Examples
     ///
     /// ```no_run
-    /// use things3_core::{ThingsDatabase, ThingsError};
+    /// use things3_core::{SqliteThingsDatabase, ThingsError};
     /// use std::path::Path;
     ///
     /// # async fn example() -> Result<(), ThingsError> {
     /// // Connect to Things 3 database
-    /// let db = ThingsDatabase::new(Path::new("/path/to/things.db")).await?;
+    /// let db = SqliteThingsDatabase::new(Path::new("/path/to/things.db")).await?;
     ///
     /// // Get inbox tasks
     /// let tasks = db.get_inbox(None).await?;
@@ -49,7 +52,7 @@ impl ThingsDatabase {
     /// # Examples
     ///
     /// ```no_run
-    /// use things3_core::{ThingsDatabase, DatabasePoolConfig, ThingsError};
+    /// use things3_core::{SqliteThingsDatabase, DatabasePoolConfig, ThingsError};
     /// use std::path::Path;
     /// use std::time::Duration;
     ///
@@ -66,7 +69,7 @@ impl ThingsDatabase {
     /// };
     ///
     /// // Connect with custom configuration
-    /// let db = ThingsDatabase::new_with_config(
+    /// let db = SqliteThingsDatabase::new_with_config(
     ///     Path::new("/path/to/things.db"),
     ///     config,
     /// ).await?;
@@ -110,7 +113,7 @@ impl ThingsDatabase {
         Ok(Self { pool, config })
     }
 
-    /// Create a new database connection pool from a connection string with default configuration
+    /// Create a connection pool from a URL string with default configuration.
     ///
     /// # Errors
     ///
@@ -120,7 +123,7 @@ impl ThingsDatabase {
         Self::from_connection_string_with_config(database_url, DatabasePoolConfig::default()).await
     }
 
-    /// Create a new database connection pool from a connection string with custom configuration
+    /// Create a connection pool from a URL string with custom configuration.
     ///
     /// # Errors
     ///
@@ -156,7 +159,10 @@ impl ThingsDatabase {
         Ok(Self { pool, config })
     }
 
-    /// Get the underlying connection pool
+    /// Get the underlying SQLite connection pool.
+    ///
+    /// This is an inherent method specific to `SqliteThingsDatabase` and is not
+    /// part of the [`ThingsDatabase`](crate::database::ThingsDatabase) trait.
     #[must_use]
     pub fn pool(&self) -> &SqlitePool {
         &self.pool

@@ -35,7 +35,7 @@ use async_trait::async_trait;
 use sqlx::Row;
 
 use super::MutationBackend;
-use crate::database::ThingsDatabase;
+use crate::database::SqliteThingsDatabase;
 use crate::error::{Result as ThingsResult, ThingsError};
 use crate::models::{
     BulkCompleteRequest, BulkCreateTasksRequest, BulkDeleteRequest, BulkMoveRequest,
@@ -47,17 +47,17 @@ use crate::models::{
 
 /// AppleScript-driven mutation backend.
 ///
-/// Holds an [`Arc<ThingsDatabase>`] for read-only side-channel queries — used
+/// Holds an [`Arc<SqliteThingsDatabase>`] for read-only side-channel queries — used
 /// today only by [`AppleScriptBackend::delete_task`] when it needs to discover
 /// a task's subtasks before deciding how to handle them. Reads are safe per
 /// CulturedCode; only writes risk corruption.
 pub struct AppleScriptBackend {
-    db: Arc<ThingsDatabase>,
+    db: Arc<SqliteThingsDatabase>,
 }
 
 impl AppleScriptBackend {
     #[must_use]
-    pub fn new(db: Arc<ThingsDatabase>) -> Self {
+    pub fn new(db: Arc<SqliteThingsDatabase>) -> Self {
         Self { db }
     }
 
@@ -743,7 +743,7 @@ impl MutationBackend for AppleScriptBackend {
                     });
                 }
                 // No existing match and no similar tags — auto-create. Mirrors
-                // `ThingsDatabase::add_tag_to_task` (`database/core.rs:2792-2802`).
+                // `SqliteThingsDatabase::add_tag_to_task` (`database/core.rs:2792-2802`).
                 let create_req = CreateTagRequest {
                     title: tag_title.to_string(),
                     shortcut: None,
@@ -799,7 +799,7 @@ impl MutationBackend for AppleScriptBackend {
 
         // Intentionally asymmetric with add_tag_to_task: similar-tag suggestions
         // accumulate for the caller but never block the write — every title is
-        // auto-created if absent, matching ThingsDatabase::set_task_tags semantics.
+        // auto-created if absent, matching SqliteThingsDatabase::set_task_tags semantics.
         let mut suggestions: Vec<TagMatch> = Vec::new();
         let mut resolved: Vec<String> = Vec::with_capacity(tag_titles.len());
 
@@ -813,7 +813,7 @@ impl MutationBackend for AppleScriptBackend {
             if !similar.is_empty() {
                 suggestions.extend(similar);
             }
-            // Auto-create on miss — mirrors `ThingsDatabase::set_task_tags`
+            // Auto-create on miss — mirrors `SqliteThingsDatabase::set_task_tags`
             // (`database/core.rs:2966-2981`). Suggestions are accumulated
             // for the caller's review but do not block creation.
             let create_req = CreateTagRequest {
@@ -840,7 +840,7 @@ mod tests {
     #[tokio::test]
     async fn new_does_not_spawn_osascript() {
         let db = Arc::new(
-            ThingsDatabase::from_connection_string("sqlite::memory:")
+            SqliteThingsDatabase::from_connection_string("sqlite::memory:")
                 .await
                 .expect("in-memory db"),
         );
@@ -1081,7 +1081,7 @@ mod tests {
     #[tokio::test]
     async fn merge_tags_rejects_identical_source_and_target() {
         let db = Arc::new(
-            ThingsDatabase::from_connection_string("sqlite::memory:")
+            SqliteThingsDatabase::from_connection_string("sqlite::memory:")
                 .await
                 .expect("in-memory db"),
         );
@@ -1098,7 +1098,7 @@ mod tests {
     #[tokio::test]
     async fn bulk_validation_rejects_empty_and_oversize() {
         let db = Arc::new(
-            ThingsDatabase::from_connection_string("sqlite::memory:")
+            SqliteThingsDatabase::from_connection_string("sqlite::memory:")
                 .await
                 .expect("in-memory db"),
         );
@@ -1144,7 +1144,7 @@ mod tests {
 
     async fn guard_test_backend() -> AppleScriptBackend {
         let db = Arc::new(
-            ThingsDatabase::from_connection_string("sqlite::memory:")
+            SqliteThingsDatabase::from_connection_string("sqlite::memory:")
                 .await
                 .expect("in-memory db"),
         );

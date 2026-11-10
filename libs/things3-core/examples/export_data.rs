@@ -2,7 +2,7 @@
 //!
 //! Run with: cargo run --example export_data
 
-use things3_core::{DataExporter, ExportData, ExportFormat, ThingsConfig, ThingsDatabase};
+use things3_core::{DataExporter, ExportData, ExportFormat, SqliteThingsDatabase, ThingsConfig};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -10,7 +10,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Connect to database
     let config = ThingsConfig::from_env();
-    let db = ThingsDatabase::new(&config.get_effective_database_path()?).await?;
+    let db = SqliteThingsDatabase::new(&config.get_effective_database_path()?).await?;
 
     // Get data
     println!("Fetching data...");
