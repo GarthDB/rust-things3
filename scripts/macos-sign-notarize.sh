@@ -37,9 +37,12 @@ codesign --verify --strict --verbose=2 "$bin"
 
 echo "$NOTARY_API_KEY_P8" > "$tmp/key.p8"
 ditto -c -k --keepParent "$bin" "$tmp/notarize.zip"
-xcrun notarytool submit "$tmp/notarize.zip" \
+out="$(xcrun notarytool submit "$tmp/notarize.zip" \
   --key "$tmp/key.p8" --key-id "$NOTARY_API_KEY_ID" --issuer "$NOTARY_API_ISSUER_ID" \
-  --wait --timeout 30m
+  --wait --timeout 30m --output-format json)"
+echo "$out"
+echo "$out" | jq -e '.status == "Accepted"' >/dev/null \
+  || { echo "Notarization not accepted" >&2; exit 1; }
 
 # Bare Mach-O binaries cannot be stapled; Gatekeeper checks the ticket online.
 echo "Signed and notarized: $bin"
