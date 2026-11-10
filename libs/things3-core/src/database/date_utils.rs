@@ -9,11 +9,14 @@ use chrono::{Datelike, NaiveDate, Utc};
 use super::conversions::{naive_date_to_things_timestamp, things_date_to_naive_date};
 use thiserror::Error;
 
-/// Things 3 epoch: 2001-01-01 00:00:00 UTC
+/// Earliest year accepted when encoding dates (Things 3 epoch year)
 const THINGS_EPOCH_YEAR: i32 = 2001;
 
 /// Maximum reasonable year for Things 3 dates (year 2100)
 const MAX_YEAR: i32 = 2100;
+
+/// Minimum year accepted when decoding dates
+const MIN_YEAR: i32 = 2000;
 
 /// Errors that can occur during date conversion
 #[non_exhaustive]
@@ -58,7 +61,7 @@ pub enum DateValidationError {
 
 /// Check if a packed Things 3 date decodes to a reasonable date (2000..=2100)
 pub fn is_valid_things_timestamp(packed: i64) -> bool {
-    things_date_to_naive_date(packed).is_some_and(|d| (2000..=MAX_YEAR).contains(&d.year()))
+    things_date_to_naive_date(packed).is_some_and(|d| (MIN_YEAR..=MAX_YEAR).contains(&d.year()))
 }
 
 /// Convert a packed Things 3 date (`year<<16 | month<<12 | day<<7`) to a NaiveDate
@@ -68,6 +71,9 @@ pub fn is_valid_things_timestamp(packed: i64) -> bool {
 pub fn safe_things_date_to_naive_date(packed: i64) -> Result<NaiveDate, DateConversionError> {
     let date =
         things_date_to_naive_date(packed).ok_or(DateConversionError::InvalidTimestamp(packed))?;
+    if date.year() < MIN_YEAR {
+        return Err(DateConversionError::InvalidTimestamp(packed));
+    }
     if date.year() > MAX_YEAR {
         return Err(DateConversionError::TooFarFuture(date));
     }
@@ -221,6 +227,7 @@ mod tests {
     fn test_safe_things_date_conversion_invalid() {
         assert!(safe_things_date_to_naive_date(0).is_err());
         assert!(safe_things_date_to_naive_date(-100_000_000).is_err());
+        assert!(safe_things_date_to_naive_date(packed(1999, 12, 31)).is_err());
         assert!(matches!(
             safe_things_date_to_naive_date(packed(2150, 1, 1)),
             Err(DateConversionError::TooFarFuture(_))
