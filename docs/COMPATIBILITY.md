@@ -44,6 +44,8 @@ These platforms are tested in CI and guaranteed to work:
 | macOS 15+ | ARM64 (Apple Silicon) | ✅ Supported | Native ARM support, tested on macOS 15 and latest |
 | Linux (Ubuntu) | x86_64 | ✅ Supported | For CI/CD and server-side processing |
 
+Linux support applies to the library and building from source. Release binaries are a single universal macOS build (`things3`).
+
 ### Tier 2: Should Work
 
 These platforms should work but are not regularly tested:
