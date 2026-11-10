@@ -3,7 +3,7 @@
 //! This test suite validates the date conversion, validation, and edge case handling
 //! throughout the Things 3 integration.
 
-use chrono::{Datelike, NaiveDate};
+use chrono::NaiveDate;
 use things3_core::database::{
     add_days, format_date_for_display, is_date_in_future, is_date_in_past,
     is_valid_things_timestamp, parse_date_from_string, safe_naive_date_to_things_timestamp,
@@ -19,53 +19,31 @@ use things3_core::test_utils::{create_test_database_and_connect, TaskRequestBuil
 // ===========================
 
 #[test]
-fn test_things_date_conversion_basic() {
-    // Test conversion of a normal date
-    let timestamp = 86400 * 365; // Approximately 1 year after epoch
-    let date = safe_things_date_to_naive_date(timestamp).unwrap();
-
-    // Should be roughly early 2002
-    assert_eq!(date.year(), 2002);
+fn test_things_date_conversion_known() {
+    let date = safe_things_date_to_naive_date(132_822_272).unwrap();
+    assert_eq!(date, NaiveDate::from_ymd_opt(2026, 11, 10).unwrap());
 }
 
 #[test]
-fn test_things_date_conversion_epoch() {
-    // Epoch (2001-01-01) should convert correctly
-    let date = safe_things_date_to_naive_date(0).unwrap();
-    assert_eq!(date, NaiveDate::from_ymd_opt(2001, 1, 1).unwrap());
-}
-
-#[test]
-fn test_things_date_conversion_negative() {
-    // Small negative timestamps (within reasonable range) should fail
-    let result = safe_things_date_to_naive_date(-86400 * 400); // ~1 year+ before epoch
-    assert!(result.is_err());
+fn test_things_date_conversion_zero_and_negative() {
     assert!(matches!(
-        result,
+        safe_things_date_to_naive_date(0),
         Err(DateConversionError::InvalidTimestamp(_))
     ));
-}
-
-#[test]
-fn test_things_date_conversion_zero() {
-    // Zero timestamp should convert to epoch
-    let date = safe_things_date_to_naive_date(0).unwrap();
-    assert_eq!(date, NaiveDate::from_ymd_opt(2001, 1, 1).unwrap());
+    assert!(safe_things_date_to_naive_date(-86400 * 400).is_err());
 }
 
 #[test]
 fn test_things_date_conversion_far_future() {
-    // Year 2150 (way beyond reasonable range)
-    let far_future_timestamp = 86400 * 365 * 150; // ~150 years after epoch
-    let result = safe_things_date_to_naive_date(far_future_timestamp);
-    assert!(result.is_err());
+    let packed = safe_naive_date_to_things_timestamp(NaiveDate::from_ymd_opt(2100, 1, 1).unwrap())
+        .unwrap()
+        + (50 << 16);
+    assert!(safe_things_date_to_naive_date(packed).is_err());
 }
 
 #[test]
 fn test_things_date_conversion_overflow() {
-    // Test with value that would cause overflow
-    let result = safe_things_date_to_naive_date(i64::MAX);
-    assert!(result.is_err());
+    assert!(safe_things_date_to_naive_date(i64::MAX).is_err());
 }
 
 #[test]
@@ -199,7 +177,7 @@ fn test_handle_null_dates_gracefully() {
 #[test]
 fn test_handle_invalid_timestamp_gracefully() {
     // Test that invalid timestamps produce clear errors
-    let invalid_timestamps = vec![i64::MAX, i64::MIN, -1000000000, 10000000000];
+    let invalid_timestamps = vec![i64::MAX, i64::MIN, -1000000000, 0];
 
     for timestamp in invalid_timestamps {
         let result = safe_things_date_to_naive_date(timestamp);
@@ -415,10 +393,8 @@ async fn test_update_task_dates_successfully() {
 #[test]
 fn test_is_valid_things_timestamp_valid() {
     // Valid timestamps
-    assert!(is_valid_things_timestamp(0)); // Epoch
-    assert!(is_valid_things_timestamp(86400)); // 1 day after
-    assert!(is_valid_things_timestamp(86400 * 365)); // 1 year after
-    assert!(is_valid_things_timestamp(86400 * 365 * 20)); // 20 years after
+    assert!(is_valid_things_timestamp(132_822_272)); // 2026-11-10
+    assert!(is_valid_things_timestamp(2001 << 16 | 1 << 12 | 1 << 7));
 }
 
 #[test]
@@ -427,7 +403,7 @@ fn test_is_valid_things_timestamp_invalid() {
     assert!(!is_valid_things_timestamp(-86400 * 365 * 5)); // 5 years before epoch
 
     // Invalid - too far in future
-    assert!(!is_valid_things_timestamp(86400 * 365 * 150)); // 150 years after epoch
+    assert!(!is_valid_things_timestamp(2150 << 16 | 1 << 12 | 1 << 7));
 }
 
 // ================================

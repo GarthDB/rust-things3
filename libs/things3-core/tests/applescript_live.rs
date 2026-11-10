@@ -569,10 +569,7 @@ async fn create_task_with_start_date_and_rollback() {
             .await
             .expect("lookup")
             .expect("task should exist");
-        // Only checks presence: the DB read path decodes Things' packed
-        // startDate integer as seconds-since-2001 (separate bug), so the
-        // value itself can't be compared yet.
-        assert!(task.start_date.is_some(), "start_date not applied");
+        assert_eq!(task.start_date, Some(date), "start_date not applied");
     }
 
     let title = format!("rust-things3 e2e rollback {}", unique_suffix());

@@ -1,9 +1,9 @@
 //! Timestamp, date, tag-blob conversions and small enum mappers.
 #![allow(deprecated)]
 //!
-//! Things 3 stores dates as seconds since 2001-01-01 UTC (a `REAL` column for
-//! creation/modification, `INTEGER` for start/deadline). These helpers convert
-//! between that representation and `chrono` types, plus two small `from_i32`
+//! Things 3 stores creation/modification as seconds (a `REAL` column) and
+//! start/deadline as packed ints (`year<<16 | month<<12 | day<<7`). These
+//! helpers convert between those and `chrono` types, plus two small `from_i32`
 //! mappers for the integer task-status/type columns.
 
 use crate::error::{Result as ThingsResult, ThingsError};
@@ -28,39 +28,28 @@ pub(crate) fn safe_timestamp_convert(ts_f64: f64) -> i64 {
     }
 }
 
-/// Convert Things 3 date value (seconds since 2001-01-01) to NaiveDate
-pub(crate) fn things_date_to_naive_date(seconds_since_2001: i64) -> Option<chrono::NaiveDate> {
-    use chrono::{TimeZone, Utc};
-
-    if seconds_since_2001 <= 0 {
+/// Decode a Things 3 packed date (`year<<16 | month<<12 | day<<7`) to a NaiveDate.
+///
+/// Returns `None` for NULL-like/invalid values and for the year-4001 sentinel
+/// Things uses for "no date" on repeating templates.
+pub(crate) fn things_date_to_naive_date(packed: i64) -> Option<chrono::NaiveDate> {
+    if packed <= 0 {
         return None;
     }
-
-    // Base date: 2001-01-01 00:00:00 UTC
-    let base_date = Utc.with_ymd_and_hms(2001, 1, 1, 0, 0, 0).single().unwrap();
-
-    // Add seconds to get the actual date
-    let date_time = base_date + chrono::Duration::seconds(seconds_since_2001);
-
-    Some(date_time.date_naive())
+    let year = i32::try_from(packed >> 16).ok()?;
+    if year >= 4000 {
+        return None;
+    }
+    let month = u32::try_from((packed >> 12) & 0xF).ok()?;
+    let day = u32::try_from((packed >> 7) & 0x1F).ok()?;
+    NaiveDate::from_ymd_opt(year, month, day)
 }
 
-/// Convert NaiveDate to Things 3 timestamp (seconds since 2001-01-01)
+/// Encode a NaiveDate as a Things 3 packed date (`year<<16 | month<<12 | day<<7`)
 pub fn naive_date_to_things_timestamp(date: NaiveDate) -> i64 {
-    use chrono::{NaiveTime, TimeZone, Utc};
+    use chrono::Datelike;
 
-    // Base date: 2001-01-01 00:00:00 UTC
-    let base_date = Utc.with_ymd_and_hms(2001, 1, 1, 0, 0, 0).single().unwrap();
-
-    // Convert NaiveDate to DateTime at midnight UTC
-    let date_time = date
-        .and_time(NaiveTime::from_hms_opt(0, 0, 0).unwrap())
-        .and_local_timezone(Utc)
-        .single()
-        .unwrap();
-
-    // Calculate seconds difference
-    date_time.timestamp() - base_date.timestamp()
+    (i64::from(date.year()) << 16) | (i64::from(date.month()) << 12) | (i64::from(date.day()) << 7)
 }
 
 /// Serialize tags to Things 3 binary format
@@ -173,90 +162,26 @@ mod tests {
     }
 
     #[test]
-    fn test_things_date_negative_returns_none() {
-        // Negative values should return None
+    fn test_things_date_invalid_returns_none() {
         assert_eq!(things_date_to_naive_date(-1), None);
-        assert_eq!(things_date_to_naive_date(-100), None);
         assert_eq!(things_date_to_naive_date(i64::MIN), None);
-    }
-
-    #[test]
-    fn test_things_date_zero_returns_none() {
-        // Zero should return None (no date set)
         assert_eq!(things_date_to_naive_date(0), None);
+        // month 0 / day 0
+        assert_eq!(things_date_to_naive_date(2026 << 16), None);
+        // year-4001 sentinel seen on repeating templates
+        assert_eq!(things_date_to_naive_date(262_213_760), None);
     }
 
     #[test]
-    fn test_things_date_boundary_2001() {
-        use chrono::Datelike;
-        // 1 second after 2001-01-01 00:00:00 should be 2001-01-01
-        let result = things_date_to_naive_date(1);
-        assert!(result.is_some());
-
-        let date = result.unwrap();
-        assert_eq!(date.year(), 2001);
-        assert_eq!(date.month(), 1);
-        assert_eq!(date.day(), 1);
-    }
-
-    #[test]
-    fn test_things_date_one_day() {
-        use chrono::Datelike;
-        // 86400 seconds = 1 day (60 * 60 * 24), should be 2001-01-02
-        let seconds_per_day = 86400i64;
-        let result = things_date_to_naive_date(seconds_per_day);
-        assert!(result.is_some());
-
-        let date = result.unwrap();
-        assert_eq!(date.year(), 2001);
-        assert_eq!(date.month(), 1);
-        assert_eq!(date.day(), 2);
-    }
-
-    #[test]
-    fn test_things_date_one_year() {
-        use chrono::Datelike;
-        // ~365 days should be around 2002-01-01 (365 days * 86400 seconds/day)
-        let seconds_per_year = 365 * 86400i64;
-        let result = things_date_to_naive_date(seconds_per_year);
-        assert!(result.is_some());
-
-        let date = result.unwrap();
-        assert_eq!(date.year(), 2002);
-    }
-
-    #[test]
-    fn test_things_date_current_era() {
-        use chrono::Datelike;
-        // Test a date in the current era (2024)
-        // Days from 2001-01-01 to 2024-01-01 = ~8401 days
-        // Calculation: (2024-2001) * 365 + leap days (2004, 2008, 2012, 2016, 2020) = 23 * 365 + 5 = 8400
-        let days_to_2024 = 8401i64;
-        let seconds_to_2024 = days_to_2024 * 86400;
-
-        let result = things_date_to_naive_date(seconds_to_2024);
-        assert!(result.is_some());
-
-        let date = result.unwrap();
-        assert_eq!(date.year(), 2024);
-    }
-
-    #[test]
-    fn test_things_date_leap_year() {
-        use chrono::{Datelike, TimeZone, Utc};
-        // Test Feb 29, 2004 (leap year)
-        // Days from 2001-01-01 to 2004-02-29
-        let base_date = Utc.with_ymd_and_hms(2001, 1, 1, 0, 0, 0).single().unwrap();
-        let target_date = Utc.with_ymd_and_hms(2004, 2, 29, 0, 0, 0).single().unwrap();
-        let seconds_diff = (target_date - base_date).num_seconds();
-
-        let result = things_date_to_naive_date(seconds_diff);
-        assert!(result.is_some());
-
-        let date = result.unwrap();
-        assert_eq!(date.year(), 2004);
-        assert_eq!(date.month(), 2);
-        assert_eq!(date.day(), 29);
+    fn test_things_date_known_values() {
+        assert_eq!(
+            things_date_to_naive_date(132_822_272),
+            NaiveDate::from_ymd_opt(2026, 11, 10)
+        );
+        assert_eq!(
+            naive_date_to_things_timestamp(NaiveDate::from_ymd_opt(2026, 11, 10).unwrap()),
+            132_822_272
+        );
     }
 
     #[test]
@@ -295,59 +220,11 @@ mod tests {
 
     #[test]
     fn test_date_roundtrip_known_dates() {
-        use chrono::{Datelike, TimeZone, Utc};
-        // Test roundtrip conversion for known dates
-        // Note: Starting from 2001-01-02 because 2001-01-01 is the base date (0 seconds)
-        // and things_date_to_naive_date returns None for values <= 0
-        let test_cases = vec![
-            (2001, 1, 2), // Start from day 2 since day 1 is the base (0 seconds)
-            (2010, 6, 15),
-            (2020, 12, 31),
-            (2024, 2, 29), // Leap year
-            (2025, 7, 4),
-        ];
-
-        for (year, month, day) in test_cases {
-            let base_date = Utc.with_ymd_and_hms(2001, 1, 1, 0, 0, 0).single().unwrap();
-            let target_date = Utc
-                .with_ymd_and_hms(year, month, day, 0, 0, 0)
-                .single()
-                .unwrap();
-            let seconds = (target_date - base_date).num_seconds();
-
-            let converted = things_date_to_naive_date(seconds);
-            assert!(
-                converted.is_some(),
-                "Failed to convert {}-{:02}-{:02}",
-                year,
-                month,
-                day
-            );
-
-            let result_date = converted.unwrap();
+        for (y, m, d) in [(2001, 1, 1), (2010, 6, 15), (2024, 2, 29), (2025, 7, 4)] {
+            let date = NaiveDate::from_ymd_opt(y, m, d).unwrap();
             assert_eq!(
-                result_date.year(),
-                year,
-                "Year mismatch for {}-{:02}-{:02}",
-                year,
-                month,
-                day
-            );
-            assert_eq!(
-                result_date.month(),
-                month,
-                "Month mismatch for {}-{:02}-{:02}",
-                year,
-                month,
-                day
-            );
-            assert_eq!(
-                result_date.day(),
-                day,
-                "Day mismatch for {}-{:02}-{:02}",
-                year,
-                month,
-                day
+                things_date_to_naive_date(naive_date_to_things_timestamp(date)),
+                Some(date)
             );
         }
     }

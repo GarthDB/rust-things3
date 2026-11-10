@@ -124,11 +124,9 @@ async fn create_test_schema(db: &SqliteThingsDatabase) -> Result<(), Box<dyn std
     .execute(pool).await?;
 
     // Insert inbox task (no project) with today's date
-    // Convert Unix timestamp to Things 3 format (seconds since 2001-01-01)
-    let base_2001 = chrono::DateTime::parse_from_rfc3339("2001-01-01T00:00:00Z")
-        .unwrap()
-        .timestamp();
-    let today_things3 = Utc::now().timestamp() - base_2001;
+    // Things 3 packed date format
+    let today_things3 =
+        things3_core::database::naive_date_to_things_timestamp(Utc::now().date_naive());
     sqlx::query(
         "INSERT INTO TMTask (uuid, title, type, status, project, area, creationDate, userModificationDate, startDate, trashed, todayIndex) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
     )

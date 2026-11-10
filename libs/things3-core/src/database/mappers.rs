@@ -130,12 +130,10 @@ pub fn map_project_row(row: &SqliteRow) -> Project {
         notes: row.get("notes"),
         deadline: row
             .get::<Option<i64>, _>("deadline")
-            .and_then(|ts| DateTime::from_timestamp(ts, 0))
-            .map(|dt| dt.date_naive()),
+            .and_then(things_date_to_naive_date),
         start_date: row
             .get::<Option<i64>, _>("startDate")
-            .and_then(|ts| DateTime::from_timestamp(ts, 0))
-            .map(|dt| dt.date_naive()),
+            .and_then(things_date_to_naive_date),
         tags: Vec::new(),
         tasks: Vec::new(),
         created: {
