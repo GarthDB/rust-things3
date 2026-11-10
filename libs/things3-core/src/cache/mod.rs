@@ -754,7 +754,7 @@ mod tests {
         crate::test_utils::create_test_database(f.path())
             .await
             .unwrap();
-        let db = Arc::new(crate::ThingsDatabase::new(f.path()).await.unwrap());
+        let db = Arc::new(crate::SqliteThingsDatabase::new(f.path()).await.unwrap());
         let cache = Arc::new(ThingsCache::new_default());
         let pre = DefaultPreloader::new(&cache, db);
 
@@ -883,7 +883,7 @@ mod tests {
         crate::test_utils::create_test_database(f.path())
             .await
             .unwrap();
-        let db = Arc::new(crate::ThingsDatabase::new(f.path()).await.unwrap());
+        let db = Arc::new(crate::SqliteThingsDatabase::new(f.path()).await.unwrap());
 
         let config = CacheConfig {
             warming_interval: Duration::from_millis(20),
@@ -924,7 +924,7 @@ mod tests {
         crate::test_utils::create_test_database(f.path())
             .await
             .unwrap();
-        let db = Arc::new(crate::ThingsDatabase::new(f.path()).await.unwrap());
+        let db = Arc::new(crate::SqliteThingsDatabase::new(f.path()).await.unwrap());
 
         let cache = Arc::new(ThingsCache::new_default());
         let preloader = DefaultPreloader::new(&cache, db);

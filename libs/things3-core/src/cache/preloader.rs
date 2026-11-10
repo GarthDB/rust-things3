@@ -29,7 +29,7 @@ use super::ThingsCache;
 /// enqueuing occurs until one of them expires or is invalidated.
 pub struct DefaultPreloader {
     cache: std::sync::Weak<ThingsCache>,
-    db: Arc<crate::database::ThingsDatabase>,
+    db: Arc<crate::database::SqliteThingsDatabase>,
 }
 
 impl DefaultPreloader {
@@ -37,7 +37,10 @@ impl DefaultPreloader {
     /// strong handle to `db`. Wrap in [`Arc`] before registering with
     /// [`ThingsCache::set_preloader`].
     #[must_use]
-    pub fn new(cache: &Arc<ThingsCache>, db: Arc<crate::database::ThingsDatabase>) -> Arc<Self> {
+    pub fn new(
+        cache: &Arc<ThingsCache>,
+        db: Arc<crate::database::SqliteThingsDatabase>,
+    ) -> Arc<Self> {
         Arc::new(Self {
             cache: Arc::downgrade(cache),
             db,

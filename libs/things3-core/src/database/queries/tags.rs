@@ -1,7 +1,6 @@
 #![allow(deprecated)]
-
 use crate::{
-    database::{conversions::safe_timestamp_convert, ThingsDatabase},
+    database::{conversions::safe_timestamp_convert, SqliteThingsDatabase},
     error::{Result as ThingsResult, ThingsError},
     models::ThingsId,
 };
@@ -9,7 +8,7 @@ use chrono::DateTime;
 use sqlx::Row;
 use tracing::instrument;
 
-impl ThingsDatabase {
+impl SqliteThingsDatabase {
     /// Find a tag by normalized title (exact match, case-insensitive)
     ///
     /// # Errors

@@ -1,16 +1,16 @@
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
 use things3_core::test_utils::create_test_database;
-use things3_core::{CreateTaskRequest, ThingsDatabase};
+use things3_core::{CreateTaskRequest, SqliteThingsDatabase};
 use tokio::runtime::Runtime;
 
-fn create_test_db_with_data(task_count: usize) -> (tempfile::NamedTempFile, ThingsDatabase) {
+fn create_test_db_with_data(task_count: usize) -> (tempfile::NamedTempFile, SqliteThingsDatabase) {
     let rt = Runtime::new().unwrap();
     let temp_file = tempfile::NamedTempFile::new().unwrap();
     let db_path = temp_file.path().to_path_buf();
 
     let db = rt.block_on(async {
         create_test_database(&db_path).await.unwrap();
-        let db = ThingsDatabase::new(&db_path).await.unwrap();
+        let db = SqliteThingsDatabase::new(&db_path).await.unwrap();
 
         // Insert test tasks
         for i in 0..task_count {

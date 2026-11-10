@@ -7,7 +7,7 @@ use super::common::create_test_mcp_server;
 use serde_json::json;
 use tempfile::NamedTempFile;
 use things3_cli::mcp::{CallToolRequest, Content, McpError, ThingsMcpServer};
-use things3_core::{config::ThingsConfig, database::ThingsDatabase};
+use things3_core::{config::ThingsConfig, database::SqliteThingsDatabase};
 
 #[tokio::test]
 async fn test_mcp_server_creation() {
@@ -1063,7 +1063,7 @@ async fn test_mcp_server_with_custom_middleware() {
         .await
         .unwrap();
 
-    let db = ThingsDatabase::new(db_path).await.unwrap();
+    let db = SqliteThingsDatabase::new(db_path).await.unwrap();
     let config = ThingsConfig::builder()
         .database_path(db_path)
         .build()

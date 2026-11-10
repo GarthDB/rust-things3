@@ -4,12 +4,12 @@
 
 use sqlx::SqlitePool;
 pub(crate) use things3_cli::mcp::ThingsMcpServer;
-use things3_core::{config::ThingsConfig, database::ThingsDatabase};
+use things3_core::{config::ThingsConfig, database::SqliteThingsDatabase};
 
 /// Create a test MCP server with mock database
 pub(crate) async fn create_test_mcp_server() -> ThingsMcpServer {
     // Use in-memory database for testing
-    let db = ThingsDatabase::from_connection_string("sqlite::memory:")
+    let db = SqliteThingsDatabase::from_connection_string("sqlite::memory:")
         .await
         .unwrap();
 
@@ -21,7 +21,7 @@ pub(crate) async fn create_test_mcp_server() -> ThingsMcpServer {
 }
 
 /// Create the test database schema
-async fn create_test_schema(db: &ThingsDatabase) -> Result<(), Box<dyn std::error::Error>> {
+async fn create_test_schema(db: &SqliteThingsDatabase) -> Result<(), Box<dyn std::error::Error>> {
     let pool = db.pool();
 
     // Create the Things 3 schema

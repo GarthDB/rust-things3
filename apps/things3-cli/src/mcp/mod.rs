@@ -7,8 +7,9 @@ use std::sync::Arc;
 #[cfg(target_os = "macos")]
 use things3_core::AppleScriptBackend;
 use things3_core::{
-    BackupManager, DataExporter, McpServerConfig, MutationBackend, PerformanceMonitor, SqlxBackend,
-    ThingsCache, ThingsConfig, ThingsDatabase, ThingsDatabaseError, ThingsError, ThingsQueryError,
+    BackupManager, DataExporter, McpServerConfig, MutationBackend, PerformanceMonitor,
+    SqliteThingsDatabase, SqlxBackend, ThingsCache, ThingsConfig, ThingsDatabaseError, ThingsError,
+    ThingsQueryError,
 };
 use thiserror::Error;
 use tokio::sync::Mutex;
@@ -551,7 +552,7 @@ pub struct GetPromptResult {
 /// MCP server for Things 3 integration
 pub struct ThingsMcpServer {
     #[allow(dead_code)]
-    pub db: Arc<ThingsDatabase>,
+    pub db: Arc<SqliteThingsDatabase>,
     /// Mutation backend used for all write operations.
     ///
     /// On macOS the default is `AppleScriptBackend` (CulturedCode-supported);
@@ -621,7 +622,7 @@ fn build_jsonrpc_error_response(
 /// # Errors
 /// Returns an error if the server fails to start
 pub async fn start_mcp_server(
-    db: Arc<ThingsDatabase>,
+    db: Arc<SqliteThingsDatabase>,
     config: ThingsConfig,
     unsafe_direct_db: bool,
 ) -> things3_core::Result<()> {
@@ -634,7 +635,7 @@ pub async fn start_mcp_server(
 /// This function is generic over the I/O layer, allowing it to work with both
 /// production stdin/stdout (via `StdIo`) and test mocks (via `MockIo`).
 pub async fn start_mcp_server_generic<I: McpIo>(
-    db: Arc<ThingsDatabase>,
+    db: Arc<SqliteThingsDatabase>,
     config: ThingsConfig,
     mut io: I,
     unsafe_direct_db: bool,
@@ -711,7 +712,7 @@ pub async fn start_mcp_server_generic<I: McpIo>(
 /// # Errors
 /// Returns an error if the server fails to start
 pub async fn start_mcp_server_with_config(
-    db: Arc<ThingsDatabase>,
+    db: Arc<SqliteThingsDatabase>,
     mcp_config: McpServerConfig,
     unsafe_direct_db: bool,
 ) -> things3_core::Result<()> {
@@ -721,7 +722,7 @@ pub async fn start_mcp_server_with_config(
 
 /// Generic MCP server with config implementation that works with any I/O implementation
 pub async fn start_mcp_server_with_config_generic<I: McpIo>(
-    db: Arc<ThingsDatabase>,
+    db: Arc<SqliteThingsDatabase>,
     mcp_config: McpServerConfig,
     mut io: I,
     unsafe_direct_db: bool,
@@ -798,7 +799,7 @@ pub async fn start_mcp_server_with_config_generic<I: McpIo>(
 /// On non-macOS the default is always `SqlxBackend` — there's no Things 3
 /// install to corrupt, and `AppleScriptBackend` is platform-gated.
 fn select_default_backend(
-    db: Arc<ThingsDatabase>,
+    db: Arc<SqliteThingsDatabase>,
     unsafe_direct_db: bool,
 ) -> Arc<dyn MutationBackend> {
     #[cfg(target_os = "macos")]
@@ -839,7 +840,11 @@ fn is_things3_running() -> bool {
 
 impl ThingsMcpServer {
     #[must_use]
-    pub fn new(db: Arc<ThingsDatabase>, config: ThingsConfig, unsafe_direct_db: bool) -> Self {
+    pub fn new(
+        db: Arc<SqliteThingsDatabase>,
+        config: ThingsConfig,
+        unsafe_direct_db: bool,
+    ) -> Self {
         let mutations = select_default_backend(Arc::clone(&db), unsafe_direct_db);
         let mut server = Self::with_mutation_backend(db, mutations, config);
         server.unsafe_direct_db = unsafe_direct_db;
@@ -855,7 +860,7 @@ impl ThingsMcpServer {
     /// `set_unsafe_direct_db` helper.
     #[must_use]
     pub fn with_mutation_backend(
-        db: Arc<ThingsDatabase>,
+        db: Arc<SqliteThingsDatabase>,
         mutations: Arc<dyn MutationBackend>,
         config: ThingsConfig,
     ) -> Self {
@@ -884,7 +889,7 @@ impl ThingsMcpServer {
     /// Create a new MCP server with custom middleware configuration
     #[must_use]
     pub fn with_middleware_config(
-        db: ThingsDatabase,
+        db: SqliteThingsDatabase,
         config: ThingsConfig,
         middleware_config: MiddlewareConfig,
         unsafe_direct_db: bool,
@@ -913,7 +918,7 @@ impl ThingsMcpServer {
     /// Create a new MCP server with comprehensive configuration
     #[must_use]
     pub fn new_with_mcp_config(
-        db: Arc<ThingsDatabase>,
+        db: Arc<SqliteThingsDatabase>,
         config: ThingsConfig,
         mcp_config: McpServerConfig,
         unsafe_direct_db: bool,
@@ -2598,7 +2603,7 @@ mod backend_selection_tests {
         let db = std::thread::spawn(move || {
             tokio::runtime::Runtime::new()
                 .unwrap()
-                .block_on(async { ThingsDatabase::new(&db_path_clone).await.unwrap() })
+                .block_on(async { SqliteThingsDatabase::new(&db_path_clone).await.unwrap() })
         })
         .join()
         .unwrap();

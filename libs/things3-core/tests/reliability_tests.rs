@@ -2,7 +2,7 @@
 
 use std::sync::Arc;
 use things3_core::test_utils::create_test_database;
-use things3_core::{CreateTaskRequest, ThingsDatabase};
+use things3_core::{CreateTaskRequest, SqliteThingsDatabase};
 use tokio::task::JoinSet;
 
 /// Test concurrent read operations
@@ -12,7 +12,7 @@ async fn test_concurrent_reads() {
     let db_path = temp_file.path().to_path_buf();
 
     create_test_database(&db_path).await.unwrap();
-    let db = Arc::new(ThingsDatabase::new(&db_path).await.unwrap());
+    let db = Arc::new(SqliteThingsDatabase::new(&db_path).await.unwrap());
 
     // Create test data
     for i in 0..100 {
@@ -61,7 +61,7 @@ async fn test_concurrent_writes() {
     let db_path = temp_file.path().to_path_buf();
 
     create_test_database(&db_path).await.unwrap();
-    let db = Arc::new(ThingsDatabase::new(&db_path).await.unwrap());
+    let db = Arc::new(SqliteThingsDatabase::new(&db_path).await.unwrap());
 
     // Spawn 10 concurrent write operations
     let mut join_set = JoinSet::new();
@@ -108,7 +108,7 @@ async fn test_concurrent_mixed_operations() {
     let db_path = temp_file.path().to_path_buf();
 
     create_test_database(&db_path).await.unwrap();
-    let db = Arc::new(ThingsDatabase::new(&db_path).await.unwrap());
+    let db = Arc::new(SqliteThingsDatabase::new(&db_path).await.unwrap());
 
     // Create initial data
     for i in 0..50 {
@@ -185,7 +185,7 @@ async fn test_empty_database() {
     let db_path = temp_file.path().to_path_buf();
 
     create_test_database(&db_path).await.unwrap();
-    let db = ThingsDatabase::new(&db_path).await.unwrap();
+    let db = SqliteThingsDatabase::new(&db_path).await.unwrap();
 
     // All queries should succeed (may have test data from schema)
     let _inbox = db.get_inbox(None).await.unwrap();
@@ -217,7 +217,7 @@ async fn test_large_dataset() {
     let db_path = temp_file.path().to_path_buf();
 
     create_test_database(&db_path).await.unwrap();
-    let db = ThingsDatabase::new(&db_path).await.unwrap();
+    let db = SqliteThingsDatabase::new(&db_path).await.unwrap();
 
     // Create 1000 tasks
     for i in 0..1000 {
@@ -261,13 +261,13 @@ async fn test_resource_cleanup() {
 
     // Create and drop multiple database instances
     for _ in 0..10 {
-        let db = ThingsDatabase::new(&db_path).await.unwrap();
+        let db = SqliteThingsDatabase::new(&db_path).await.unwrap();
         let _ = db.get_inbox(None).await.unwrap();
         // db is dropped here, connections should be released
     }
 
     // Final connection should still work
-    let db = ThingsDatabase::new(&db_path).await.unwrap();
+    let db = SqliteThingsDatabase::new(&db_path).await.unwrap();
     let _inbox = db.get_inbox(None).await.unwrap();
     // Just verify it doesn't error (may have test data)
 }
@@ -281,9 +281,9 @@ async fn test_multiple_database_instances() {
     create_test_database(&db_path).await.unwrap();
 
     // Create multiple instances pointing to same database
-    let db1 = Arc::new(ThingsDatabase::new(&db_path).await.unwrap());
-    let db2 = Arc::new(ThingsDatabase::new(&db_path).await.unwrap());
-    let db3 = Arc::new(ThingsDatabase::new(&db_path).await.unwrap());
+    let db1 = Arc::new(SqliteThingsDatabase::new(&db_path).await.unwrap());
+    let db2 = Arc::new(SqliteThingsDatabase::new(&db_path).await.unwrap());
+    let db3 = Arc::new(SqliteThingsDatabase::new(&db_path).await.unwrap());
 
     // Write from db1
     let request = CreateTaskRequest {
@@ -323,7 +323,7 @@ async fn test_error_recovery() {
     let db_path = temp_file.path().to_path_buf();
 
     create_test_database(&db_path).await.unwrap();
-    let db = ThingsDatabase::new(&db_path).await.unwrap();
+    let db = SqliteThingsDatabase::new(&db_path).await.unwrap();
 
     // Try to complete a non-existent task
     let fake_uuid = things3_core::ThingsId::new_v4();

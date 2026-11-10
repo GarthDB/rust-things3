@@ -10,7 +10,7 @@ use serde_json::Value;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Instant;
-use things3_core::ThingsDatabase;
+use things3_core::SqliteThingsDatabase;
 use tracing::{error, info, warn};
 
 /// Test mode selection
@@ -91,7 +91,7 @@ async fn main() -> Result<()> {
 }
 
 struct TestRunner {
-    db: Arc<ThingsDatabase>,
+    db: Arc<SqliteThingsDatabase>,
     verbose: bool,
     #[allow(dead_code)]
     json_output: bool,
@@ -102,7 +102,7 @@ impl TestRunner {
         info!("Setting up test environment...");
 
         // Create database connection in read-only mode
-        let db = ThingsDatabase::new(&db_path).await?;
+        let db = SqliteThingsDatabase::new(&db_path).await?;
 
         Ok(Self {
             db: Arc::new(db),

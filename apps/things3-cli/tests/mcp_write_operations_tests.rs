@@ -1,7 +1,7 @@
 use serde_json::json;
 use tempfile::NamedTempFile;
 use things3_cli::mcp::{CallToolRequest, ThingsMcpServer};
-use things3_core::{test_utils::create_test_database, ThingsConfig, ThingsDatabase};
+use things3_core::{test_utils::create_test_database, SqliteThingsDatabase, ThingsConfig};
 use uuid::Uuid;
 
 // Test harness for MCP server
@@ -15,7 +15,7 @@ impl McpTestHarness {
         let temp_file = NamedTempFile::new().unwrap();
         let db_path = temp_file.path();
         create_test_database(db_path).await.unwrap();
-        let db = ThingsDatabase::new(db_path).await.unwrap();
+        let db = SqliteThingsDatabase::new(db_path).await.unwrap();
         let config = ThingsConfig::default();
         let server = ThingsMcpServer::new(std::sync::Arc::new(db), config, true);
 

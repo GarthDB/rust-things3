@@ -8,7 +8,7 @@ use things3_cli::mcp::start_mcp_server;
 #[cfg(all(feature = "mcp-server", feature = "observability"))]
 use things3_cli::mcp::start_mcp_server_with_config;
 use things3_cli::{start_websocket_server, watch_updates, Cli, Commands};
-use things3_core::{Result, ThingsConfig, ThingsDatabase};
+use things3_core::{Result, SqliteThingsDatabase, ThingsConfig};
 
 #[cfg(all(feature = "mcp-server", feature = "observability"))]
 use things3_core::load_config;
@@ -89,7 +89,7 @@ This flag exists for emergency recovery only and will be removed.
     };
 
     // Create database connection
-    let db = ThingsDatabase::new(config.database_path()).await?;
+    let db = SqliteThingsDatabase::new(config.database_path()).await?;
     let db = Arc::new(db);
 
     match cli.command {
@@ -214,7 +214,7 @@ mod tests {
         let db_path = temp_file.path();
         create_test_database(db_path).await.unwrap();
 
-        let db = ThingsDatabase::new(db_path).await.unwrap();
+        let db = SqliteThingsDatabase::new(db_path).await.unwrap();
 
         // Test inbox command
         let cli = Cli::try_parse_from(["things-cli", "inbox"]).unwrap();
@@ -236,7 +236,7 @@ mod tests {
         let db_path = temp_file.path();
         create_test_database(db_path).await.unwrap();
 
-        let db = ThingsDatabase::new(db_path).await.unwrap();
+        let db = SqliteThingsDatabase::new(db_path).await.unwrap();
 
         // Test today command
         let cli = Cli::try_parse_from(["things-cli", "today"]).unwrap();
@@ -258,7 +258,7 @@ mod tests {
         let db_path = temp_file.path();
         create_test_database(db_path).await.unwrap();
 
-        let db = ThingsDatabase::new(db_path).await.unwrap();
+        let db = SqliteThingsDatabase::new(db_path).await.unwrap();
 
         // Test projects command
         let cli = Cli::try_parse_from(["things-cli", "projects"]).unwrap();
@@ -286,7 +286,7 @@ mod tests {
         let db_path = temp_file.path();
         create_test_database(db_path).await.unwrap();
 
-        let db = ThingsDatabase::new(db_path).await.unwrap();
+        let db = SqliteThingsDatabase::new(db_path).await.unwrap();
 
         // Test areas command
         let cli = Cli::try_parse_from(["things-cli", "areas"]).unwrap();
@@ -313,7 +313,7 @@ mod tests {
         let db_path = temp_file.path();
         create_test_database(db_path).await.unwrap();
 
-        let db = ThingsDatabase::new(db_path).await.unwrap();
+        let db = SqliteThingsDatabase::new(db_path).await.unwrap();
 
         // Test search command
         let cli = Cli::try_parse_from(["things-cli", "search", "test"]).unwrap();
@@ -335,7 +335,7 @@ mod tests {
         let db_path = temp_file.path();
         create_test_database(db_path).await.unwrap();
 
-        let db = ThingsDatabase::new(db_path).await.unwrap();
+        let db = SqliteThingsDatabase::new(db_path).await.unwrap();
 
         // Test health command
         let cli = Cli::try_parse_from(["things-cli", "health"]).unwrap();
@@ -358,7 +358,9 @@ mod tests {
             .database_path(db_path)
             .build()
             .unwrap();
-        let db = ThingsDatabase::new(config.database_path()).await.unwrap();
+        let db = SqliteThingsDatabase::new(config.database_path())
+            .await
+            .unwrap();
 
         // Test MCP command
         let cli = Cli::try_parse_from(["things-cli", "mcp"]).unwrap();
@@ -379,7 +381,7 @@ mod tests {
         let db_path = temp_file.path();
         create_test_database(db_path).await.unwrap();
 
-        let db = ThingsDatabase::new(db_path).await.unwrap();
+        let db = SqliteThingsDatabase::new(db_path).await.unwrap();
 
         // Test with verbose flag
         let cli = Cli::try_parse_from(["things-cli", "--verbose", "inbox"]).unwrap();
@@ -413,7 +415,7 @@ mod tests {
         .unwrap();
         assert_eq!(cli.database, Some(db_path.to_path_buf()));
 
-        let db = ThingsDatabase::new(db_path).await.unwrap();
+        let db = SqliteThingsDatabase::new(db_path).await.unwrap();
 
         match cli.command {
             Commands::Inbox { limit } => {
@@ -437,7 +439,7 @@ mod tests {
         let cli = Cli::try_parse_from(["things-cli", "--fallback-to-default", "inbox"]).unwrap();
         assert!(cli.fallback_to_default);
 
-        let db = ThingsDatabase::new(db_path).await.unwrap();
+        let db = SqliteThingsDatabase::new(db_path).await.unwrap();
 
         match cli.command {
             Commands::Inbox { limit } => {
@@ -457,7 +459,7 @@ mod tests {
         let db_path = temp_file.path();
         create_test_database(db_path).await.unwrap();
 
-        let db = ThingsDatabase::new(db_path).await.unwrap();
+        let db = SqliteThingsDatabase::new(db_path).await.unwrap();
 
         // Test with limit
         let cli = Cli::try_parse_from(["things-cli", "inbox", "--limit", "5"]).unwrap();

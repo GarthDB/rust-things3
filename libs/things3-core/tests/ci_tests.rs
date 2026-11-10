@@ -1,7 +1,7 @@
 //! CI-friendly tests that use mock data when Things 3 is not available
 
 use tempfile::NamedTempFile;
-use things3_core::ThingsDatabase;
+use things3_core::SqliteThingsDatabase;
 
 #[cfg(feature = "test-utils")]
 use things3_core::test_utils;
@@ -18,7 +18,7 @@ async fn test_ci_mock_database() {
     test_utils::create_test_database(db_path).await.unwrap();
 
     // Test that we can connect to the mock database
-    let db = ThingsDatabase::new(db_path).await.unwrap();
+    let db = SqliteThingsDatabase::new(db_path).await.unwrap();
 
     // Test all major functionality with mock data
     test_database_operations(&db);
@@ -27,7 +27,7 @@ async fn test_ci_mock_database() {
 }
 
 /// Test database operations with mock data
-fn test_database_operations(_db: &ThingsDatabase) {
+fn test_database_operations(_db: &SqliteThingsDatabase) {
     // Test basic database connection
     println!("✅ Database connection successful");
 
@@ -43,7 +43,7 @@ async fn test_fallback_to_mock_data() {
     // Use a test database path instead of trying to access the real Things 3 database
     let real_db_path = std::path::Path::new("test_things.db");
 
-    if let Ok(db) = ThingsDatabase::new(real_db_path).await {
+    if let Ok(db) = SqliteThingsDatabase::new(real_db_path).await {
         // Real database available, test with it
         println!("Using real Things 3 database for testing");
         test_database_operations(&db);
@@ -61,7 +61,7 @@ async fn test_fallback_to_mock_data() {
             println!("Testing fallback to mock data (test-utils enabled)");
 
             test_utils::create_test_database(temp_path).await.unwrap();
-            let db = ThingsDatabase::new(temp_path).await.unwrap();
+            let db = SqliteThingsDatabase::new(temp_path).await.unwrap();
             test_database_operations(&db);
 
             println!("✅ Fallback to mock data successful");
@@ -72,9 +72,9 @@ async fn test_fallback_to_mock_data() {
             // Without test-utils: verify we can handle databases gracefully
             println!("Testing database handling without test-utils");
 
-            // ThingsDatabase::new() may succeed (SQLite can open empty files)
+            // SqliteThingsDatabase::new() may succeed (SQLite can open empty files)
             // but queries should fail gracefully on an invalid database
-            let result = ThingsDatabase::new(temp_path).await;
+            let result = SqliteThingsDatabase::new(temp_path).await;
 
             match result {
                 Ok(db) => {

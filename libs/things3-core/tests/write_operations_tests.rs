@@ -1,6 +1,6 @@
 use chrono::NaiveDate;
 use things3_core::{
-    CreateTaskRequest, TaskStatus, TaskType, ThingsDatabase, ThingsId, UpdateTaskRequest,
+    CreateTaskRequest, SqliteThingsDatabase, TaskStatus, TaskType, ThingsId, UpdateTaskRequest,
 };
 
 #[cfg(feature = "test-utils")]
@@ -19,7 +19,7 @@ async fn test_create_task_minimal_fields() {
     let temp_file = NamedTempFile::new().unwrap();
     let db_path = temp_file.path();
     create_test_database(db_path).await.unwrap();
-    let db = ThingsDatabase::new(db_path).await.unwrap();
+    let db = SqliteThingsDatabase::new(db_path).await.unwrap();
 
     let request = CreateTaskRequest {
         title: "Test Task".to_string(),
@@ -47,7 +47,7 @@ async fn test_create_task_all_fields() {
     let temp_file = NamedTempFile::new().unwrap();
     let db_path = temp_file.path();
     create_test_database(db_path).await.unwrap();
-    let db = ThingsDatabase::new(db_path).await.unwrap();
+    let db = SqliteThingsDatabase::new(db_path).await.unwrap();
 
     // First create a project to reference
     let project_request = CreateTaskRequest {
@@ -91,7 +91,7 @@ async fn test_create_task_returns_valid_uuid() {
     let temp_file = NamedTempFile::new().unwrap();
     let db_path = temp_file.path();
     create_test_database(db_path).await.unwrap();
-    let db = ThingsDatabase::new(db_path).await.unwrap();
+    let db = SqliteThingsDatabase::new(db_path).await.unwrap();
 
     let request = CreateTaskRequest {
         title: "UUID Test Task".to_string(),
@@ -125,7 +125,7 @@ async fn test_create_task_appears_in_database() {
     let temp_file = NamedTempFile::new().unwrap();
     let db_path = temp_file.path();
     create_test_database(db_path).await.unwrap();
-    let db = ThingsDatabase::new(db_path).await.unwrap();
+    let db = SqliteThingsDatabase::new(db_path).await.unwrap();
 
     let request = CreateTaskRequest {
         title: "Verifiable Task".to_string(),
@@ -155,7 +155,7 @@ async fn test_create_task_timestamps_set() {
     let temp_file = NamedTempFile::new().unwrap();
     let db_path = temp_file.path();
     create_test_database(db_path).await.unwrap();
-    let db = ThingsDatabase::new(db_path).await.unwrap();
+    let db = SqliteThingsDatabase::new(db_path).await.unwrap();
 
     let request = CreateTaskRequest {
         title: "Timestamp Test".to_string(),
@@ -186,7 +186,7 @@ async fn test_create_task_with_invalid_project_uuid() {
     let temp_file = NamedTempFile::new().unwrap();
     let db_path = temp_file.path();
     create_test_database(db_path).await.unwrap();
-    let db = ThingsDatabase::new(db_path).await.unwrap();
+    let db = SqliteThingsDatabase::new(db_path).await.unwrap();
 
     let invalid_uuid = ThingsId::new_v4();
     let request = CreateTaskRequest {
@@ -212,7 +212,7 @@ async fn test_create_task_with_invalid_area_uuid() {
     let temp_file = NamedTempFile::new().unwrap();
     let db_path = temp_file.path();
     create_test_database(db_path).await.unwrap();
-    let db = ThingsDatabase::new(db_path).await.unwrap();
+    let db = SqliteThingsDatabase::new(db_path).await.unwrap();
 
     let invalid_uuid = ThingsId::new_v4();
     let request = CreateTaskRequest {
@@ -238,7 +238,7 @@ async fn test_create_task_with_invalid_parent_uuid() {
     let temp_file = NamedTempFile::new().unwrap();
     let db_path = temp_file.path();
     create_test_database(db_path).await.unwrap();
-    let db = ThingsDatabase::new(db_path).await.unwrap();
+    let db = SqliteThingsDatabase::new(db_path).await.unwrap();
 
     let invalid_uuid = ThingsId::new_v4();
     let request = CreateTaskRequest {
@@ -264,7 +264,7 @@ async fn test_create_task_with_valid_project() {
     let temp_file = NamedTempFile::new().unwrap();
     let db_path = temp_file.path();
     create_test_database(db_path).await.unwrap();
-    let db = ThingsDatabase::new(db_path).await.unwrap();
+    let db = SqliteThingsDatabase::new(db_path).await.unwrap();
 
     // Create a project first
     let project_request = CreateTaskRequest {
@@ -305,7 +305,7 @@ async fn test_create_task_with_valid_dates() {
     let temp_file = NamedTempFile::new().unwrap();
     let db_path = temp_file.path();
     create_test_database(db_path).await.unwrap();
-    let db = ThingsDatabase::new(db_path).await.unwrap();
+    let db = SqliteThingsDatabase::new(db_path).await.unwrap();
 
     let request = CreateTaskRequest {
         title: "Task with Dates".to_string(),
@@ -330,7 +330,7 @@ async fn test_create_task_type_todo() {
     let temp_file = NamedTempFile::new().unwrap();
     let db_path = temp_file.path();
     create_test_database(db_path).await.unwrap();
-    let db = ThingsDatabase::new(db_path).await.unwrap();
+    let db = SqliteThingsDatabase::new(db_path).await.unwrap();
 
     let request = CreateTaskRequest {
         title: "Todo Task".to_string(),
@@ -355,7 +355,7 @@ async fn test_create_task_type_project() {
     let temp_file = NamedTempFile::new().unwrap();
     let db_path = temp_file.path();
     create_test_database(db_path).await.unwrap();
-    let db = ThingsDatabase::new(db_path).await.unwrap();
+    let db = SqliteThingsDatabase::new(db_path).await.unwrap();
 
     let request = CreateTaskRequest {
         title: "Project Task".to_string(),
@@ -380,7 +380,7 @@ async fn test_create_task_type_heading() {
     let temp_file = NamedTempFile::new().unwrap();
     let db_path = temp_file.path();
     create_test_database(db_path).await.unwrap();
-    let db = ThingsDatabase::new(db_path).await.unwrap();
+    let db = SqliteThingsDatabase::new(db_path).await.unwrap();
 
     let request = CreateTaskRequest {
         title: "Heading Task".to_string(),
@@ -405,7 +405,7 @@ async fn test_create_task_all_statuses() {
     let temp_file = NamedTempFile::new().unwrap();
     let db_path = temp_file.path();
     create_test_database(db_path).await.unwrap();
-    let db = ThingsDatabase::new(db_path).await.unwrap();
+    let db = SqliteThingsDatabase::new(db_path).await.unwrap();
 
     let statuses = vec![
         TaskStatus::Incomplete,
@@ -442,7 +442,7 @@ async fn test_create_task_with_empty_title_succeeds() {
     let temp_file = NamedTempFile::new().unwrap();
     let db_path = temp_file.path();
     create_test_database(db_path).await.unwrap();
-    let db = ThingsDatabase::new(db_path).await.unwrap();
+    let db = SqliteThingsDatabase::new(db_path).await.unwrap();
 
     // Empty title is technically allowed by the database
     let request = CreateTaskRequest {
@@ -472,7 +472,7 @@ async fn test_update_task_title() {
     let temp_file = NamedTempFile::new().unwrap();
     let db_path = temp_file.path();
     create_test_database(db_path).await.unwrap();
-    let db = ThingsDatabase::new(db_path).await.unwrap();
+    let db = SqliteThingsDatabase::new(db_path).await.unwrap();
 
     // Create task
     let create_request = CreateTaskRequest {
@@ -512,7 +512,7 @@ async fn test_update_task_notes() {
     let temp_file = NamedTempFile::new().unwrap();
     let db_path = temp_file.path();
     create_test_database(db_path).await.unwrap();
-    let db = ThingsDatabase::new(db_path).await.unwrap();
+    let db = SqliteThingsDatabase::new(db_path).await.unwrap();
 
     // Create task
     let create_request = CreateTaskRequest {
@@ -552,7 +552,7 @@ async fn test_update_task_dates() {
     let temp_file = NamedTempFile::new().unwrap();
     let db_path = temp_file.path();
     create_test_database(db_path).await.unwrap();
-    let db = ThingsDatabase::new(db_path).await.unwrap();
+    let db = SqliteThingsDatabase::new(db_path).await.unwrap();
 
     // Create task
     let create_request = CreateTaskRequest {
@@ -592,7 +592,7 @@ async fn test_update_task_project_assignment() {
     let temp_file = NamedTempFile::new().unwrap();
     let db_path = temp_file.path();
     create_test_database(db_path).await.unwrap();
-    let db = ThingsDatabase::new(db_path).await.unwrap();
+    let db = SqliteThingsDatabase::new(db_path).await.unwrap();
 
     // Create project
     let project_request = CreateTaskRequest {
@@ -647,7 +647,7 @@ async fn test_update_task_status() {
     let temp_file = NamedTempFile::new().unwrap();
     let db_path = temp_file.path();
     create_test_database(db_path).await.unwrap();
-    let db = ThingsDatabase::new(db_path).await.unwrap();
+    let db = SqliteThingsDatabase::new(db_path).await.unwrap();
 
     // Create task
     let create_request = CreateTaskRequest {
@@ -687,7 +687,7 @@ async fn test_update_task_tags() {
     let temp_file = NamedTempFile::new().unwrap();
     let db_path = temp_file.path();
     create_test_database(db_path).await.unwrap();
-    let db = ThingsDatabase::new(db_path).await.unwrap();
+    let db = SqliteThingsDatabase::new(db_path).await.unwrap();
 
     // Create task
     let create_request = CreateTaskRequest {
@@ -727,7 +727,7 @@ async fn test_update_task_partial() {
     let temp_file = NamedTempFile::new().unwrap();
     let db_path = temp_file.path();
     create_test_database(db_path).await.unwrap();
-    let db = ThingsDatabase::new(db_path).await.unwrap();
+    let db = SqliteThingsDatabase::new(db_path).await.unwrap();
 
     // Create task with multiple fields
     let create_request = CreateTaskRequest {
@@ -767,7 +767,7 @@ async fn test_update_nonexistent_task() {
     let temp_file = NamedTempFile::new().unwrap();
     let db_path = temp_file.path();
     create_test_database(db_path).await.unwrap();
-    let db = ThingsDatabase::new(db_path).await.unwrap();
+    let db = SqliteThingsDatabase::new(db_path).await.unwrap();
 
     let nonexistent_uuid = ThingsId::new_v4();
     let update_request = UpdateTaskRequest {
@@ -795,7 +795,7 @@ async fn test_update_task_with_no_fields() {
     let temp_file = NamedTempFile::new().unwrap();
     let db_path = temp_file.path();
     create_test_database(db_path).await.unwrap();
-    let db = ThingsDatabase::new(db_path).await.unwrap();
+    let db = SqliteThingsDatabase::new(db_path).await.unwrap();
 
     // Create a task first
     let create_request = CreateTaskRequest {
@@ -835,7 +835,7 @@ async fn test_update_task_with_invalid_project_uuid() {
     let temp_file = NamedTempFile::new().unwrap();
     let db_path = temp_file.path();
     create_test_database(db_path).await.unwrap();
-    let db = ThingsDatabase::new(db_path).await.unwrap();
+    let db = SqliteThingsDatabase::new(db_path).await.unwrap();
 
     // Create a task first
     let create_request = CreateTaskRequest {
@@ -879,7 +879,7 @@ async fn test_update_task_with_invalid_area_uuid() {
     let temp_file = NamedTempFile::new().unwrap();
     let db_path = temp_file.path();
     create_test_database(db_path).await.unwrap();
-    let db = ThingsDatabase::new(db_path).await.unwrap();
+    let db = SqliteThingsDatabase::new(db_path).await.unwrap();
 
     // Create a task first
     let create_request = CreateTaskRequest {
@@ -927,7 +927,7 @@ async fn test_create_task_very_long_title() {
     let temp_file = NamedTempFile::new().unwrap();
     let db_path = temp_file.path();
     create_test_database(db_path).await.unwrap();
-    let db = ThingsDatabase::new(db_path).await.unwrap();
+    let db = SqliteThingsDatabase::new(db_path).await.unwrap();
 
     let long_title = "A".repeat(1000);
     let request = CreateTaskRequest {
@@ -953,7 +953,7 @@ async fn test_create_task_special_characters() {
     let temp_file = NamedTempFile::new().unwrap();
     let db_path = temp_file.path();
     create_test_database(db_path).await.unwrap();
-    let db = ThingsDatabase::new(db_path).await.unwrap();
+    let db = SqliteThingsDatabase::new(db_path).await.unwrap();
 
     let special_title = "Task with émojis 🎉 and symbols @#$%";
     let request = CreateTaskRequest {
@@ -979,7 +979,7 @@ async fn test_create_task_empty_vs_null_notes() {
     let temp_file = NamedTempFile::new().unwrap();
     let db_path = temp_file.path();
     create_test_database(db_path).await.unwrap();
-    let db = ThingsDatabase::new(db_path).await.unwrap();
+    let db = SqliteThingsDatabase::new(db_path).await.unwrap();
 
     // Task with null notes
     let request1 = CreateTaskRequest {
@@ -1020,7 +1020,7 @@ async fn test_create_subtask() {
     let temp_file = NamedTempFile::new().unwrap();
     let db_path = temp_file.path();
     create_test_database(db_path).await.unwrap();
-    let db = ThingsDatabase::new(db_path).await.unwrap();
+    let db = SqliteThingsDatabase::new(db_path).await.unwrap();
 
     // Create parent task
     let parent_request = CreateTaskRequest {
@@ -1061,7 +1061,7 @@ async fn test_create_task_multiple_tags() {
     let temp_file = NamedTempFile::new().unwrap();
     let db_path = temp_file.path();
     create_test_database(db_path).await.unwrap();
-    let db = ThingsDatabase::new(db_path).await.unwrap();
+    let db = SqliteThingsDatabase::new(db_path).await.unwrap();
 
     let request = CreateTaskRequest {
         title: "Task with Multiple Tags".to_string(),
@@ -1091,7 +1091,7 @@ async fn test_concurrent_create_operations() {
     let temp_file = NamedTempFile::new().unwrap();
     let db_path = temp_file.path();
     create_test_database(db_path).await.unwrap();
-    let db = std::sync::Arc::new(ThingsDatabase::new(db_path).await.unwrap());
+    let db = std::sync::Arc::new(SqliteThingsDatabase::new(db_path).await.unwrap());
 
     let mut handles = vec![];
 
@@ -1127,7 +1127,7 @@ async fn test_update_task_remove_optional_fields() {
     let temp_file = NamedTempFile::new().unwrap();
     let db_path = temp_file.path();
     create_test_database(db_path).await.unwrap();
-    let db = ThingsDatabase::new(db_path).await.unwrap();
+    let db = SqliteThingsDatabase::new(db_path).await.unwrap();
 
     // Create task with notes
     let create_request = CreateTaskRequest {

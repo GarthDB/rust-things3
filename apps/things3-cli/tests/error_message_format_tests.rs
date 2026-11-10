@@ -3,13 +3,13 @@
 //! Ensures all error messages follow the "Failed to {operation}: {error}" format
 
 use things3_cli::mcp::{CallToolRequest, McpError, ThingsMcpServer};
-use things3_core::{config::ThingsConfig, database::ThingsDatabase};
+use things3_core::{config::ThingsConfig, database::SqliteThingsDatabase};
 
 /// Create a test MCP server with an invalid/closed database to trigger errors
 async fn create_invalid_mcp_server() -> ThingsMcpServer {
     // Create an in-memory database but don't set up schema
     // This will cause database operations to fail
-    let db = ThingsDatabase::from_connection_string("sqlite::memory:")
+    let db = SqliteThingsDatabase::from_connection_string("sqlite::memory:")
         .await
         .unwrap();
 

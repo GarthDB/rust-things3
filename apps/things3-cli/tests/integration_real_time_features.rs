@@ -28,7 +28,9 @@ async fn test_progress_tracking_integration() {
         .await
         .unwrap();
 
-    let db = things3_core::ThingsDatabase::new(db_path).await.unwrap();
+    let db = things3_core::SqliteThingsDatabase::new(db_path)
+        .await
+        .unwrap();
 
     // Test progress tracking with bulk operations
     let manager = things3_cli::bulk_operations::BulkOperationsManager::new();

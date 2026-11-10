@@ -4,6 +4,7 @@ pub(crate) mod conversions;
 mod core;
 pub mod date_utils;
 mod health;
+mod impl_trait;
 pub mod mappers;
 mod mutations;
 pub(crate) mod path_discovery;
@@ -14,10 +15,14 @@ pub(crate) mod stats;
 pub mod tag_utils;
 #[cfg(test)]
 mod tests;
+pub mod traits;
 pub mod validators;
 
-// Re-export everything from core for backward compatibility
-pub use core::*;
+// Re-export the concrete SQLite implementation
+pub use core::SqliteThingsDatabase;
+
+// Re-export the database trait
+pub use traits::ThingsDatabase;
 
 // Re-export conversions
 pub use conversions::{

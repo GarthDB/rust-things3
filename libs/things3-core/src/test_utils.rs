@@ -3,7 +3,7 @@
 
 use crate::{
     models::{Area, CreateTaskRequest, Project, Task, TaskStatus, TaskType, ThingsId},
-    ThingsDatabase,
+    SqliteThingsDatabase,
 };
 use chrono::{NaiveDate, Utc};
 use std::path::Path;
@@ -815,18 +815,18 @@ mod tests {
 ///
 /// # Returns
 ///
-/// A tuple of (`ThingsDatabase`, `NamedTempFile`) where the file must be kept
+/// A tuple of (`SqliteThingsDatabase`, `NamedTempFile`) where the file must be kept
 /// alive to prevent premature deletion.
 ///
 /// # Errors
 ///
 /// Returns an error if database creation or connection fails
 pub async fn create_test_database_and_connect(
-) -> Result<(ThingsDatabase, NamedTempFile), crate::ThingsError> {
+) -> Result<(SqliteThingsDatabase, NamedTempFile), crate::ThingsError> {
     let temp_file = NamedTempFile::new()?;
     let db_path = temp_file.path();
     create_test_database(db_path).await?;
-    let db = ThingsDatabase::new(db_path).await?;
+    let db = SqliteThingsDatabase::new(db_path).await?;
     Ok((db, temp_file))
 }
 

@@ -12,13 +12,13 @@ async fn test_database_connection() {
 
     // This will fail because the database doesn't exist yet
     // In a real implementation, we'd need to create the schema first
-    let result = super::ThingsDatabase::new(&db_path).await;
+    let result = super::SqliteThingsDatabase::new(&db_path).await;
     assert!(result.is_err());
 }
 
 #[tokio::test]
 async fn test_connection_string() {
-    let result = super::ThingsDatabase::from_connection_string("sqlite::memory:").await;
+    let result = super::SqliteThingsDatabase::from_connection_string("sqlite::memory:").await;
     assert!(result.is_ok());
 }
 
@@ -41,7 +41,7 @@ async fn test_database_new_with_config() {
         sqlite_optimizations: SqliteOptimizations::default(),
     };
 
-    let database = ThingsDatabase::new_with_config(db_path, config)
+    let database = SqliteThingsDatabase::new_with_config(db_path, config)
         .await
         .unwrap();
     let pool = database.pool();
@@ -51,7 +51,7 @@ async fn test_database_new_with_config() {
 #[tokio::test]
 async fn test_database_error_handling_invalid_path() {
     // Test with non-existent database path
-    let result = ThingsDatabase::new(Path::new("/non/existent/path.db")).await;
+    let result = SqliteThingsDatabase::new(Path::new("/non/existent/path.db")).await;
     assert!(result.is_err(), "Should fail with non-existent path");
 }
 
@@ -63,7 +63,7 @@ async fn test_database_get_stats() {
     crate::test_utils::create_test_database(db_path)
         .await
         .unwrap();
-    let database = ThingsDatabase::new(db_path).await.unwrap();
+    let database = SqliteThingsDatabase::new(db_path).await.unwrap();
 
     let stats = database.get_stats().await.unwrap();
     assert!(stats.task_count > 0, "Should have test tasks");
@@ -79,7 +79,7 @@ async fn test_database_comprehensive_health_check() {
     crate::test_utils::create_test_database(db_path)
         .await
         .unwrap();
-    let database = ThingsDatabase::new(db_path).await.unwrap();
+    let database = SqliteThingsDatabase::new(db_path).await.unwrap();
 
     let health = database.comprehensive_health_check().await.unwrap();
     assert!(health.overall_healthy, "Database should be healthy");
@@ -97,12 +97,12 @@ mod query_tasks_tests {
     use crate::query::TaskQueryBuilder;
     use tempfile::NamedTempFile;
 
-    async fn open_test_db() -> (ThingsDatabase, NamedTempFile) {
+    async fn open_test_db() -> (SqliteThingsDatabase, NamedTempFile) {
         let f = NamedTempFile::new().unwrap();
         crate::test_utils::create_test_database(f.path())
             .await
             .unwrap();
-        let db = ThingsDatabase::new(f.path()).await.unwrap();
+        let db = SqliteThingsDatabase::new(f.path()).await.unwrap();
         (db, f)
     }
 
@@ -185,7 +185,7 @@ mod query_tasks_tests {
         .unwrap();
         pool.close().await;
 
-        let db = ThingsDatabase::new(f.path()).await.unwrap();
+        let db = SqliteThingsDatabase::new(f.path()).await.unwrap();
 
         // Default query must not surface the trashed row
         let active = db.query_tasks(&TaskFilters::default()).await.unwrap();
@@ -263,7 +263,7 @@ mod query_tasks_tests {
     /// Insert a TMTask row with optional notes and tags.
     /// Used to seed tests; bypasses create_test_database which inserts only untagged rows.
     async fn insert_task(
-        db: &ThingsDatabase,
+        db: &SqliteThingsDatabase,
         title: &str,
         notes: Option<&str>,
         tags: &[&str],
@@ -320,12 +320,21 @@ mod query_tasks_tests {
         task_id
     }
 
-    async fn insert_task_with_tags(db: &ThingsDatabase, title: &str, tags: &[&str]) -> ThingsId {
+    async fn insert_task_with_tags(
+        db: &SqliteThingsDatabase,
+        title: &str,
+        tags: &[&str],
+    ) -> ThingsId {
         insert_task(db, title, None, tags).await
     }
 
-    async fn open_db_with_tagged_rows(
-    ) -> (ThingsDatabase, NamedTempFile, ThingsId, ThingsId, ThingsId) {
+    async fn open_db_with_tagged_rows() -> (
+        SqliteThingsDatabase,
+        NamedTempFile,
+        ThingsId,
+        ThingsId,
+        ThingsId,
+    ) {
         let (db, f) = open_test_db().await;
         let a = insert_task_with_tags(&db, "task-a", &["a"]).await;
         let b = insert_task_with_tags(&db, "task-b", &["b"]).await;
@@ -548,7 +557,7 @@ mod query_tasks_tests {
     }
 
     async fn insert_task_with_status(
-        db: &ThingsDatabase,
+        db: &SqliteThingsDatabase,
         title: &str,
         status: TaskStatus,
     ) -> ThingsId {
@@ -574,7 +583,7 @@ mod query_tasks_tests {
     }
 
     async fn insert_task_with_type(
-        db: &ThingsDatabase,
+        db: &SqliteThingsDatabase,
         title: &str,
         task_type: crate::models::TaskType,
     ) -> ThingsId {

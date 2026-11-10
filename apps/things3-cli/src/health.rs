@@ -66,7 +66,7 @@ async fn metrics_endpoint(State(state): State<AppState>) -> Result<String, Statu
 use axum::{extract::State, http::StatusCode, response::Json, routing::get, Router};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
-use things3_core::{ObservabilityManager, ThingsDatabase};
+use things3_core::{ObservabilityManager, SqliteThingsDatabase};
 use tokio::net::TcpListener;
 use tower_http::cors::CorsLayer;
 use tracing::{info, instrument};
@@ -76,7 +76,7 @@ use tracing::{info, instrument};
 #[derive(Clone)]
 pub struct AppState {
     pub observability: Arc<ObservabilityManager>,
-    pub database: Arc<ThingsDatabase>,
+    pub database: Arc<SqliteThingsDatabase>,
 }
 
 /// Health response
@@ -103,7 +103,7 @@ impl HealthServer {
     pub fn new(
         port: u16,
         observability: Arc<ObservabilityManager>,
-        database: Arc<ThingsDatabase>,
+        database: Arc<SqliteThingsDatabase>,
     ) -> Self {
         Self {
             port,
@@ -143,7 +143,7 @@ impl HealthServer {
 pub struct HealthServer {
     port: u16,
     observability: Arc<ObservabilityManager>,
-    database: Arc<ThingsDatabase>,
+    database: Arc<SqliteThingsDatabase>,
 }
 
 /// Start the health check server
@@ -154,7 +154,7 @@ pub struct HealthServer {
 pub async fn start_health_server(
     port: u16,
     observability: Arc<ObservabilityManager>,
-    database: Arc<ThingsDatabase>,
+    database: Arc<SqliteThingsDatabase>,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let server = HealthServer::new(port, observability, database);
     server.start().await
@@ -172,7 +172,8 @@ mod tests {
         let db_path = temp_file.path();
 
         let rt = tokio::runtime::Runtime::new().unwrap();
-        let database = Arc::new(rt.block_on(async { ThingsDatabase::new(db_path).await.unwrap() }));
+        let database =
+            Arc::new(rt.block_on(async { SqliteThingsDatabase::new(db_path).await.unwrap() }));
 
         let observability = Arc::new(
             things3_core::ObservabilityManager::new(things3_core::ObservabilityConfig::default())
@@ -265,7 +266,8 @@ mod tests {
         let db_path = temp_file.path();
 
         let rt = tokio::runtime::Runtime::new().unwrap();
-        let database = Arc::new(rt.block_on(async { ThingsDatabase::new(db_path).await.unwrap() }));
+        let database =
+            Arc::new(rt.block_on(async { SqliteThingsDatabase::new(db_path).await.unwrap() }));
 
         let observability = Arc::new(
             things3_core::ObservabilityManager::new(things3_core::ObservabilityConfig::default())
@@ -287,7 +289,8 @@ mod tests {
         let db_path = temp_file.path();
 
         let rt = tokio::runtime::Runtime::new().unwrap();
-        let database = Arc::new(rt.block_on(async { ThingsDatabase::new(db_path).await.unwrap() }));
+        let database =
+            Arc::new(rt.block_on(async { SqliteThingsDatabase::new(db_path).await.unwrap() }));
 
         let observability = Arc::new(
             things3_core::ObservabilityManager::new(things3_core::ObservabilityConfig::default())

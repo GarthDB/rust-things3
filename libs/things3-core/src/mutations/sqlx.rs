@@ -1,6 +1,6 @@
 //! `SqlxBackend` — direct-SQLite implementation of [`MutationBackend`].
 //!
-//! Forwards every call to the corresponding method on [`ThingsDatabase`]. Behavior
+//! Forwards every call to the corresponding method on [`SqliteThingsDatabase`]. Behavior
 //! is byte-for-byte identical to calling the database directly. Kept around after
 //! AppleScript becomes the default (#125) for offline tests, CI, and the
 //! `--unsafe-direct-db` opt-in.
@@ -10,7 +10,7 @@ use std::sync::Arc;
 use async_trait::async_trait;
 
 use super::MutationBackend;
-use crate::database::ThingsDatabase;
+use crate::database::SqliteThingsDatabase;
 use crate::error::Result as ThingsResult;
 use crate::models::{
     BulkCompleteRequest, BulkCreateTasksRequest, BulkDeleteRequest, BulkMoveRequest,
@@ -21,12 +21,12 @@ use crate::models::{
 };
 
 pub struct SqlxBackend {
-    db: Arc<ThingsDatabase>,
+    db: Arc<SqliteThingsDatabase>,
 }
 
 impl SqlxBackend {
     #[must_use]
-    pub fn new(db: Arc<ThingsDatabase>) -> Self {
+    pub fn new(db: Arc<SqliteThingsDatabase>) -> Self {
         Self { db }
     }
 }

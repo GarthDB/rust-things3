@@ -1,18 +1,19 @@
-//! Health check and metrics methods for `ThingsDatabase`.
 #![allow(deprecated)]
+//! Health check and metrics methods for `SqliteThingsDatabase`.
+
+use chrono::Utc;
+use tracing::{debug, error, instrument};
 
 use crate::{
     database::{
         pool::{ComprehensiveHealthStatus, PoolHealthStatus, PoolMetrics},
         stats::DatabaseStats,
-        ThingsDatabase,
+        SqliteThingsDatabase,
     },
     error::{Result as ThingsResult, ThingsError},
 };
-use chrono::Utc;
-use tracing::{debug, error, instrument};
 
-impl ThingsDatabase {
+impl SqliteThingsDatabase {
     /// Check if the database is connected
     #[instrument]
     pub async fn is_connected(&self) -> bool {

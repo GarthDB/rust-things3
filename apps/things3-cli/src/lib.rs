@@ -24,7 +24,7 @@ pub mod metrics;
 pub mod monitoring;
 
 pub mod progress;
-// pub mod thread_safe_db; // Removed - ThingsDatabase is now Send + Sync
+// pub mod thread_safe_db; // Removed - SqliteThingsDatabase is now Send + Sync
 pub mod websocket;
 
 use crate::events::EventBroadcaster;
@@ -33,7 +33,7 @@ use clap::{Parser, Subcommand};
 use std::io::Write;
 use std::path::PathBuf;
 use std::sync::Arc;
-use things3_core::{Result, ThingsDatabase};
+use things3_core::{Result, SqliteThingsDatabase};
 
 #[derive(Parser, Debug)]
 #[command(name = "things3")]
@@ -170,11 +170,11 @@ pub enum BulkOperation {
 ///
 /// ```no_run
 /// use things3_cli::print_tasks;
-/// use things3_core::ThingsDatabase;
+/// use things3_core::SqliteThingsDatabase;
 /// use std::io;
 ///
 /// # async fn example() -> things3_core::Result<()> {
-/// let db = ThingsDatabase::new(std::path::Path::new("test.db")).await?;
+/// let db = SqliteThingsDatabase::new(std::path::Path::new("test.db")).await?;
 /// let tasks = db.get_inbox(Some(10)).await?;
 /// print_tasks(&db, &tasks, &mut io::stdout())?;
 /// # Ok(())
@@ -184,7 +184,7 @@ pub enum BulkOperation {
 /// # Errors
 /// Returns an error if writing fails
 pub fn print_tasks<W: Write>(
-    _db: &ThingsDatabase,
+    _db: &SqliteThingsDatabase,
     tasks: &[things3_core::Task],
     writer: &mut W,
 ) -> Result<()> {
@@ -216,11 +216,11 @@ pub fn print_tasks<W: Write>(
 ///
 /// ```no_run
 /// use things3_cli::print_projects;
-/// use things3_core::ThingsDatabase;
+/// use things3_core::SqliteThingsDatabase;
 /// use std::io;
 ///
 /// # async fn example() -> things3_core::Result<()> {
-/// let db = ThingsDatabase::new(std::path::Path::new("test.db")).await?;
+/// let db = SqliteThingsDatabase::new(std::path::Path::new("test.db")).await?;
 /// let projects = db.get_projects(None).await?;
 /// print_projects(&db, &projects, &mut io::stdout())?;
 /// # Ok(())
@@ -230,7 +230,7 @@ pub fn print_tasks<W: Write>(
 /// # Errors
 /// Returns an error if writing fails
 pub fn print_projects<W: Write>(
-    _db: &ThingsDatabase,
+    _db: &SqliteThingsDatabase,
     projects: &[things3_core::Project],
     writer: &mut W,
 ) -> Result<()> {
@@ -262,11 +262,11 @@ pub fn print_projects<W: Write>(
 ///
 /// ```no_run
 /// use things3_cli::print_areas;
-/// use things3_core::ThingsDatabase;
+/// use things3_core::SqliteThingsDatabase;
 /// use std::io;
 ///
 /// # async fn example() -> things3_core::Result<()> {
-/// let db = ThingsDatabase::new(std::path::Path::new("test.db")).await?;
+/// let db = SqliteThingsDatabase::new(std::path::Path::new("test.db")).await?;
 /// let areas = db.get_areas().await?;
 /// print_areas(&db, &areas, &mut io::stdout())?;
 /// # Ok(())
@@ -276,7 +276,7 @@ pub fn print_projects<W: Write>(
 /// # Errors
 /// Returns an error if writing fails
 pub fn print_areas<W: Write>(
-    _db: &ThingsDatabase,
+    _db: &SqliteThingsDatabase,
     areas: &[things3_core::Area],
     writer: &mut W,
 ) -> Result<()> {
@@ -305,10 +305,10 @@ pub fn print_areas<W: Write>(
 ///
 /// ```no_run
 /// use things3_cli::health_check;
-/// use things3_core::ThingsDatabase;
+/// use things3_core::SqliteThingsDatabase;
 ///
 /// # async fn example() -> things3_core::Result<()> {
-/// let db = ThingsDatabase::new(std::path::Path::new("test.db")).await?;
+/// let db = SqliteThingsDatabase::new(std::path::Path::new("test.db")).await?;
 /// health_check(&db).await?;
 /// # Ok(())
 /// # }
@@ -316,7 +316,7 @@ pub fn print_areas<W: Write>(
 ///
 /// # Errors
 /// Returns an error if the database is not accessible
-pub async fn health_check(db: &ThingsDatabase) -> Result<()> {
+pub async fn health_check(db: &SqliteThingsDatabase) -> Result<()> {
     println!("🔍 Checking Things 3 database connection...");
 
     // Check if database is connected
@@ -343,7 +343,7 @@ pub async fn health_check(db: &ThingsDatabase) -> Result<()> {
 // ///
 // /// # Errors
 // /// Returns an error if the server fails to start
-// pub fn start_mcp_server(db: Arc<SqlxThingsDatabase>, config: ThingsConfig) -> Result<()> {
+// pub fn start_mcp_server(db: Arc<SqlxSqliteThingsDatabase>, config: ThingsConfig) -> Result<()> {
 //     println!("🚀 Starting MCP server...");
 //     println!("🚧 MCP server is temporarily disabled during SQLx migration");
 //     Err(things3_core::ThingsError::unknown("MCP server temporarily disabled".to_string()))
@@ -419,7 +419,7 @@ mod tests {
         let db_path = temp_file.path();
         let rt = Runtime::new().unwrap();
         rt.block_on(async { create_test_database(db_path).await.unwrap() });
-        let db = rt.block_on(async { ThingsDatabase::new(db_path).await.unwrap() });
+        let db = rt.block_on(async { SqliteThingsDatabase::new(db_path).await.unwrap() });
         let result = rt.block_on(async { health_check(&db).await });
         assert!(result.is_ok());
     }
@@ -430,7 +430,7 @@ mod tests {
         let temp_file = tempfile::NamedTempFile::new().unwrap();
         let db_path = temp_file.path();
         create_test_database(db_path).await.unwrap();
-        let db = ThingsDatabase::new(db_path).await.unwrap();
+        let db = SqliteThingsDatabase::new(db_path).await.unwrap();
         let config = things3_core::ThingsConfig::default();
 
         // Note: We can't actually run start_mcp_server in a test because it's an infinite
