@@ -20,7 +20,7 @@ jobs:
       matrix:
         os: [macos-latest]
         rust:
-          - 1.70.0  # MSRV
+          - 1.89.0  # MSRV
           - stable
 
     steps:
@@ -69,7 +69,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # macos-14 = Intel, macos-latest = Apple Silicon
+        # both are Apple Silicon (macos-13 was the last Intel image)
         os: [macos-14, macos-latest]
 
     steps:

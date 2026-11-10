@@ -470,7 +470,7 @@ pub type Result<T> = std::result::Result<T, ThingsError>;
 ## Technology Stack
 
 ### Core Technologies
-- **Language**: Rust 1.70+
+- **Language**: Rust 1.89+
 - **Async Runtime**: Tokio
 - **Database**: SQLx (async SQLite)
 - **CLI**: Clap v4

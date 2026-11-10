@@ -4,9 +4,9 @@ This document describes the compatibility requirements and test matrix for `rust
 
 ## Minimum Supported Rust Version (MSRV)
 
-**MSRV: Rust 1.70.0**
+**MSRV: Rust 1.89.0**
 
-The library is tested and guaranteed to work with Rust 1.70.0 and later. This MSRV is documented in `Cargo.toml` via the `rust-version` field.
+The library is tested and guaranteed to work with Rust 1.89.0 and later. This MSRV is documented in `Cargo.toml` via the `rust-version` field.
 
 ### MSRV Policy
 
@@ -15,14 +15,9 @@ The library is tested and guaranteed to work with Rust 1.70.0 and later. This MS
 - **Notice**: MSRV changes will be clearly documented in the changelog
 - **Testing**: CI tests against MSRV, stable, and beta Rust versions
 
-### Why Rust 1.70?
+### Why Rust 1.89?
 
-Rust 1.70.0 was chosen as the MSRV because it provides:
-- Stable async/await support
-- Required `sqlx` features
-- Modern error handling with `thiserror`
-- Improved type inference
-- Better const generics support
+Rust 1.89.0 is required by `serde-saphyr`, the pure-Rust YAML library that replaced the unmaintained `serde_yaml`/`unsafe-libyaml`.
 
 ## Supported Platforms
 
@@ -157,9 +152,7 @@ The library expects the following tables:
 Our CI pipeline tests the following combinations:
 
 #### Rust Versions
-- ✅ 1.70.0 (MSRV)
-- ✅ 1.75.0
-- ✅ 1.80.0
+- ✅ 1.89.0 (MSRV)
 - ✅ stable
 - ✅ beta
 
@@ -225,8 +218,8 @@ Our CI pipeline tests the following combinations:
 
 ```bash
 # Test with MSRV
-rustup install 1.70.0
-cargo +1.70.0 test --workspace --features test-utils
+rustup install 1.89.0
+cargo +1.89.0 test --workspace --features test-utils
 
 # Test with stable
 cargo test --workspace --features test-utils
@@ -278,8 +271,7 @@ If you encounter compatibility issues:
 ### MSRV Updates
 
 Potential MSRV updates:
-- **1.75.0**: For improved async traits (0.4.0)
-- **1.80.0**: For const generics improvements (0.5.0)
+- Raised to 1.89.0 for `serde-saphyr` (unreleased)
 
 Updates will be announced in advance and documented in the changelog.
 
@@ -287,6 +279,7 @@ Updates will be announced in advance and documented in the changelog.
 
 | Version | MSRV | Notable Changes |
 |---------|------|-----------------|
+| Unreleased | 1.89.0 | Raised for `serde-saphyr` |
 | 0.2.0 | 1.70.0 | Initial MSRV declaration |
 | 0.1.0 | N/A | Pre-release |
 
