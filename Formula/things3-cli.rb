@@ -13,6 +13,6 @@ class Things3Cli < Formula
   end
 
   test do
-    system "#{bin}/things3", "--version"
+    system "#{bin}/tasklink", "--version"
   end
 end

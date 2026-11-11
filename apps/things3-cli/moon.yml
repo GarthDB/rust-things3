@@ -42,7 +42,7 @@ tasks:
     deps:
     - lint
   build:
-    command: cargo build --bin things3
+    command: cargo build --bin tasklink
     inputs:
     - src/**/*.rs
     - src/**/*.md
@@ -55,7 +55,7 @@ tasks:
       cache: true
       runDepsInParallel: true
   doc:
-    command: cargo doc --bin things3
+    command: cargo doc --bin tasklink
     inputs:
     - src/**/*.rs
     - src/**/*.md

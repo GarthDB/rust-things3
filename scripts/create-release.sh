@@ -80,16 +80,16 @@ cargo install --git https://github.com/GarthDB/rust-things3
 
 \`\`\`bash
 # Basic usage
-things3 --help
+tasklink --help
 
 # View inbox tasks
-things3 inbox
+tasklink inbox
 
 # View today's tasks
-things3 today
+tasklink today
 
 # Start MCP server
-things3 mcp
+tasklink mcp
 \`\`\`
 
 ## 📊 Test Coverage

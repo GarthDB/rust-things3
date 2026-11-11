@@ -13,7 +13,7 @@ keywords = ["things3", "cli", "mcp", "productivity-tool", "task-manager"]
 categories = ["command-line-utilities", "development-tools"]
 
 [[bin]]
-name = "things3"
+name = "tasklink"
 path = "src/main.rs"
 
 [[bin]]

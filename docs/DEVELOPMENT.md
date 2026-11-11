@@ -81,7 +81,7 @@ cargo build --workspace
 cargo build --workspace --release
 
 # Run CLI
-cargo run --bin things3 -- --help
+cargo run --bin tasklink -- --help
 
 # Run specific test
 cargo test --package things3-core test_name
@@ -172,11 +172,11 @@ cargo llvm-cov --workspace --all-features --text
 ```bash
 # Enable debug logging
 export RUST_LOG=debug
-cargo run --bin things3 -- inbox
+cargo run --bin tasklink -- inbox
 
 # Specific module
 export RUST_LOG=things3_core::database=trace
-cargo run --bin things3 -- inbox
+cargo run --bin tasklink -- inbox
 
 # Multiple modules
 export RUST_LOG=things3_core=debug,things3_cli=info
@@ -235,7 +235,7 @@ SELECT title, status FROM TMTask LIMIT 10;
 cargo install flamegraph
 
 # Profile application
-cargo flamegraph --bin things3 -- inbox
+cargo flamegraph --bin tasklink -- inbox
 
 # View flamegraph.svg
 open flamegraph.svg

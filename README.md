@@ -52,7 +52,7 @@ cargo install --path apps/things3-cli --features mcp-server
 > **After upgrading:** `cargo install` replaces the binary on disk, but any
 > running MCP server process still uses the old in-memory binary. Restart the
 > process (or your editor/agent host) after upgrading so the new version is
-> loaded. You can verify the running version with `things3 --version`.
+> loaded. You can verify the running version with `tasklink --version`.
 
 ### From Source
 
@@ -151,35 +151,35 @@ async fn main() -> Result<(), ThingsError> {
 
 ```bash
 # Show help
-things3 --help
+tasklink --help
 
 # Health check
-things3 health
+tasklink health
 
 # Show inbox tasks
-things3 inbox
-things3 inbox --limit 5
+tasklink inbox
+tasklink inbox --limit 5
 
 # Show today's tasks
-things3 today
-things3 today --limit 3
+tasklink today
+tasklink today --limit 3
 
 # Show all projects
-things3 projects
-things3 projects --area <AREA_UUID>
+tasklink projects
+tasklink projects --area <AREA_UUID>
 
 # Show all areas
-things3 areas
+tasklink areas
 
 # Search for tasks
-things3 search "meeting"
-things3 search "report" --limit 10
+tasklink search "meeting"
+tasklink search "report" --limit 10
 
 # Start MCP server (for AI/LLM integration)
-things3 mcp
+tasklink mcp
 
 # Start health check server
-things3 health-server --port 8080
+tasklink health-server --port 8080
 
 # Start monitoring dashboard
 things3 dashboard --port 8081
@@ -206,7 +206,7 @@ The CLI includes built-in web servers for monitoring and health checks:
 
 ```bash
 # Start health check server
-things3 health-server --port 8080
+tasklink health-server --port 8080
 
 # Test health endpoint
 curl http://localhost:8080/health
@@ -748,14 +748,14 @@ on the old version, you are likely running a **stale in-memory binary** — the
 OS cached the old executable in memory even though the file on disk changed.
 
 **Symptoms:** tool calls return errors that were fixed in the new version;
-`things3 --version` prints the old version number when run from a fresh shell
+`tasklink --version` prints the old version number when run from a fresh shell
 but the running process reports something different.
 
 **Fix:** restart the process or application hosting the MCP server (e.g. your
-editor, Claude Desktop, or the shell running `things3 mcp`), then verify:
+editor, Claude Desktop, or the shell running `tasklink mcp`), then verify:
 
 ```bash
-things3 --version   # should print the new version
+tasklink --version   # should print the new version
 ```
 
 ### Test Failures

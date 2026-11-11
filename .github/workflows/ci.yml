@@ -200,7 +200,7 @@ jobs:
       with:
         name: build-artifacts
         path: |
-          target/release/things3
+          target/release/tasklink
           target/release/libthings_core.*
           target/release/libthings_common.*
         retention-days: 7
