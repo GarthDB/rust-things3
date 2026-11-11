@@ -5,7 +5,10 @@ and notarized with `xcrun notarytool`. A stable signing identity keeps Full Disk
 and Automation grants across upgrades.
 
 Script: `scripts/macos-sign-notarize.sh`. Releases call it from `.github/workflows/release.yml`.
-Test it any time with the manual **Sign Test** workflow (`sign-test.yml`).
+The release job builds `aarch64-apple-darwin` and `x86_64-apple-darwin`, merges them with
+`lipo -create` into one universal binary, then signs and notarizes that binary once.
+The per-arch binaries are not signed. The binary name lives in `BINARY_NAME` in the workflow.
+Test the script any time with the manual **Sign Test** workflow (`sign-test.yml`).
 
 ## GitHub secrets
 
