@@ -77,7 +77,7 @@ Test installation:
 
 ```bash
 cargo install things3-cli
-things3 --version
+tasklink --version
 ```
 
 ## Updating Published Crates

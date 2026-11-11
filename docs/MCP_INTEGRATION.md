@@ -40,13 +40,13 @@ graph LR
 
 ```bash
 # Start with default configuration
-things3 mcp
+tasklink mcp
 
 # With custom database path
-things3 mcp --database-path /path/to/things.db
+tasklink mcp --database-path /path/to/things.db
 
 # With verbose logging
-RUST_LOG=debug things3 mcp
+RUST_LOG=debug tasklink mcp
 ```
 
 ### Configuration Files

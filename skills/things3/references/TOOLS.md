@@ -1,8 +1,8 @@
 # things3 MCP Tool Reference
 
-Complete parameter schemas for all 46 tools exposed by `things3 mcp`.
+Complete parameter schemas for all 46 tools exposed by `tasklink mcp`.
 
-Derived from `apps/things3-cli/src/mcp.rs` — `get_available_tools()` and its dispatch table. Last audited against the source at commit 5f99673. Tool count can be verified with `things3 mcp --list-tools | wc -l`; if the count drifts from 46, re-audit this file.
+Derived from `apps/things3-cli/src/mcp.rs` — `get_available_tools()` and its dispatch table. Last audited against the source at commit 5f99673. Tool count can be verified with `tasklink mcp --list-tools | wc -l`; if the count drifts from 46, re-audit this file.
 
 > **Note:** `docs/MCP_INTEGRATION.md` documents a subset of these tools in narrative form. This file is the more complete catalog.
 

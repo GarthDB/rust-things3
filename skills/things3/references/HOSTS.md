@@ -37,12 +37,12 @@ Restart Claude Desktop after editing.
 
 ```bash
 # From your project directory (or globally with --global)
-claude mcp add things3 -- things3 mcp
+claude mcp add things3 -- tasklink mcp
 ```
 
 To set the database path:
 ```bash
-claude mcp add things3 -e THINGS_DB_PATH=/path/to/main.sqlite -- things3 mcp
+claude mcp add things3 -e THINGS_DB_PATH=/path/to/main.sqlite -- tasklink mcp
 ```
 
 Or add to `.claude/settings.json` manually:

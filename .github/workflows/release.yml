@@ -7,7 +7,7 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
-  BINARY_NAME: things3
+  BINARY_NAME: tasklink
 
 permissions:
   contents: write

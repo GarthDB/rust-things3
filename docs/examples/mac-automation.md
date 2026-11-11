@@ -38,7 +38,7 @@ which things3
 **Verify it works**:
 
 ```bash
-RUST_LOG=off things3 inbox | head -5
+RUST_LOG=off tasklink inbox | head -5
 ```
 
 > **Note:** `things3` currently writes log output to stdout alongside JSON results. Set `RUST_LOG=off` in scripts to suppress log output and get clean JSON.
@@ -379,10 +379,10 @@ THINGS3=$(command -v things3 || echo "${HOME}/.cargo/bin/things3")
 `things3` currently writes log output to stdout alongside JSON. Set `RUST_LOG=off` to suppress it:
 
 ```bash
-RUST_LOG=off things3 search "query"
+RUST_LOG=off tasklink search "query"
 # or in a script:
 export RUST_LOG=off
-things3 search "query"
+tasklink search "query"
 ```
 
 ### Things URL scheme reference
@@ -400,7 +400,7 @@ All examples use the [Things URL scheme](https://culturedcode.com/things/support
 
 ### JSON output structure
 
-Commands like `things3 search` and `things3 inbox` return a JSON array of task objects:
+Commands like `tasklink search` and `tasklink inbox` return a JSON array of task objects:
 
 ```json
 [

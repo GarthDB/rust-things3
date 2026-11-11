@@ -19,7 +19,7 @@ test_websocket_server() {
     
     # Start server in background
     echo "Starting WebSocket server on port 8080..."
-    cargo run --bin things3-cli -- server --port 8080 &
+    cargo run --bin tasklink-cli -- server --port 8080 &
     SERVER_PID=$!
     
     # Wait for server to start
@@ -27,7 +27,7 @@ test_websocket_server() {
     
     # Test client connection
     echo "Testing client connection..."
-    timeout 10s cargo run --bin things3-cli -- watch --url "ws://127.0.0.1:8080" &
+    timeout 10s cargo run --bin tasklink-cli -- watch --url "ws://127.0.0.1:8080" &
     CLIENT_PID=$!
     
     # Wait for client to connect and receive updates
@@ -52,7 +52,7 @@ test_progress_tracking() {
     
     # Test bulk operations with progress tracking
     echo "Testing bulk export with progress tracking..."
-    timeout 30s cargo run --bin things3-cli -- bulk export --format json > /dev/null 2>&1 &
+    timeout 30s cargo run --bin tasklink-cli -- bulk export --format json > /dev/null 2>&1 &
     BULK_PID=$!
     
     # Wait for operation to complete
@@ -74,7 +74,7 @@ test_event_broadcasting() {
     # This would require a more complex setup with actual database operations
     # For now, we'll just verify the code compiles and basic functionality works
     echo "Testing event broadcaster creation..."
-    cargo run --bin things3-cli -- health > /dev/null 2>&1
+    cargo run --bin tasklink-cli -- health > /dev/null 2>&1
     
     if [ $? -eq 0 ]; then
         echo -e "${GREEN}✅ Event broadcasting infrastructure working${NC}"
