@@ -2,6 +2,8 @@
 
 A high-performance Rust library and CLI for Things 3 integration with integrated MCP (Model Context Protocol) server support for AI/LLM environments.
 
+The CLI binary is called `tasklink`. Not affiliated with or endorsed by Cultured Code.
+
 **📦 Version 1.0.0 - Production Ready!**
 
 [![CI/CD Pipeline](https://github.com/GarthDB/rust-things3/actions/workflows/ci.yml/badge.svg)](https://github.com/GarthDB/rust-things3/actions/workflows/ci.yml)
