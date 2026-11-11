@@ -23,9 +23,9 @@ Use the provided script to test real-time features manually:
 ./scripts/test_realtime_features.sh
 
 # Test individual components
-cargo run --bin things3-cli -- server --port 8080
-cargo run --bin things3-cli -- watch --url "ws://127.0.0.1:8080"
-cargo run --bin things3-cli -- bulk export --format json
+cargo run --bin tasklink-cli -- server --port 8080
+cargo run --bin tasklink-cli -- watch --url "ws://127.0.0.1:8080"
+cargo run --bin tasklink-cli -- bulk export --format json
 ```
 
 ### 3. **Health Monitoring** (Runtime Validation)
@@ -33,7 +33,7 @@ Use the built-in health validation to check if features are working:
 
 ```bash
 # Validate real-time features health
-cargo run --bin things3-cli -- validate
+cargo run --bin tasklink-cli -- validate
 ```
 
 ## 🔍 What We Test
@@ -134,15 +134,15 @@ cargo run --bin things3-cli -- validate
 ### **Quick Verification (5 minutes):**
 ```bash
 # 1. Test WebSocket server
-cargo run --bin things3-cli -- server --port 8080 &
+cargo run --bin tasklink-cli -- server --port 8080 &
 SERVER_PID=$!
 
 # 2. Test client connection
-cargo run --bin things3-cli -- watch --url "ws://127.0.0.1:8080" &
+cargo run --bin tasklink-cli -- watch --url "ws://127.0.0.1:8080" &
 CLIENT_PID=$!
 
 # 3. Test progress tracking
-cargo run --bin things3-cli -- bulk export --format json
+cargo run --bin tasklink-cli -- bulk export --format json
 
 # 4. Clean up
 kill $SERVER_PID $CLIENT_PID
@@ -157,7 +157,7 @@ kill $SERVER_PID $CLIENT_PID
 ### **Production Verification:**
 ```bash
 # Use the health validation
-cargo run --bin things3-cli -- validate
+cargo run --bin tasklink-cli -- validate
 ```
 
 ## 📝 Conclusion

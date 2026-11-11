@@ -44,7 +44,7 @@ things-cli [OPTIONS] <COMMAND>
 Show tasks from the inbox.
 
 ```bash
-things3 inbox [OPTIONS]
+tasklink inbox [OPTIONS]
 ```
 
 **Options:**
@@ -359,7 +359,7 @@ things3 --verbose health
 Start a health check web server.
 
 ```bash
-things3 health-server [OPTIONS]
+tasklink health-server [OPTIONS]
 ```
 
 **Options:**
@@ -368,10 +368,10 @@ things3 health-server [OPTIONS]
 **Example:**
 ```bash
 # Start health server on default port 8080
-things3 health-server
+tasklink health-server
 
 # Start health server on custom port
-things3 health-server --port 9090
+tasklink health-server --port 9090
 
 # Test health endpoints
 curl http://localhost:8080/health
@@ -419,7 +419,7 @@ open http://localhost:8081
 Set the `RUST_LOG` environment variable for more detailed logging:
 
 ```bash
-RUST_LOG=debug things3 health
+RUST_LOG=debug tasklink health
 ```
 
 ## Development

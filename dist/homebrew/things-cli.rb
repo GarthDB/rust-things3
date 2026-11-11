@@ -15,10 +15,10 @@ class Things3Cli < Formula
 
   test do
     # Test basic functionality
-    assert_match "Things 3 CLI", shell_output("#{bin}/things3 --help")
+    assert_match "Things 3 CLI", shell_output("#{bin}/tasklink --help")
     
     # Test MCP server startup (should show available tools)
-    output = shell_output("#{bin}/things3 mcp --help", 1)
+    output = shell_output("#{bin}/tasklink mcp --help", 1)
     assert_match "MCP server", output
   end
 end

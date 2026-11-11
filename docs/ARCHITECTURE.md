@@ -107,7 +107,7 @@ sequenceDiagram
     participant Database
     participant SQLite
     
-    User->>CLI: things3 inbox
+    User->>CLI: tasklink inbox
     CLI->>Commands: parse_args()
     Commands->>Database: get_inbox(limit)
     Database->>SQLite: SELECT * FROM TMTask

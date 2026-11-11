@@ -197,7 +197,7 @@ The new version includes built-in web servers:
 
 ```rust
 // Health check server
-things3 health-server --port 8080
+tasklink health-server --port 8080
 
 // Monitoring dashboard
 things3 dashboard --port 8081

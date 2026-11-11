@@ -164,7 +164,7 @@ cargo build --package things3-cli --no-default-features \
 ```
 
 **What's included:**
-- `things3 mcp` command
+- `tasklink mcp` command
 - MCP server implementation
 - JSON-RPC protocol handling
 
@@ -199,7 +199,7 @@ cargo build --package things3-cli --no-default-features \
 ```
 
 **What's included:**
-- `things3 health-server` command
+- `tasklink health-server` command
 - `things3 dashboard` command
 - Metrics collection
 - Performance monitoring

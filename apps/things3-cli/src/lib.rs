@@ -36,7 +36,7 @@ use std::sync::Arc;
 use things3_core::{Result, SqliteThingsDatabase};
 
 #[derive(Parser, Debug)]
-#[command(name = "things3")]
+#[command(name = "tasklink")]
 #[command(about = "Things 3 CLI with integrated MCP server")]
 #[command(version)]
 pub struct Cli {

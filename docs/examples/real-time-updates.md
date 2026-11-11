@@ -34,33 +34,33 @@ This document demonstrates the new real-time updates and progress tracking featu
 
 ```bash
 # Start the WebSocket server on default port 8080
-things3 server
+tasklink server
 
 # Start on a custom port
-things3 server --port 9000
+tasklink server --port 9000
 ```
 
 ### Watching Real-time Updates
 
 ```bash
 # Connect to the WebSocket server
-things3 watch
+tasklink watch
 
 # Connect to a custom server
-things3 watch --url ws://localhost:9000
+tasklink watch --url ws://localhost:9000
 ```
 
 ### Bulk Operations with Progress
 
 ```bash
 # Export all tasks with progress tracking
-things3 bulk export --format json
+tasklink bulk export --format json
 
 # Update multiple tasks status
-things3 bulk update-status "task-id-1,task-id-2,task-id-3" completed
+tasklink bulk update-status "task-id-1,task-id-2,task-id-3" completed
 
 # Search and process tasks
-things3 bulk search-and-process "meeting"
+tasklink bulk search-and-process "meeting"
 ```
 
 ### Using Progress Tracking in Code
